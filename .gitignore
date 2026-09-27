@@ -109,3 +109,5 @@ team/.omp/
 team/.mp/
 team/context/
 team/.team/
+# Runtime audit / event logs
+.loop-log/

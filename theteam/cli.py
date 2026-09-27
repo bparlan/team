@@ -185,36 +185,51 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--project-root", default=os.environ.get("THETEAM_PROJECT_ROOT"),
                         help="Project the command applies to. Defaults to $PWD.")
-    parser.add_argument("--json", action="store_true", help="Machine-readable output.")
+    # `--json` is accepted on either side of the subcommand. `SUPPRESS` keeps a
+    # subparser copy from clobbering a value already parsed from the parent.
+    parser.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     bootstrap = sub.add_parser("bootstrap", help="Generate a team for this project.")
     bootstrap.add_argument("path", nargs="?", help="Project root. Defaults to --project-root.")
     bootstrap.add_argument("--interactive", action="store_true", help="Ask before writing.")
+    bootstrap.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     bootstrap.set_defaults(func=cmd_bootstrap)
 
     status = sub.add_parser("status", help="Roster, state directory, task counts.")
+    status.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     status.set_defaults(func=cmd_status)
 
     discuss = sub.add_parser("discuss", help="One-shot team discussion, this turn only.")
     discuss.add_argument("topic")
+    discuss.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     discuss.set_defaults(func=cmd_discuss)
 
     serve = sub.add_parser("serve", help="Prometheus metrics endpoint.")
     serve.add_argument("--port", type=int,
                        default=int(os.environ.get("THETEAM_METRICS_PORT", "8000")))
+    serve.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     serve.set_defaults(func=cmd_serve)
 
     loop = sub.add_parser("loop", help="Schedule a registered task to run on an interval.")
     loop.add_argument("task_id")
     loop.add_argument("--interval", type=int, default=60,
                       help="Minutes between runs. Default 60.")
+    loop.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
     loop.set_defaults(func=cmd_loop)
 
     # Declared so the surface in ARCHITECTURE.md §2 is discoverable from
     # `--help`; each refuses until its milestone lands.
     for name, milestone in MILESTONE_OF.items():
         pending = sub.add_parser(name, add_help=False)
+        pending.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                        help="Machine-readable output.")
         pending.set_defaults(func=functools.partial(
             _refuse, command=name, reason=f"not implemented yet ({milestone})"))
 

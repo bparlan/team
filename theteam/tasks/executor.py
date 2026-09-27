@@ -1,9 +1,19 @@
-import subprocess
+#!/usr/bin/env python3
+"""
+Task execution. Layer 3: runs one phase, collects its result.
+
+Moved here from `subskills/task_stack/executor.py`, which §5.3 removes. The
+behaviour is unchanged; the M4 safety wrapper (`ResourceLimiter`,
+`AgentIsolation`, `CircuitBreaker`) lands on this class, not on a directory
+that is on its way out.
+"""
 import json
+import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
 import sys
 from typing import Dict
+
 
 class TaskExecutor:
     def __init__(self, project_root: str = "."):

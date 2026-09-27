@@ -128,17 +128,20 @@ def cmd_discuss(args: argparse.Namespace) -> int:
 
 def cmd_loop(args: argparse.Namespace) -> int:
     """Schedule one registered task to run on an interval."""
-    from theteam.subskills.task_stack.orchestrator import TaskStackOrchestrator
+    from theteam.tasks.repository import TaskRepository
 
     if args.interval <= 0:
         return _fail(args, "loop", f"--interval must be positive, got {args.interval}")
 
-    result = TaskStackOrchestrator(_project_root(args)).loop_task(args.task_id, args.interval)
-    if not result.get("success"):
-        return _fail(args, "loop", result.get("error", "loop failed"))
-    return _emit(args, result,
-                 f"{result['task_id']} scheduled every {result['interval_minutes']}m, "
-                 f"next run {result['next_run']}")
+    repo = TaskRepository(_project_root(args))
+    try:
+        next_run = repo.schedule_task(args.task_id, args.interval)
+    except KeyError:
+        return _fail(args, "loop", f"Task not found: {args.task_id}")
+    return _emit(args, {"task_id": args.task_id, "interval_minutes": args.interval,
+                        "next_run": next_run},
+                 f"{args.task_id} scheduled every {args.interval}m, "
+                 f"next run {next_run}")
 
 def cmd_tasks(args: argparse.Namespace) -> int:
     """Every task and its state. An empty list reports why it is empty."""
@@ -165,7 +168,7 @@ def cmd_tasks(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Execute everything currently due. Nothing due means nothing happens."""
-    from theteam.subskills.task_stack.executor import TaskExecutor
+    from theteam.tasks.executor import TaskExecutor
     from theteam.tasks.repository import TaskRepository
 
     project_root = _project_root(args)

@@ -25,12 +25,12 @@ class TaskStackAdapter:
         self._last_refresh = 0
 
     @property
-    def orchestrator(self):
-        """Lazy-load the orchestrator."""
-        if self._orchestrator is None:
-            from theteam.subskills.task_stack.orchestrator import TaskStackOrchestrator
-            self._orchestrator = TaskStackOrchestrator(str(self.project_root))
-        return self._orchestrator
+    def repo(self):
+        """Lazy-load the repository."""
+        if getattr(self, "_repo", None) is None:
+            from theteam.tasks.repository import TaskRepository
+            self._repo = TaskRepository(str(self.project_root))
+        return self._repo
 
     def _refresh_if_needed(self):
         """Refresh cache if TTL expired."""

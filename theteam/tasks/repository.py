@@ -306,6 +306,27 @@ class TaskRepository:
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
 
+    def schedule_task(self, task_id: str, interval_minutes: int) -> str:
+        """
+        Schedule a task on an interval, returning its ISO `next_run`.
+
+        Scheduling lives here so the state directory is resolved in one place.
+        The CLI must not assemble a schedule file by hand.
+
+        Raises:
+            KeyError: the id names no task.
+        """
+        if self.get(task_id) is None:
+            raise KeyError(f"Task '{task_id}' not found")
+        next_run = _now() + timedelta(minutes=int(interval_minutes))
+        schedule = self.schedule()
+        schedule["scheduled_tasks"][task_id] = {
+            "next_run": next_run.isoformat(),
+            "interval_minutes": int(interval_minutes),
+        }
+        self._save_schedule(schedule)
+        return next_run.isoformat()
+
     def _write_task(self, name: str, task: Dict[str, Any]) -> None:
         """Write the task as the operator's file, not as the reader sees it.
 

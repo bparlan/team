@@ -1,0 +1,40 @@
+{
+  "project": "team",
+  "timestamp": "2026-09-20T17:50:00Z",
+  "folder_health": {
+    "critical_folders_ok": true,
+    "root_clutter": 12,
+    "ledger_exists": true,
+    "ledger_location": ".mp/theteam/ledger.json",
+    "diagrams_ready": true,
+    "diagrams_location": "diagrams/"
+  },
+  "system_awareness": {
+    "primary_runner": "tasks/optimized_system_awareness_runner.py",
+    "enabled": true,
+    "config": "system-awareness-config.json",
+    "last_analysis": "2026-09-20T17:50:00Z"
+  },
+  "theteam_skill": {
+    "state_manager": "core/state_manager.py",
+    "system_integration": "core/system_integration.py",
+    "folder_monitor": "core/folder_monitor.py",
+    "discussion_manager": "workflow/discussion_manager.py",
+    "context_aggregator": "workflow/context_aggregator.py",
+    "terminal_ui": "ui/terminal_ui.py",
+    "config": "theteam.config"
+  },
+  "recommendations": [
+    "Consolidate tasks/ awareness runners to single primary",
+    "Archive obsolete task runners",
+    "Run folder health check every 30 minutes"
+  ],
+  "key_files": {
+    "architecture_diagram": "diagrams/architecture.html",
+    "project_config": "theteam.config",
+    "system_awareness_config": "system-awareness-config.json",
+    "team_config": "theteam.config",
+    "implementation_guide": "theteam/IMPLEMENTATION_GUIDE.md",
+    "validation_docs": "theteam/VALIDATION_DOCUMENTATION.md"
+  }
+}

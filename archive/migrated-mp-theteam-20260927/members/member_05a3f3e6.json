@@ -1,0 +1,14 @@
+{
+  "member_id": "member_05a3f3e6",
+  "role": "designer",
+  "permissions": [
+    "read",
+    "write",
+    "admin"
+  ],
+  "created_at": "2026-09-26T10:17:56.487130+00:00",
+  "last_active": "2026-09-26T10:17:56.487133+00:00",
+  "is_active": true,
+  "contexts": [],
+  "preferences": {}
+}

@@ -1,0 +1,20 @@
+{
+  "field_index": {
+    "discussion_60d84861": {
+      "topic": "Test topic",
+      "created": "2026-09-23T15:06:06.171382+00:00",
+      "member_count": 2
+    }
+  },
+  "notes_index": {
+    "discussion_60d84861": {}
+  },
+  "task_index": {
+    "discussion_60d84861": {}
+  },
+  "stats": {
+    "views": 0,
+    "creates": 1,
+    "updates": 0
+  }
+}

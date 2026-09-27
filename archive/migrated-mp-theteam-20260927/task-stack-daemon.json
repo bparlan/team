@@ -1,0 +1,8 @@
+{
+  "running": true,
+  "last_check": "2026-09-24T06:12:44.136501+00:00",
+  "tasks_executed": 1,
+  "next_runs": {
+    "folder-monitoring": "2026-09-24T06:42:44.135923+00:00"
+  }
+}

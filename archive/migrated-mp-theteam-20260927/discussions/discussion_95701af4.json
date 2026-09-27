@@ -1,0 +1,27 @@
+{
+  "discussion_id": "discussion_95701af4",
+  "topic": "Final verification",
+  "created_at": "2026-09-23T07:06:54.112638+00:00",
+  "member_ids": [
+    "architect",
+    "devops"
+  ],
+  "participants": [
+    "architect",
+    "devops"
+  ],
+  "status": "active",
+  "tasks": {},
+  "notes": {
+    "note_74e91d1d": {
+      "content": "verified",
+      "note_id": "note_74e91d1d",
+      "member_id": "architect",
+      "created_at": "2026-09-23T07:06:54.113529+00:00"
+    }
+  },
+  "analytics": {
+    "views": 0,
+    "last_updated": null
+  }
+}

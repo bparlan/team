@@ -1,0 +1,14 @@
+{
+  "member_id": "member_b4ffda62",
+  "role": "designer",
+  "permissions": [
+    "read",
+    "write",
+    "admin"
+  ],
+  "created_at": "2026-09-23T16:37:28.992021+00:00",
+  "last_active": "2026-09-23T16:37:28.992024+00:00",
+  "is_active": true,
+  "contexts": [],
+  "preferences": {}
+}

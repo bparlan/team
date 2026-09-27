@@ -1,0 +1,29 @@
+{
+  "task_id": "task_7abf1570",
+  "title": "Test Task",
+  "description": "A test task",
+  "assigned_to": "test_member",
+  "project": "test_project",
+  "task_data": {},
+  "created_at": "2026-09-23T15:18:29.633278+00:00",
+  "updated_at": "2026-09-23T15:18:29.634762+00:00",
+  "status": "completed",
+  "due_date": null,
+  "priority": "high",
+  "tags": [],
+  "dependencies": [],
+  "completed_at": "2026-09-23T15:18:29.634307+00:00",
+  "completed_by": "test_member",
+  "completion_data": {
+    "notes": "Completed successfully"
+  },
+  "comments": [
+    {
+      "member_id": "test_member",
+      "comment": "This is a test comment",
+      "timestamp": "2026-09-23T15:18:29.634755+00:00"
+    }
+  ],
+  "related_discussions": [],
+  "version": 1
+}

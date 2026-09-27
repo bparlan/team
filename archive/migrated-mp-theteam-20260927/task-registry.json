@@ -1,0 +1,171 @@
+{
+  "tasks": {
+    "folder-monitoring": {
+      "id": "folder-monitoring",
+      "name": "Folder Structure Monitoring",
+      "type": "loop",
+      "priority": "medium",
+      "schedule": {
+        "mode": "interval",
+        "interval_minutes": 30,
+        "start_delay_minutes": 0,
+        "max_iterations": null,
+        "retry_on_failure": true
+      },
+      "phases": [
+        {
+          "name": "assess_structure",
+          "script": "theteam/core/folder_monitor.py",
+          "args": [
+            "--compact"
+          ],
+          "timeout_seconds": 60,
+          "condition": "always"
+        }
+      ],
+      "outputs": [
+        {
+          "path": ".mp/theteam/folder-monitor.log",
+          "type": "log",
+          "retention_days": 30
+        },
+        {
+          "path": ".mp/theteam/structure-summary.json",
+          "type": "json",
+          "overwrite": true
+        }
+      ],
+      "actions": {
+        "on_success": "update_ledger",
+        "on_failure": "notify_agent",
+        "on_issue": {
+          "safe_auto_fix": true,
+          "notify_team": true
+        }
+      },
+      "team_review": {
+        "enabled": true,
+        "required_verdicts": [
+          "architect",
+          "pragmatist"
+        ]
+      },
+      "metadata": {
+        "created_by": "agent",
+        "created_at": "2026-09-20T17:50:00Z",
+        "last_modified": "2026-09-20T17:50:00Z"
+      }
+    },
+    "conv-20260920-183614": {
+      "id": "conv-20260920-183614",
+      "name": "Converted Conversation Task",
+      "type": "conversation",
+      "priority": "medium",
+      "schedule": {
+        "mode": "once"
+      },
+      "phases": [
+        {
+          "name": "analyze",
+          "script": "theteam/workflow/context_aggregator.py",
+          "args": [
+            "--compact"
+          ],
+          "timeout_seconds": 60
+        }
+      ],
+      "outputs": [
+        {
+          "path": ".mp/theteam/conversation-task.json",
+          "type": "json"
+        }
+      ],
+      "metadata": {
+        "created_by": "converter",
+        "created_at": "2026-09-20T15:36:14.345896+00:00",
+        "source": "recent_chat",
+        "lines_analyzed": 50
+      }
+    },
+    "task-20260920-183614": {
+      "id": "task-20260920-183614",
+      "name": "Build Folder Monitoring Continuous Task",
+      "type": "one-shot",
+      "priority": "medium",
+      "schedule": {
+        "mode": "once"
+      },
+      "phases": [
+        {
+          "name": "analyze",
+          "script": "theteam/workflow/context_aggregator.py",
+          "args": [
+            "--compact"
+          ],
+          "timeout_seconds": 60
+        },
+        {
+          "name": "execute",
+          "script": "theteam/subskills/task-stack/executor.py",
+          "args": [
+            "--task",
+            "task-20260920-183614"
+          ],
+          "timeout_seconds": 300
+        }
+      ],
+      "outputs": [
+        {
+          "path": ".mp/theteam/user-task.json",
+          "type": "json"
+        }
+      ],
+      "metadata": {
+        "created_by": "converter",
+        "created_at": "2026-09-20T15:36:14.608571+00:00",
+        "source": "user_request",
+        "request_preview": "build folder monitoring continuous task"
+      }
+    },
+    "task-20260920-200014": {
+      "id": "task-20260920-200014",
+      "name": "Monitor Disk Usage Every 15",
+      "type": "loop",
+      "priority": "medium",
+      "schedule": {
+        "mode": "once"
+      },
+      "phases": [
+        {
+          "name": "analyze",
+          "script": "theteam/workflow/context_aggregator.py",
+          "args": [
+            "--compact"
+          ],
+          "timeout_seconds": 60
+        },
+        {
+          "name": "execute",
+          "script": "theteam/subskills/task-stack/orchestrator.py",
+          "args": [
+            "execute",
+            "task-20260920-200014"
+          ],
+          "timeout_seconds": 300
+        }
+      ],
+      "outputs": [
+        {
+          "path": ".mp/theteam/user-task.json",
+          "type": "json"
+        }
+      ],
+      "metadata": {
+        "created_by": "converter",
+        "created_at": "2026-09-20T17:00:14.679550+00:00",
+        "source": "user_request",
+        "request_preview": "monitor disk usage every 15 minutes"
+      }
+    }
+  }
+}

@@ -1,0 +1,824 @@
+{
+  "project": "team",
+  "timestamp": "2026-09-21T08:34:36.090347+00:00",
+  "root": "/Users/bparlan/devcode/team",
+  "directories": [
+    {
+      "name": ".",
+      "path": ".",
+      "depth": 0,
+      "directories": [
+        {
+          "name": ".github",
+          "path": ".github",
+          "file_count": 0
+        },
+        {
+          "name": ".mp",
+          "path": ".mp",
+          "file_count": 1
+        },
+        {
+          "name": ".omp",
+          "path": ".omp",
+          "file_count": 0
+        },
+        {
+          "name": ".pi",
+          "path": ".pi",
+          "file_count": 0
+        },
+        {
+          "name": "bash-project",
+          "path": "bash-project",
+          "file_count": 0
+        },
+        {
+          "name": "bin",
+          "path": "bin",
+          "file_count": 2
+        },
+        {
+          "name": "config",
+          "path": "config",
+          "file_count": 1
+        },
+        {
+          "name": "context",
+          "path": "context",
+          "file_count": 1
+        },
+        {
+          "name": "diagrams",
+          "path": "diagrams",
+          "file_count": 3
+        },
+        {
+          "name": "docs",
+          "path": "docs",
+          "file_count": 7
+        },
+        {
+          "name": "... and 12 more",
+          "path": "..."
+        }
+      ],
+      "files": [
+        {
+          "name": ".env.template",
+          "path": ".env.template",
+          "size": 168
+        },
+        {
+          "name": ".loop-state.json",
+          "path": ".loop-state.json",
+          "size": 3790
+        },
+        {
+          "name": "30",
+          "path": "30",
+          "size": 0
+        },
+        {
+          "name": "50%",
+          "path": "50%",
+          "size": 0
+        },
+        {
+          "name": "funcs_all.txt",
+          "path": "funcs_all.txt",
+          "size": 0
+        },
+        {
+          "name": "integration_solution_summary.md",
+          "path": "integration_solution_summary.md",
+          "size": 9632
+        },
+        {
+          "name": "package.json",
+          "path": "package.json",
+          "size": 389
+        },
+        {
+          "name": "system-awareness-config.json",
+          "path": "system-awareness-config.json",
+          "size": 1952
+        },
+        {
+          "name": "system-awareness-ledger.json",
+          "path": "system-awareness-ledger.json",
+          "size": 11981371
+        },
+        {
+          "name": "task_archive.py.backup",
+          "path": "task_archive.py.backup",
+          "size": 5887
+        },
+        {
+          "name": "... and 6 more",
+          "path": "..."
+        }
+      ],
+      "children": [
+        {
+          "name": ".github",
+          "path": ".github",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "workflows",
+              "path": ".github/workflows",
+              "file_count": 0
+            }
+          ],
+          "files": [],
+          "children": [
+            {
+              "name": "workflows",
+              "path": ".github/workflows",
+              "depth": 2,
+              "directories": [],
+              "files": []
+            }
+          ]
+        },
+        {
+          "name": ".mp",
+          "path": ".mp",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "theteam",
+              "path": ".mp/theteam",
+              "file_count": 13
+            }
+          ],
+          "files": [
+            {
+              "name": "pi-integration.json",
+              "path": ".mp/pi-integration.json",
+              "size": 229
+            }
+          ],
+          "children": [
+            {
+              "name": "theteam",
+              "path": ".mp/theteam",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "folder-monitor.log",
+                  "path": ".mp/theteam/folder-monitor.log",
+                  "size": 20954
+                },
+                {
+                  "name": "health-score.json",
+                  "path": ".mp/theteam/health-score.json",
+                  "size": 536
+                },
+                {
+                  "name": "ledger.json",
+                  "path": ".mp/theteam/ledger.json",
+                  "size": 1776096
+                },
+                {
+                  "name": "structure-summary.json",
+                  "path": ".mp/theteam/structure-summary.json",
+                  "size": 1380
+                },
+                {
+                  "name": "system-awareness-summary.json",
+                  "path": ".mp/theteam/system-awareness-summary.json",
+                  "size": 780
+                },
+                {
+                  "name": "system-health-score.json",
+                  "path": ".mp/theteam/system-health-score.json",
+                  "size": 672
+                },
+                {
+                  "name": "task-execution.log",
+                  "path": ".mp/theteam/task-execution.log",
+                  "size": 78987
+                },
+                {
+                  "name": "task-registry.json",
+                  "path": ".mp/theteam/task-registry.json",
+                  "size": 4256
+                },
+                {
+                  "name": "task-schedule.json",
+                  "path": ".mp/theteam/task-schedule.json",
+                  "size": 196
+                },
+                {
+                  "name": "task-stack-daemon.json",
+                  "path": ".mp/theteam/task-stack-daemon.json",
+                  "size": 178
+                },
+                {
+                  "name": "... and 3 more",
+                  "path": "..."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": ".omp",
+          "path": ".omp",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "theteam",
+              "path": ".omp/theteam",
+              "file_count": 0
+            }
+          ],
+          "files": [],
+          "children": [
+            {
+              "name": "theteam",
+              "path": ".omp/theteam",
+              "depth": 2,
+              "directories": [
+                {
+                  "name": "reports",
+                  "path": ".omp/theteam/reports",
+                  "file_count": 4
+                }
+              ],
+              "files": [],
+              "children": [
+                {
+                  "name": "reports",
+                  "path": ".omp/theteam/reports",
+                  "depth": 3,
+                  "directories": [],
+                  "files": [
+                    {
+                      "name": "2026-09-19-loop-report.md",
+                      "path": ".omp/theteam/reports/2026-09-19-loop-report.md",
+                      "size": 1035
+                    },
+                    {
+                      "name": "2026-09-19-team-skill-report.md",
+                      "path": ".omp/theteam/reports/2026-09-19-team-skill-report.md",
+                      "size": 2969
+                    },
+                    {
+                      "name": "20260919_195732-discussion-report.md",
+                      "path": ".omp/theteam/reports/20260919_195732-discussion-report.md",
+                      "size": 22981
+                    },
+                    {
+                      "name": "20260920-172107-reflex-dashboard-plan-review.md",
+                      "path": ".omp/theteam/reports/20260920-172107-reflex-dashboard-plan-review.md",
+                      "size": 5751
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": ".pi",
+          "path": ".pi",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "fabric",
+              "path": ".pi/fabric",
+              "file_count": 1
+            }
+          ],
+          "files": [],
+          "children": [
+            {
+              "name": "fabric",
+              "path": ".pi/fabric",
+              "depth": 2,
+              "directories": [
+                {
+                  "name": "mesh",
+                  "path": ".pi/fabric/mesh",
+                  "file_count": 1
+                }
+              ],
+              "files": [
+                {
+                  "name": "mcp-cache.json",
+                  "path": ".pi/fabric/mcp-cache.json",
+                  "size": 45896
+                }
+              ],
+              "children": [
+                {
+                  "name": "mesh",
+                  "path": ".pi/fabric/mesh",
+                  "depth": 3,
+                  "directories": [
+                    {
+                      "name": "schema-transactions",
+                      "path": ".pi/fabric/mesh/schema-transactions",
+                      "file_count": 0
+                    }
+                  ],
+                  "files": [
+                    {
+                      "name": "state.json",
+                      "path": ".pi/fabric/mesh/state.json",
+                      "size": 982
+                    }
+                  ],
+                  "children": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "bash-project",
+          "path": "bash-project",
+          "depth": 1,
+          "directories": [
+            {
+              "name": ".healthloop",
+              "path": "bash-project/.healthloop",
+              "file_count": 0
+            },
+            {
+              "name": ".team",
+              "path": "bash-project/.team",
+              "file_count": 0
+            }
+          ],
+          "files": [],
+          "children": [
+            {
+              "name": ".healthloop",
+              "path": "bash-project/.healthloop",
+              "depth": 2,
+              "directories": [
+                {
+                  "name": "config",
+                  "path": "bash-project/.healthloop/config",
+                  "file_count": 1
+                },
+                {
+                  "name": "evaluations",
+                  "path": "bash-project/.healthloop/evaluations",
+                  "file_count": 0
+                },
+                {
+                  "name": "reports",
+                  "path": "bash-project/.healthloop/reports",
+                  "file_count": 0
+                },
+                {
+                  "name": "states",
+                  "path": "bash-project/.healthloop/states",
+                  "file_count": 0
+                }
+              ],
+              "files": [],
+              "children": [
+                {
+                  "name": "config",
+                  "path": "bash-project/.healthloop/config",
+                  "depth": 3,
+                  "directories": [],
+                  "files": [
+                    {
+                      "name": "manifest.yml",
+                      "path": "bash-project/.healthloop/config/manifest.yml",
+                      "size": 0
+                    }
+                  ]
+                },
+                {
+                  "name": "evaluations",
+                  "path": "bash-project/.healthloop/evaluations",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                },
+                {
+                  "name": "reports",
+                  "path": "bash-project/.healthloop/reports",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                },
+                {
+                  "name": "states",
+                  "path": "bash-project/.healthloop/states",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                }
+              ]
+            },
+            {
+              "name": ".team",
+              "path": "bash-project/.team",
+              "depth": 2,
+              "directories": [
+                {
+                  "name": "assignments",
+                  "path": "bash-project/.team/assignments",
+                  "file_count": 0
+                },
+                {
+                  "name": "contracts",
+                  "path": "bash-project/.team/contracts",
+                  "file_count": 1
+                },
+                {
+                  "name": "evaluations",
+                  "path": "bash-project/.team/evaluations",
+                  "file_count": 0
+                },
+                {
+                  "name": "specializations",
+                  "path": "bash-project/.team/specializations",
+                  "file_count": 0
+                }
+              ],
+              "files": [],
+              "children": [
+                {
+                  "name": "assignments",
+                  "path": "bash-project/.team/assignments",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                },
+                {
+                  "name": "contracts",
+                  "path": "bash-project/.team/contracts",
+                  "depth": 3,
+                  "directories": [],
+                  "files": [
+                    {
+                      "name": "team-roles.json",
+                      "path": "bash-project/.team/contracts/team-roles.json",
+                      "size": 0
+                    }
+                  ]
+                },
+                {
+                  "name": "evaluations",
+                  "path": "bash-project/.team/evaluations",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                },
+                {
+                  "name": "specializations",
+                  "path": "bash-project/.team/specializations",
+                  "depth": 3,
+                  "directories": [],
+                  "files": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "bin",
+          "path": "bin",
+          "depth": 1,
+          "directories": [],
+          "files": [
+            {
+              "name": "theteam_config.py",
+              "path": "bin/theteam_config.py",
+              "size": 8633
+            },
+            {
+              "name": "theteam_report.py",
+              "path": "bin/theteam_report.py",
+              "size": 7675
+            }
+          ]
+        },
+        {
+          "name": "config",
+          "path": "config",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "routine-engine",
+              "path": "config/routine-engine",
+              "file_count": 5
+            }
+          ],
+          "files": [
+            {
+              "name": "routines.yaml",
+              "path": "config/routines.yaml",
+              "size": 676
+            }
+          ],
+          "children": [
+            {
+              "name": "routine-engine",
+              "path": "config/routine-engine",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "auto_discovery_config.json",
+                  "path": "config/routine-engine/auto_discovery_config.json",
+                  "size": 2846
+                },
+                {
+                  "name": "engine_config.json",
+                  "path": "config/routine-engine/engine_config.json",
+                  "size": 839
+                },
+                {
+                  "name": "interactive_config.json",
+                  "path": "config/routine-engine/interactive_config.json",
+                  "size": 1064
+                },
+                {
+                  "name": "routines.yaml",
+                  "path": "config/routine-engine/routines.yaml",
+                  "size": 2992
+                },
+                {
+                  "name": "routines_engine.yaml",
+                  "path": "config/routine-engine/routines_engine.yaml",
+                  "size": 498
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "context",
+          "path": "context",
+          "depth": 1,
+          "directories": [],
+          "files": [
+            {
+              "name": "project-structure-maintenance.md",
+              "path": "context/project-structure-maintenance.md",
+              "size": 7769
+            }
+          ]
+        },
+        {
+          "name": "diagrams",
+          "path": "diagrams",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "architecture",
+              "path": "diagrams/architecture",
+              "file_count": 0
+            }
+          ],
+          "files": [
+            {
+              "name": "architecture-candidate.json",
+              "path": "diagrams/architecture-candidate.json",
+              "size": 1794
+            },
+            {
+              "name": "architecture.html",
+              "path": "diagrams/architecture.html",
+              "size": 793894
+            },
+            {
+              "name": "team_architecture_candidate.json",
+              "path": "diagrams/team_architecture_candidate.json",
+              "size": 1794
+            }
+          ],
+          "children": [
+            {
+              "name": "architecture",
+              "path": "diagrams/architecture",
+              "depth": 2,
+              "directories": [],
+              "files": []
+            }
+          ]
+        },
+        {
+          "name": "docs",
+          "path": "docs",
+          "depth": 1,
+          "directories": [
+            {
+              "name": "architecture",
+              "path": "docs/architecture",
+              "file_count": 0
+            },
+            {
+              "name": "contexts",
+              "path": "docs/contexts",
+              "file_count": 6
+            },
+            {
+              "name": "evolution",
+              "path": "docs/evolution",
+              "file_count": 1
+            },
+            {
+              "name": "security",
+              "path": "docs/security",
+              "file_count": 1
+            },
+            {
+              "name": "skeletons",
+              "path": "docs/skeletons",
+              "file_count": 1
+            },
+            {
+              "name": "skills",
+              "path": "docs/skills",
+              "file_count": 4
+            },
+            {
+              "name": "specs",
+              "path": "docs/specs",
+              "file_count": 1
+            }
+          ],
+          "files": [
+            {
+              "name": "architecture.md",
+              "path": "docs/architecture.md",
+              "size": 12336
+            },
+            {
+              "name": "deployment.md",
+              "path": "docs/deployment.md",
+              "size": 0
+            },
+            {
+              "name": "master-launcher-spec.md",
+              "path": "docs/master-launcher-spec.md",
+              "size": 16356
+            },
+            {
+              "name": "project-contract-template.md",
+              "path": "docs/project-contract-template.md",
+              "size": 16054
+            },
+            {
+              "name": "system-integration-overview.md",
+              "path": "docs/system-integration-overview.md",
+              "size": 18635
+            },
+            {
+              "name": "team-loop-prompt.md",
+              "path": "docs/team-loop-prompt.md",
+              "size": 13877
+            },
+            {
+              "name": "team-specialization.md",
+              "path": "docs/team-specialization.md",
+              "size": 0
+            }
+          ],
+          "children": [
+            {
+              "name": "architecture",
+              "path": "docs/architecture",
+              "depth": 2,
+              "directories": [],
+              "files": []
+            },
+            {
+              "name": "contexts",
+              "path": "docs/contexts",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "IMPLEMENTATION_CONTEXT.md",
+                  "path": "docs/contexts/IMPLEMENTATION_CONTEXT.md",
+                  "size": 6695
+                },
+                {
+                  "name": "IMPLEMENTATION_PLAN.md",
+                  "path": "docs/contexts/IMPLEMENTATION_PLAN.md",
+                  "size": 7515
+                },
+                {
+                  "name": "integration_plan.md",
+                  "path": "docs/contexts/integration_plan.md",
+                  "size": 8818
+                },
+                {
+                  "name": "Scientific and Theoretical Foundation.md",
+                  "path": "docs/contexts/Scientific and Theoretical Foundation.md",
+                  "size": 12822
+                },
+                {
+                  "name": "SIMPLE_CONTEXT.md",
+                  "path": "docs/contexts/SIMPLE_CONTEXT.md",
+                  "size": 2676
+                },
+                {
+                  "name": "STABLE_INTEGRATION.md",
+                  "path": "docs/contexts/STABLE_INTEGRATION.md",
+                  "size": 7236
+                }
+              ]
+            },
+            {
+              "name": "evolution",
+              "path": "docs/evolution",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "ROUTINE_ENGINE_SUMMARY.md",
+                  "path": "docs/evolution/ROUTINE_ENGINE_SUMMARY.md",
+                  "size": 9965
+                }
+              ]
+            },
+            {
+              "name": "security",
+              "path": "docs/security",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "security_fixes.md",
+                  "path": "docs/security/security_fixes.md",
+                  "size": 14386
+                }
+              ]
+            },
+            {
+              "name": "skeletons",
+              "path": "docs/skeletons",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "team_skeleton.md",
+                  "path": "docs/skeletons/team_skeleton.md",
+                  "size": 2564
+                }
+              ]
+            },
+            {
+              "name": "skills",
+              "path": "docs/skills",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "IMPLEMENTATION.md",
+                  "path": "docs/skills/IMPLEMENTATION.md",
+                  "size": 5987
+                },
+                {
+                  "name": "INTEGRATION.md",
+                  "path": "docs/skills/INTEGRATION.md",
+                  "size": 6200
+                },
+                {
+                  "name": "SKILL.md",
+                  "path": "docs/skills/SKILL.md",
+                  "size": 6358
+                },
+                {
+                  "name": "TEAM_MEMBER_PROPOSAL.md",
+                  "path": "docs/skills/TEAM_MEMBER_PROPOSAL.md",
+                  "size": 5967
+                }
+              ]
+            },
+            {
+              "name": "specs",
+              "path": "docs/specs",
+              "depth": 2,
+              "directories": [],
+              "files": [
+                {
+                  "name": "SYSTEM_AWARENESS_INTEGRATION_SPEC.md",
+                  "path": "docs/specs/SYSTEM_AWARENESS_INTEGRATION_SPEC.md",
+                  "size": 9808
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "file_count": 71,
+  "dir_count": 48
+}

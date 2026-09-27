@@ -1,0 +1,12 @@
+{
+  "member_id": "member_3d2db9b2",
+  "role": "developer",
+  "permissions": [
+    "read"
+  ],
+  "created_at": "2026-09-23T16:36:06.628721+00:00",
+  "last_active": "2026-09-23T16:36:06.628725+00:00",
+  "is_active": true,
+  "contexts": [],
+  "preferences": {}
+}

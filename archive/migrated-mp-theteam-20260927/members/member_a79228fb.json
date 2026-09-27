@@ -1,0 +1,13 @@
+{
+  "member_id": "member_a79228fb",
+  "role": "architect",
+  "permissions": [
+    "read",
+    "write"
+  ],
+  "created_at": "2026-09-23T16:43:20.018084+00:00",
+  "last_active": "2026-09-23T16:43:20.018088+00:00",
+  "is_active": true,
+  "contexts": [],
+  "preferences": {}
+}

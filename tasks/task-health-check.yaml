@@ -8,7 +8,7 @@ context:
   - Project root structure
   - Runtime configuration
   - Required files and directories
-expected_output: Health check passed: /path/to/root
+expected_output: "Health check passed: /path/to/root"
 phases:
   - name: execute
     script: scripts/loop_health_check.py

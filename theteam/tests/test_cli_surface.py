@@ -40,9 +40,9 @@ def test_every_command_in_the_architecture_surface_exists():
     ("discuss", False, "OMP"),
     ("loop", False, "Task not found"),
     ("comment", False, "not implemented yet"),
-    ("tasks", False, "not implemented yet"),
+    ("tasks", True, None),
     ("task", False, "not implemented yet"),
-    ("run", False, "not implemented yet"),
+    ("run", True, None),
     ("history", False, "not implemented yet"),
 ])
 def test_command_returns_an_int_exit_code(command, succeeds, diagnostic, tmp_path, capsys):
@@ -83,7 +83,7 @@ def test_serve_is_wired_to_its_handler():
     assert action.choices["serve"].get_default("func") is cmd_serve
 
 
-@pytest.mark.parametrize("command", ["tasks", "task", "run", "history", "comment"])
+@pytest.mark.parametrize("command", ["task", "history", "comment"])
 def test_unimplemented_command_names_its_milestone(command, tmp_path, capsys):
     """A command that does not exist says so. It never returns a fake result."""
     assert main(["--project-root", str(tmp_path), command]) == 1
@@ -103,10 +103,19 @@ def test_discuss_outside_omp_fails_with_the_command_to_run(tmp_path, capsys):
 
 def test_json_output_is_valid_json(tmp_path, capsys):
     """--json emits parseable JSON, not prose that happens to look structured."""
-    assert main(["--project-root", str(tmp_path), "--json", "tasks"]) == 1
+    # `history` still refuses, so it exercises the failure path's JSON shape.
+    assert main(["--project-root", str(tmp_path), "--json", "history"]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["reason"]
+
+
+def test_tasks_json_is_valid_json_with_the_task_list(tmp_path, capsys):
+    """`tasks --json` parses, and the count is a number the caller can trust."""
+    assert main(["--project-root", str(tmp_path), "--json", "tasks"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert isinstance(payload["count"], int)
+    assert payload["count"] == len(payload["tasks"])
 
 
 def test_loop_rejects_a_non_positive_interval(tmp_path, capsys):

@@ -138,6 +138,73 @@ def cmd_loop(args: argparse.Namespace) -> int:
                  f"{result['task_id']} scheduled every {result['interval_minutes']}m, "
                  f"next run {result['next_run']}")
 
+def cmd_tasks(args: argparse.Namespace) -> int:
+    """Every task and its state. An empty list reports why it is empty."""
+    from theteam.tasks.repository import TaskRepository
+
+    payload = TaskRepository(_project_root(args)).list_tasks()
+    lines = [
+        f"{'order':>5}  {'id':<24} {'type':<12} {'pri':>3}  next run",
+    ]
+    for task in payload["tasks"]:
+        lines.append(
+            f"{task['order'] if task['order'] is not None else '-':>5}  "
+            f"{task['id']:<24} {str(task['type'] or '-'):<12} "
+            f"{task['priority']:>3}  {task['next_run'] or 'not scheduled'}"
+        )
+    lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
+    # Say out loud what the migration is holding, so a fallback is never
+    # mistaken for the task being gone.
+    for label, ids in (("still only in the legacy registry", payload["legacy_only"]),
+                       ("registered but not in TASK_ORDER", payload["legacy_tasks"]),
+                       ("in TASK_ORDER but unreadable", payload["missing_tasks"])):
+        if ids:
+            lines.append(f"note: {label}: {', '.join(ids)}")
+    return _emit(args, payload, "\n".join(lines))
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Execute everything currently due. Nothing due means nothing happens."""
+    from theteam.subskills.task_stack.executor import TaskExecutor
+    from theteam.tasks.repository import TaskRepository
+
+    project_root = _project_root(args)
+    repo = TaskRepository(project_root)
+    due = repo.due(only=args.only)
+    executor = TaskExecutor(project_root)
+
+    results = []
+    for task in due:
+        # Missing script is reported, never silently skipped as a success.
+        missing = [p["script"] for p in task.get("phases", [])
+                   if not os.path.exists(os.path.join(project_root, p["script"]))]
+        if missing:
+            detail = f"missing script: {', '.join(missing)}"
+            repo.record_run(task["id"], "skipped", detail)
+            results.append({"id": task["id"], "result": "skipped", "detail": detail})
+            continue
+        outcome = executor.execute_task(task)
+        ok = outcome["overall_success"]
+        repo.record_run(task["id"], "ok" if ok else "failed",
+                        "" if ok else f"returncode {outcome['phases'][-1].get('returncode')}")
+        results.append({"id": task["id"], "result": "ok" if ok else "failed"})
+
+    payload = {
+        # `ran` counts what actually executed. A task with a missing script was
+        # due but never ran, so counting it would report work that never happened.
+        "ran": sum(1 for r in results if r["result"] in ("ok", "failed")),
+        "skipped": sum(1 for r in results if r["result"] == "skipped"),
+        "failures": sum(1 for r in results if r["result"] == "failed"),
+        "results": results,
+    }
+    if not due:
+        return _emit(args, payload, "nothing due")
+    lines = [f"{r['id']}: {r['result']}" + (f" ({r['detail']})" if r.get("detail") else "")
+             for r in results]
+    lines.append(f"{payload['ran']} ran, {payload['skipped']} skipped, "
+                 f"{payload['failures']} failed")
+    return _emit(args, payload, "\n".join(lines))
+
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """The metrics endpoint. The only thing in the product that starts a server."""
@@ -170,9 +237,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 MILESTONE_OF = {
     "comment": "M5",
-    "tasks": "M2",
     "task": "M3",
-    "run": "M2",
     "history": "M4",
 }
 
@@ -224,6 +289,17 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Machine-readable output.")
     loop.set_defaults(func=cmd_loop)
 
+
+    tasks = sub.add_parser("tasks", help="List every task and its state.")
+    tasks.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                       help="Machine-readable output.")
+    tasks.set_defaults(func=cmd_tasks)
+
+    run = sub.add_parser("run", help="Execute everything currently due.")
+    run.add_argument("--only", help="Run one task id, ignoring the rest.")
+    run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                     help="Machine-readable output.")
+    run.set_defaults(func=cmd_run)
     # Declared so the surface in ARCHITECTURE.md §2 is discoverable from
     # `--help`; each refuses until its milestone lands.
     for name, milestone in MILESTONE_OF.items():

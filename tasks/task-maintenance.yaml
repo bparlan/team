@@ -8,7 +8,7 @@ context:
   - Temporary files
   - Log directories
   - Cache directories
-expected_output: Routine maintenance complete: cache cleaned, logs rotated
+expected_output: "Routine maintenance complete: cache cleaned, logs rotated"
 phases:
   - name: execute
     script: scripts/loop_maintenance.py

@@ -25,7 +25,7 @@ descending then id. Deterministic, so `theteam tasks` is reproducible.
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import yaml
@@ -106,7 +106,11 @@ class TaskRepository:
         if not os.path.isdir(self.tasks_dir):
             return tasks
         for name in sorted(os.listdir(self.tasks_dir)):
-            if not name.endswith((".yaml", ".yml")):
+            # `tasks/` also holds non-tasks (`SECURITY_POLICY.yaml`, and it is
+            # not even parseable YAML), so globbing every `*.yaml` here dies on
+            # a file that is none of this reader's business. The `task-` prefix
+            # is the directory's own convention, not a new one.
+            if not (name.startswith("task-") and name.endswith((".yaml", ".yml"))):
                 continue
             task = _load_yaml(os.path.join(self.tasks_dir, name))
             task.setdefault("source_file", name)
@@ -204,9 +208,12 @@ class TaskRepository:
         `yaml_count` and `legacy_only` are the migration reporting itself, so a
         caller can tell "this project has no tasks" from "the read found none",
         which are indistinguishable from the outside and mean opposite things.
+        """
+        schedule = self.schedule()
+        tasks = self.all_tasks()
         return {
-            "tasks": [self._row(t, schedule) for t in self.all_tasks()],
-            "count": len(self.all_tasks()),
+            "tasks": [self._row(t, schedule) for t in tasks],
+            "count": len(tasks),
             "yaml_count": len(self._yaml),
             "legacy_only": self.legacy_only,
             "legacy_tasks": [t["id"] for t in self.unregistered_tasks],
@@ -249,7 +256,6 @@ class TaskRepository:
         entry = schedule["scheduled_tasks"].get(task_id, {})
         interval = entry.get("interval_minutes")
         if interval:
-            from datetime import timedelta
 
             entry["next_run"] = (_now() + timedelta(minutes=int(interval))).isoformat()
             schedule["scheduled_tasks"][task_id] = entry

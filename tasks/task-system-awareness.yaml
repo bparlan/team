@@ -2,14 +2,14 @@ id: system-awareness
 name: System Awareness
 type: analysis
 priority: 7
-description: Run comprehensive system architecture analysis (4-phase: structure, documentation, architecture, infrastructure) with health scoring and team commentary
+description: "Run comprehensive system architecture analysis (4-phase: structure, documentation, architecture, infrastructure) with health scoring and team commentary"
 failure_handling: skip
 context:
   - Project structure and module organization
   - Documentation quality and completeness
   - Architecture patterns and technical debt
   - Infrastructure build systems and configs
-expected_output: System awareness analysis complete: grade A-F, score 0.00-1.00/1.00
+expected_output: "System awareness analysis complete: grade A-F, score 0.00-1.00/1.00"
 phases:
   - name: execute
     script: scripts/sa_runner.py

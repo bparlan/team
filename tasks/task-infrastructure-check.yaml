@@ -8,8 +8,7 @@ context:
   - Python version compatibility
   - Required scripts and tools
   - Directory layout integrity
-  - Loop state files
-expected_output: Infrastructure check passed: all systems operational
+expected_output: "Infrastructure check passed: all systems operational"
 phases:
   - name: execute
     script: scripts/loop_infrastructure_check.py

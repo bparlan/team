@@ -510,9 +510,7 @@ def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
         order=["old", "keeper"],
         tasks={"old": {"name": "O"}, "keeper": {"name": "K"}},
         schedule={
-            "scheduled_tasks": {
-                "old": {"next_run": "2030-01-01T00:00:00+00:00", "interval_minutes": 60}
-            },
+            "scheduled_tasks": {"old": {"next_run": _past(5), "interval_minutes": 60}},
             "last_run": {"old": {"result": "ok", "detail": "", "at": "2026-01-01T00:00:00+00:00"}},
         },
     )
@@ -548,3 +546,93 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
     body = (root / "tasks" / "TASK_ORDER").read_text()
     assert "\n\n" not in body, "a blank line splits the order file"
     assert [line for line in body.splitlines() if not line.strip()] == []
+
+
+def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path, capsys):
+    """
+    ARCHITECTURE.md M3's falsification test, end to end through the CLI:
+    create, edit, delete. The edit is read back by a *fresh* repository, so a
+    write that only lands in memory fails here. The delete leaves no file, no
+    order entry and no schedule entry behind.
+    """
+    root = _project(tmp_path, order=["keep"], tasks={"keep": {"name": "Keep"}})
+    spec = tmp_path / "probe.yaml"
+    spec.write_text(
+        "id: probe\nname: Probe\nphases:\n  - name: run\n"
+        "    script: scripts/x.py\n    memory_limit_mb: 64\n",
+        encoding="utf-8",
+    )
+    patch = tmp_path / "patch.yaml"
+    patch.write_text("name: Probe Renamed\n", encoding="utf-8")
+
+    code, payload = _cli(root, "task", "create", "--path", str(spec), capsys=capsys)
+    assert code == 0
+    assert payload["id"] == "probe"
+
+    code, _ = _cli(root, "task", "edit", "probe", "--patch", str(patch), capsys=capsys)
+    assert code == 0
+
+    # A fresh repository is the restart. The edit is on disk, not in a dict.
+    assert TaskRepository(str(root)).get("probe")["name"] == "Probe Renamed"
+
+    # The plan is stated before the write, and names what it will touch.
+    code, plan = _cli(root, "task", "delete", "probe", capsys=capsys)
+    assert code == 0
+    assert "tasks/task-probe.yaml" in plan["will_remove"]
+    assert (root / "tasks" / "task-probe.yaml").exists(), "plan only, no delete"
+
+    code, _ = _cli(root, "task", "delete", "probe", "--yes", capsys=capsys)
+    assert code == 0
+
+    fresh = TaskRepository(str(root))
+    assert not (root / "tasks" / "task-probe.yaml").exists()
+    assert "probe" not in read_task_order(str(root))
+    assert fresh.get("probe") is None
+    assert "probe" not in fresh.schedule()["scheduled_tasks"]
+    assert fresh.orphaned_schedules() == []
+
+
+def test_a_task_is_created_only_if_every_phase_has_a_memory_bound(tmp_path, capsys):
+    """
+    §5.4: a phase without `memory_limit_mb` is rejected at the write, not
+    discovered mid-run against a real process. The rejected definition leaves
+    nothing behind - no file, no order entry.
+    """
+    root = _project(tmp_path, order=["keep"], tasks={"keep": {"name": "Keep"}})
+    spec = tmp_path / "unbounded.yaml"
+    spec.write_text(
+        "id: unbounded\nphases:\n  - name: run\n    script: scripts/x.py\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(TaskDefinitionError) as caught:
+        TaskRepository(str(root)).create(
+            {"id": "unbounded", "phases": [{"name": "run", "script": "scripts/x.py"}]}
+        )
+
+    assert "memory_limit_mb" in str(caught.value)
+    assert not (root / "tasks" / "task-unbounded.yaml").exists()
+    assert read_task_order(str(root)) == ["keep"]
+
+
+def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):
+    """
+    What lands in `tasks/` is the operator's document, in §5.4's format.
+    `source_file` is a back-reference the reader adds, and no migrated task
+    carries one - writing it into a hand-editable file pushes an internal
+    detail into the file the user owns.
+    """
+    root = _project(tmp_path, order=["t1"], tasks={"t1": {"name": "T"}})
+    repo = TaskRepository(str(root))
+
+    repo.update("t1", {"name": "Renamed"})
+    repo.create({"id": "t2", "name": "Second"})
+
+    for name in ("task-t1.yaml", "task-t2.yaml"):
+        stored = yaml.safe_load((root / "tasks" / name).read_text())
+        assert "source_file" not in stored, name
+    # The reader still resolves both: the back-reference is its own, not the
+    # file's.
+    fresh = TaskRepository(str(root))
+    assert fresh.get("t1")["name"] == "Renamed"
+    assert fresh.get("t2")["source_file"] == "task-t2.yaml"

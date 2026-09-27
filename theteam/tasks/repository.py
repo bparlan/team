@@ -27,6 +27,12 @@ SCHEDULE_FILENAME = "task-schedule.json"
 # missing key is reported rather than defaulted, per §3.3.
 REQUIRED_FIELDS = ("id",)
 
+# Paths under this directory are dead: the layout was deleted in M1.
+DEAD_DIR = ".mp/theteam"
+
+# `TASK_ORDER` is a numbered list, optionally behind a `#` comment header.
+_ORDER_LINE = re.compile(r"^\s*(\d+)\.\s+(\S+)\s*$", re.MULTILINE)
+
 
 class TaskDefinitionError(ValueError):
     """A task file that exists but is not a task. Named, never swallowed."""
@@ -36,42 +42,81 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _load_yaml(path: str) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as handle:
-        data = yaml.safe_load(handle)
+def _check_task(data: Any, name: str) -> Dict[str, Any]:
+    """
+    The read contract: a mapping that names an id and references no dead path.
+
+    Deliberately permissive about everything else. The four migrated tasks
+    predate the write rules below, and a read path that enforces them would
+    turn a listable project into an unreadable one.
+    """
     if not isinstance(data, dict):
-        raise TaskDefinitionError(f"{path}: not a mapping")
+        raise TaskDefinitionError(f"{name}: not a mapping")
     for field in REQUIRED_FIELDS:
         if not data.get(field):
-            raise TaskDefinitionError(f"{path}: missing required field '{field}'")
+            raise TaskDefinitionError(f"{name}: missing required field '{field}'")
     # Reject paths that reference the deleted .mp/theteam directory,
     # since that layout was removed and any task pointing there is dead.
-    dead_dir = ".mp/theteam"
     for section in ("outputs", "phases"):
         for item in data.get(section, []) or []:
             if not isinstance(item, dict):
                 continue
             for key in ("path", "script"):
                 value = item.get(key)
-                if not value or not isinstance(value, str):
-                    continue
-                # Reject any path containing the dead directory
-                if dead_dir in value:
+                if isinstance(value, str) and DEAD_DIR in value:
                     raise TaskDefinitionError(
-                        f"{path}: {section} entry '{key}' references dead directory '{dead_dir}'"
+                        f"{name}: {section} entry '{key}' references dead directory '{DEAD_DIR}'"
                     )
     return data
 
 
+def _check_writable(data: Any, name: str) -> Dict[str, Any]:
+    """
+    The write contract, §5.4: the read contract plus a memory bound per phase.
+
+    A phase without `memory_limit_mb` is rejected here, at the write that
+    introduced it, rather than discovered mid-run against a real process.
+    """
+    _check_task(data, name)
+    for phase in data.get("phases", []) or []:
+        if isinstance(phase, dict) and not phase.get("memory_limit_mb"):
+            raise TaskDefinitionError(
+                f"{name}: phase '{phase.get('name', '?')}' has no memory_limit_mb"
+            )
+    return data
+
+
+def _load_yaml(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle)
+    return _check_task(data, os.path.basename(path))
+
+
+def _order_path(project_root: str) -> str:
+    return os.path.join(project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
+
+
 def read_task_order(project_root: str) -> List[str]:
     """Ids in `TASK_ORDER` sequence. Empty when the file is absent."""
-    path = os.path.join(project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
+    path = _order_path(project_root)
     if not os.path.exists(path):
         return []
     with open(path, "r", encoding="utf-8") as handle:
-        text = handle.read()
-    # The file is a numbered list, optionally behind a `#` comment header.
-    return re.findall(r"^\s*\d+\.\s+(\S+)\s*$", text, re.MULTILINE)
+        return [m.group(2) for m in _ORDER_LINE.finditer(handle.read())]
+
+
+def _write_task_order(project_root: str, ids: List[str]) -> None:
+    """
+    Rewrite `TASK_ORDER` from a list of ids, renumbering from the list.
+
+    One writer, so no caller can leave a blank line or number an entry from
+    anything but the ids actually in the file. `TASK_ORDER` is a numbered
+    list; a line that does not parse is an entry that stops ordering anything.
+    """
+    header = "# Task execution order (highest priority first)\n"
+    body = "".join(f"{i}. {task_id}\n" for i, task_id in enumerate(ids, start=1))
+    with open(_order_path(project_root), "w", encoding="utf-8") as handle:
+        handle.write(header + body)
 
 
 def _priority(task: Dict[str, Any]) -> int:
@@ -270,208 +315,153 @@ class TaskRepository:
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
 
-    # NEW: CRUD OPERATIONS
+    # ======= write path =======
+    #
+    # Every write goes through `_check_writable` on the *merged* mapping before
+    # anything touches the disk. Validating the file on disk instead meant the
+    # write was never checked, so a task that could not be read back landed
+    # anyway and the next `TaskRepository()` construction raised - one edit
+    # made the whole project unreadable.
 
-    def update(self, task_id: str, patch: Dict[str, Any]) -> None:
-        """
-        Update an existing task with the given patch.
+    def _reindex(self) -> None:
+        self._order = read_task_order(self.project_root)
+        self._rank = {task_id: i for i, task_id in enumerate(self._order)}
 
-        The patch is a dict of fields to update. The task_id must exist in YAML files
-        (cannot update legacy-only tasks). If the patch changes the task's id,
-        the file is renamed accordingly. Conflict detection is performed by reading
-        the current file content before writing.
-
-        Raises:
-            KeyError: If the task_id doesn't exist in YAML files.
-            ValueError: If there are any conflicts when applying the patch.
-            TaskDefinitionError: If the updated task is invalid.
-        """
-        # Check if task exists in YAML (not legacy-only)
-        if task_id not in self._yaml:
-            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
-
-        task_file = self._yaml[task_id]["source_file"]
-        task_path = os.path.join(self.tasks_dir, task_file)
-
-        # Read current content for conflict detection
-        with open(task_path, "r", encoding="utf-8") as f:
-            current_content = f.read()
-
-        # Load current task data
-        current_task = self._yaml[task_id].copy()
-
-        # Apply the patch
-        for key, value in patch.items():
-            # Disallow changes to the id field (file name is derived from id)
-            if key == "id":
-                new_id = value
-                if new_id != task_id:
-                    raise ValueError(f"Cannot change task id from '{task_id}' to '{new_id}'")
-
-            # Special handling for source_file if it's being updated
-            if key == "source_file":
-                # Only allow renaming if it follows the task-* pattern
-                if not (value.startswith("task-") and value.endswith((".yaml", ".yml"))):
-                    raise ValueError(f"Invalid source_file name: '{value}'")
-                # Remove old task from internal dict
-                del self._yaml[task_id]
-
-            current_task[key] = value
-
-        # Validate the updated task structure
-        updated_task = _load_yaml(task_path)
-
-        # If id changed, rename the file
-        if "id" in patch and patch["id"] != task_id:
-            new_file = f"task-{patch['id']}.yaml"
-            new_path = os.path.join(self.tasks_dir, new_file)
-
-            # Remove the old task from internal dict
-            old_file = self._yaml[task_id]["source_file"]
-            del self._yaml[task_id]
-
-            # Rename the file
-            os.rename(task_path, new_path)
-
-            # Update source_file and re-add to internal dict
-            current_task["source_file"] = new_file
-            self._yaml[patch["id"]] = current_task
-
-            # Update the TASK_ORDER file if this task was in it
-            if task_id in self._order:
-                order_path = os.path.join(self.project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
-                with open(order_path, "r", encoding="utf-8") as f:
-                    order_content = f.read()
-
-                # Replace the id in TASK_ORDER
-                lines = order_content.split("\n")
-                for i, line in enumerate(lines):
-                    if f"{task_id}" in line:
-                        lines[i] = line.replace(task_id, patch["id"])
-                        break
-
-                with open(order_path, "w", encoding="utf-8") as f:
-                    f.write("\n".join(lines))
-
-                # Update internal order tracking
-                self._order[self._rank[task_id]] = patch["id"]
-                self._rank[patch["id"]] = self._rank[task_id]
-                del self._rank[task_id]
-
-        else:
-            # Write the updated task back to the same file
-            with open(task_path, "w", encoding="utf-8") as f:
-                yaml.dump(current_task, f, sort_keys=False)
-
-            # Update internal dict
-            self._yaml[task_id] = current_task
-
-    def delete(self, task_id: str) -> None:
-        """
-        Delete a task by its id.
-
-        This operation performs full referential cleanup:
-          1. Removes the task YAML file from tasks/
-          2. Removes the task from TASK_ORDER if present
-          3. Removes all schedule entries for this task
-          4. Removes all run history for this task
-
-        Raises:
-            KeyError: If the task_id doesn't exist in YAML files.
-        """
-        # Check if task exists in YAML (not legacy-only)
-        if task_id not in self._yaml:
-            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
-
-        # Get the source file name
-        task_file = self._yaml[task_id]["source_file"]
-        task_path = os.path.join(self.tasks_dir, task_file)
-
-        # Remove the task YAML file
-        os.remove(task_path)
-
-        # Remove from internal YAML dict
-        del self._yaml[task_id]
-
-        # Remove from TASK_ORDER if present
-        if task_id in self._order:
-            order_path = os.path.join(self.project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
-            with open(order_path, "r", encoding="utf-8") as f:
-                order_content = f.read()
-
-            lines = order_content.split("\n")
-            filtered_lines = [line for line in lines if task_id not in line]
-
-            with open(order_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(filtered_lines))
-
-            # Update internal order tracking
-            del self._rank[task_id]
-            self._order = [t for t in self._order if t != task_id]
-            self._rank = {task_id: i for i, task_id in enumerate(self._order)}
-
-        # Remove schedule entry for this task
-        schedule = self.schedule()
-        if task_id in schedule["scheduled_tasks"]:
-            del schedule["scheduled_tasks"][task_id]
-
-        # Remove run history for this task
-        if task_id in schedule["last_run"]:
-            del schedule["last_run"][task_id]
-
-        # Write the updated schedule back
+    def _save_schedule(self, schedule: Dict[str, Any]) -> None:
         path = self._state_path(SCHEDULE_FILENAME)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
 
-    def create(self, task_data: Dict[str, Any]) -> str:
-        """
-        Create a new task from the given data.
+    def _write_task(self, name: str, task: Dict[str, Any]) -> None:
+        """Write the task as the operator's file, not as the reader sees it.
 
-        The task_data must contain at least the 'id' field. If the task already exists,
-        raises ValueError. If the task is created successfully, returns the task_id.
+        `source_file` is a back-reference the reader adds. §5.4's format has
+        no such key and none of the migrated tasks carry one, so writing it
+        would push an internal detail into a hand-edited document.
+        """
+        canonical = {k: v for k, v in task.items() if k != "source_file"}
+        with open(os.path.join(self.tasks_dir, name), "w", encoding="utf-8") as handle:
+            yaml.dump(canonical, handle, sort_keys=False)
+
+    def update(self, task_id: str, patch: Dict[str, Any]) -> None:
+        """
+        Apply a patch to an existing YAML task, and write what was patched.
+
+        A patch may rename the task. A rename moves the file, the order entry,
+        the schedule entry and the run history together, so the schedule is
+        never left firing at an id no task answers to.
 
         Raises:
-            ValueError: If a task with the same id already exists.
-            TaskDefinitionError: If the task data is invalid.
+            KeyError: the task is not a YAML task.
+            TaskDefinitionError: the merged task is not writable, or the new
+                id is already taken. Nothing is written in either case.
         """
-        # Validate the task data structure
-        task_id = task_data["id"]
+        if task_id not in self._yaml:
+            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
 
-        # Check if task already exists
+        old_name = self._yaml[task_id]["source_file"]
+        merged = {k: v for k, v in self._yaml[task_id].items() if k != "source_file"}
+        merged.update(patch)
+        new_id = merged["id"]
+
+        if new_id != task_id and new_id in self._yaml:
+            raise TaskDefinitionError(f"Task '{new_id}' already exists")
+        new_name = f"task-{new_id}.yaml"
+        # Validate the merged mapping, not the file on disk - that is the whole
+        # point. `source_file` is carried in so the error names the file the
+        # task would land in; `_write_task` drops it from what is written.
+        _check_writable({**merged, "source_file": new_name}, new_name)
+
+        renamed = new_id != task_id
+        if renamed:
+            os.rename(os.path.join(self.tasks_dir, old_name),
+                      os.path.join(self.tasks_dir, new_name))
+        self._write_task(new_name, {**merged, "source_file": new_name})
+        del self._yaml[task_id]
+        self._yaml[new_id] = {**merged, "source_file": new_name}
+
+        if os.path.exists(_order_path(self.project_root)):
+            # Renumbered from the parsed ids, so the renamed entry is replaced
+            # by exact match and never by substring.
+            _write_task_order(self.project_root,
+                              [new_id if t == task_id else t for t in self._order])
+            self._reindex()
+
+        if renamed:
+            self._move_schedule(task_id, new_id)
+
+    def _move_schedule(self, old_id: str, new_id: str) -> None:
+        """Carry the schedule entry and the run history to a renamed task."""
+        schedule = self.schedule()
+        moved = False
+        for section in ("scheduled_tasks", "last_run"):
+            if old_id in schedule[section]:
+                schedule[section][new_id] = schedule[section].pop(old_id)
+                moved = True
+        if moved:
+            self._save_schedule(schedule)
+
+    def delete(self, task_id: str) -> None:
+        """
+        Delete a task and every reference to it:
+          1. the task's YAML file;
+          2. its `TASK_ORDER` entry, matched by parsed id;
+          3. its schedule entry and run history, so nothing keeps firing at
+             an id no task answers to.
+
+        Raises:
+            KeyError: the task is not a YAML task.
+        """
+        if task_id not in self._yaml:
+            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
+
+        os.remove(os.path.join(self.tasks_dir, self._yaml[task_id]["source_file"]))
+        del self._yaml[task_id]
+
+        if task_id in self._order:
+            # Exact id, from the parsed list. A substring filter took out
+            # every line mentioning the id - deleting `check` also deleted
+            # the `health-check` line, leaving that task unordered but present.
+            _write_task_order(self.project_root, [t for t in self._order if t != task_id])
+            self._reindex()
+
+        schedule = self.schedule()
+        for section in ("scheduled_tasks", "last_run"):
+            schedule[section].pop(task_id, None)
+        self._save_schedule(schedule)
+
+    def create(self, task_data: Dict[str, Any]) -> str:
+        """
+        Create a task from a definition and return its id.
+
+        The definition is validated before anything is written, so a rejected
+        task leaves no file and no order entry behind.
+
+        Raises:
+            KeyError: the definition names no id.
+            ValueError: the id is taken.
+            TaskDefinitionError: the definition is not writable.
+        """
+        task_id = task_data["id"]
         if task_id in self._yaml or task_id in self._legacy:
             raise ValueError(f"Task '{task_id}' already exists")
 
-        # Validate the task structure
-        temp_path = os.path.join(self.tasks_dir, f"task-{task_id}.yaml")
-        with open(temp_path, "w", encoding="utf-8") as f:
-            yaml.dump(task_data, f, sort_keys=False)
+        name = f"task-{task_id}.yaml"
+        # Validate first, write second. The reverse order leaves an invalid
+        # task on disk under a name nothing will ever read.
+        _check_writable({**task_data, "source_file": name}, name)
 
-        # Re-validate by loading it
-        loaded_task = _load_yaml(temp_path)
+        self._write_task(name, {**task_data, "source_file": name})
+        self._yaml[task_id] = {**task_data, "source_file": name}
 
-        # Add to internal dict
-        self._yaml[task_id] = loaded_task
-
-        # Update TASK_ORDER if the file exists
-        order_path = os.path.join(self.project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
-        if os.path.exists(order_path):
-            with open(order_path, "r", encoding="utf-8") as f:
-                order_content = f.read()
-
-            # Add to end of TASK_ORDER
-            lines = order_content.split("\n")
-            next_num = len(lines) + 1
-            lines.append(f"{next_num}. {task_id}")
-
-            with open(order_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-
-            # Update internal order tracking
-            self._order.append(task_id)
-            self._rank[task_id] = len(self._order) - 1
-
+        if os.path.exists(_order_path(self.project_root)):
+            # Numbered from the id list, not the line count: the file carries a
+            # comment header and a trailing newline, and both throw the line
+            # count off. Joining onto a trailing newline also leaves a blank
+            # line, which splits the order file in two.
+            _write_task_order(self.project_root, self._order + [task_id])
+            self._reindex()
         return task_id
 
 

@@ -17,7 +17,9 @@ import functools
 import json
 import os
 import sys
-from typing import Any, List, Optional
+from typing import Any, Dict, List, Optional
+
+import yaml
 
 from theteam.state import StateStore
 
@@ -233,11 +235,69 @@ def cmd_serve(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_task(args: argparse.Namespace) -> int:
+    """Single-task operations. Every write reports what it did to what."""
+    from theteam.tasks.repository import TaskRepository
+
+    repo = TaskRepository(_project_root(args))
+    action = args.task_command
+
+    if action == "create":
+        task_id = repo.create(_definition(args.path))
+        return _emit(args, {"id": task_id, "created": True}, f"created {task_id}")
+
+    if action == "edit":
+        patch = _patch(args.patch)
+        repo.update(args.task_id, patch)
+        return _emit(args, {"id": patch.get("id", args.task_id), "patched": list(patch)},
+                     f"edited {args.task_id}")
+
+    if action == "delete":
+        plan = _delete_plan(repo, args.task_id)
+        if not args.yes:
+            return _emit(args, plan, "would clean up:\n" + "\n".join(plan["will_remove"])
+                         + "\nre-run with --yes to do it")
+        repo.delete(args.task_id)
+        return _emit(args, plan, f"deleted {args.task_id}")
+
+    task = repo.get(args.task_id)
+    if task is None:
+        return _fail(args, "task show", f"no task '{args.task_id}'")
+    return _emit(args, task, yaml.safe_dump(task, sort_keys=False).rstrip())
+
+
+def _definition(path: Optional[str]) -> Dict[str, Any]:
+    """A task definition from its YAML file. Named, never invented."""
+    if not path:
+        raise ValueError("--path is required")
+    with open(path, "r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _patch(path: Optional[str]) -> Dict[str, Any]:
+    if not path:
+        raise ValueError("--patch is required")
+    with open(path, "r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle)
+
+
+def _delete_plan(repo, task_id: str) -> Dict[str, Any]:
+    """What a delete will touch, named before it does."""
+    schedule = repo.schedule()
+    will = [f"tasks/{repo._yaml[task_id]['source_file']}"] if task_id in repo._yaml else []
+    if task_id in repo._order:
+        will.append("tasks/TASK_ORDER")
+    if task_id in schedule["scheduled_tasks"]:
+        will.append("schedule entry")
+    if task_id in schedule["last_run"]:
+        will.append("run history")
+    return {"id": task_id, "will_remove": will}
+
+
 # ======= parser =======
 
 MILESTONE_OF = {
     "comment": "M5",
-    "task": "M3",
     "history": "M4",
 }
 
@@ -300,8 +360,37 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
     run.set_defaults(func=cmd_run)
-    # Declared so the surface in ARCHITECTURE.md §2 is discoverable from
-    # `--help`; each refuses until its milestone lands.
+    task = sub.add_parser("task", help="Create, edit, delete or show one task.")
+    task_action = task.add_subparsers(dest="task_command", required=True)
+
+    task_create = task_action.add_parser("create", help="Create a task from a YAML file.")
+    task_create.add_argument("--path", required=True, help="YAML file holding the definition.")
+    task_create.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                             help="Machine-readable output.")
+    task_create.set_defaults(func=cmd_task)
+
+    task_edit = task_action.add_parser("edit", help="Patch an existing task.")
+    task_edit.add_argument("task_id")
+    task_edit.add_argument("--patch", required=True, help="YAML file holding the patch.")
+    task_edit.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                           help="Machine-readable output.")
+    task_edit.set_defaults(func=cmd_task)
+
+    task_delete = task_action.add_parser("delete", help="Delete a task and its references.")
+    task_delete.add_argument("task_id")
+    task_delete.add_argument("--yes", action="store_true", help="Actually delete.")
+    task_delete.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                             help="Machine-readable output.")
+    task_delete.set_defaults(func=cmd_task)
+
+    task_show = task_action.add_parser("show", help="Show one task as stored.")
+    task_show.add_argument("task_id")
+    task_show.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                           help="Machine-readable output.")
+    task_show.set_defaults(func=cmd_task)
+
+    # Declared so the rest of the surface in ARCHITECTURE.md §2 is discoverable
+    # from `--help`; each refuses until its milestone lands.
     for name, milestone in MILESTONE_OF.items():
         pending = sub.add_parser(name, add_help=False)
         pending.add_argument("--json", action="store_true", default=argparse.SUPPRESS,

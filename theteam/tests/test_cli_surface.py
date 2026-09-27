@@ -41,7 +41,7 @@ def test_every_command_in_the_architecture_surface_exists():
     ("loop", False, "Task not found"),
     ("comment", False, "not implemented yet"),
     ("tasks", True, None),
-    ("task", False, "not implemented yet"),
+    ("task", False, "no task"),
     ("run", True, None),
     ("history", False, "not implemented yet"),
 ])
@@ -61,6 +61,9 @@ def test_command_returns_an_int_exit_code(command, succeeds, diagnostic, tmp_pat
     argv = {
         "bootstrap": [], "status": [], "discuss": ["a topic"],
         "loop": ["no-such-task"],
+        # `task` landed in M3, so it has real actions; a task that does not
+        # exist is the honest failure, and it must be a named one.
+        "task": ["show", "no-such-task"],
     }.get(command, [])
 
     code = main(["--project-root", str(tmp_path), command, *argv])
@@ -83,7 +86,7 @@ def test_serve_is_wired_to_its_handler():
     assert action.choices["serve"].get_default("func") is cmd_serve
 
 
-@pytest.mark.parametrize("command", ["task", "history", "comment"])
+@pytest.mark.parametrize("command", ["history", "comment"])
 def test_unimplemented_command_names_its_milestone(command, tmp_path, capsys):
     """A command that does not exist says so. It never returns a fake result."""
     assert main(["--project-root", str(tmp_path), command]) == 1

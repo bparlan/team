@@ -15,6 +15,7 @@ phases:
     script: scripts/sa_runner.py
     args: []
     timeout_seconds: 300
+    memory_limit_mb: 64
 # The prompt is the whole task document, verbatim. An agent receives this
 # text; anything lost here is a task the user can no longer run.
 prompt: |-

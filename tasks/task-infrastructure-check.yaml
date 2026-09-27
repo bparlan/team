@@ -1,0 +1,38 @@
+id: infrastructure-check
+name: Infrastructure Check
+type: monitoring
+priority: 8
+description: Check project infrastructure health including file structure, scripts, and runtime configuration
+failure_handling: retry
+context:
+  - Python version compatibility
+  - Required scripts and tools
+  - Directory layout integrity
+  - Loop state files
+expected_output: Infrastructure check passed: all systems operational
+phases:
+  - name: execute
+    script: scripts/loop_infrastructure_check.py
+    args: []
+    timeout_seconds: 300
+# The prompt is the whole task document, verbatim. An agent receives this
+# text; anything lost here is a task the user can no longer run.
+prompt: |-
+  # Task: infrastructure-check
+  ## Type
+  monitoring
+  ## Priority
+  8
+  ## Description
+  Check project infrastructure health including file structure, scripts, and runtime configuration
+  ## Execution
+  python3 scripts/loop_infrastructure_check.py
+  ## Context
+  - Python version compatibility
+  - Required scripts and tools
+  - Directory layout integrity
+  - Loop state files
+  ## Expected Output
+  Infrastructure check passed: all systems operational
+  ## Failure Handling
+  retry

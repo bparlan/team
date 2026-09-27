@@ -20,8 +20,12 @@ import uuid
 
 from theteam.core.agent_isolation import AgentIsolation, IsolationPolicy
 
-# Repo root, used to build PYTHONPATH and subprocess cwd for the agent runner.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# Directory that CONTAINS the `theteam` package: what a subprocess needs on
+# PYTHONPATH to `import theteam.*`. Derived from the package itself, so it is
+# correct at any install depth and in any checkout.
+import theteam as _theteam
+
+PROJECT_ROOT = str(Path(_theteam.__file__).resolve().parent.parent)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -199,7 +203,7 @@ class SystemIntegration:
                         runner_cmd,
                         container_name=f"theteam-agent-{uuid.uuid4().hex[:12]}",
                         project_root=project_root,
-                        env={"PYTHONPATH": str(PROJECT_ROOT)},
+                        env={"PYTHONPATH": PROJECT_ROOT},
                     )
                     returncode, stdout, stderr = (
                         runner_result["exit_code"],
@@ -213,7 +217,7 @@ class SystemIntegration:
                     import subprocess
                     _proc = subprocess.run(
                         runner_cmd,
-                        cwd=PROJECT_ROOT,
+                        cwd=self.project_root,
                         capture_output=True,
                         text=True,
                         timeout=300,

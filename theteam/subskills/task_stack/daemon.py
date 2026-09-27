@@ -21,8 +21,16 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
 PROJECT_ROOT = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(".")
-PID_FILE = PROJECT_ROOT / ".mp" / "theteam" / "task-stack.pid"
-STATUS_FILE = PROJECT_ROOT / ".mp" / "theteam" / "task-stack-daemon.json"
+
+
+def _state():
+    from theteam.state import StateStore
+
+    return StateStore(str(PROJECT_ROOT))
+
+
+PID_FILE = _state().task_daemon_pid
+STATUS_FILE = _state().task_daemon_status
 
 
 def get_orchestrator():

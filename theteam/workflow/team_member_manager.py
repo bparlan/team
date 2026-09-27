@@ -124,7 +124,9 @@ class TeamMemberManager:
         # Templates belong to the project being loaded, not to this source tree,
         # so discovery follows project_root like agents_dir and state_file do.
         self.templates_dir = Path(project_root) / "theteam" / "workflow" / "agents"
-        self.state_file = Path(project_root) / ".mp" / "theteam" / "state" / "team_members.json"
+        from theteam.state import StateStore
+
+        self.state_file = StateStore(str(project_root)).root / "state" / "team_members.json"
 
     def discover_and_load(self) -> Dict[str, TeamMember]:
         """

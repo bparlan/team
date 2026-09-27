@@ -13,7 +13,6 @@ from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 from .registry import TaskRegistry
 from .scheduler import TaskScheduler
@@ -25,11 +24,14 @@ from .converter import ConversationConverter
 class TaskStackOrchestrator:
     def __init__(self, project_root: str = None):
         if project_root is None:
-            project_root = str(PROJECT_ROOT)
+            project_root = os.getcwd()
+        from theteam.state import StateStore
+
         self.project_root = Path(project_root)
-        self.registry = TaskRegistry(str(self.project_root / ".mp" / "theteam" / "task-registry.json"))
-        self.scheduler = TaskScheduler(str(self.project_root / ".mp" / "theteam" / "task-schedule.json"))
-        self.stack = TaskStackManager(str(self.project_root / ".mp" / "theteam" / "task-stack.json"))
+        state = StateStore(str(self.project_root))
+        self.registry = TaskRegistry(str(state.task_registry))
+        self.scheduler = TaskScheduler(str(state.task_schedule))
+        self.stack = TaskStackManager(str(state.task_stack))
         self.executor = TaskExecutor(str(self.project_root))
         self.converter = ConversationConverter(str(self.project_root))
 

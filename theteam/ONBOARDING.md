@@ -120,8 +120,8 @@ python3 scripts/loop_controller.py status
 
 ### View system awareness results
 ```bash
-cat .mp/theteam/health-score.json
-cat .mp/theteam/system-awareness-summary.json
+cat .omp/theteam/health-score.json
+cat .omp/theteam/system-awareness-summary.json
 ```
 
 ## Troubleshooting

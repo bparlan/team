@@ -32,8 +32,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class TeamMemberConfig:
     """Configuration for team member management system."""
-    def __init__(self):
-        self.members_dir = ".mp/theteam/members"
+    def __init__(self, members_dir: str = "members"):
+        self.members_dir = members_dir
         self.member_ttl_days = 365  # Member validity period
         self.max_members = 1000  # Maximum team members
         self.enable_auto_cleanup = True
@@ -122,9 +122,10 @@ class TeamMemberManager:
             cls._shared_stores.pop(str(Path(project_root)), None)
     
     def _setup_directories(self):
-        """Set up required directory structure under the project root."""
-        # Members live inside the project they describe, not the process CWD.
-        self.config.members_dir = str(self.project_root / self.config.members_dir)
+        """Members live in the state directory of the project they describe."""
+        from theteam.state import StateStore
+
+        self.config.members_dir = str(StateStore(str(self.project_root)).members)
         os.makedirs(self.config.members_dir, exist_ok=True)
     
     def _read_members_from_disk(self) -> Dict[str, TeamMember]:

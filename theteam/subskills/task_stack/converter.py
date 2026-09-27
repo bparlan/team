@@ -22,7 +22,7 @@ class ConversationConverter:
                 }
             ],
             "outputs": [
-                {"path": ".mp/theteam/conversation-task.json", "type": "json"}
+                {"path": ".omp/theteam/conversation-task.json", "type": "json"}
             ],
             "metadata": {
                 "created_by": "converter",
@@ -56,7 +56,7 @@ class ConversationConverter:
                 }
             ],
             "outputs": [
-                {"path": ".mp/theteam/user-task.json", "type": "json"}
+                {"path": ".omp/theteam/user-task.json", "type": "json"}
             ],
             "metadata": {
                 "created_by": "converter",

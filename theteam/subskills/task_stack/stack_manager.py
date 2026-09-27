@@ -3,7 +3,7 @@ from typing import Dict, List, Optional
 import json
 
 class TaskStackManager:
-    def __init__(self, stack_path: str = ".mp/theteam/task-stack.json"):
+    def __init__(self, stack_path: str):
         self.path = Path(stack_path)
         self.stack = self._load()
 

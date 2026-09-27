@@ -6,17 +6,9 @@ All the work happens in stdlib functions that CI can test without Reflex;
 this class only stores their results and owns the disclosure panel state.
 """
 
-import sys
-from pathlib import Path
 from typing import Any, Dict, List
 
 import reflex as rx
-
-# The dashboard is launched from its own directory, where the repo root is not
-# on sys.path. Add it so the shared component library resolves either way.
-_REPO_ROOT = Path(__file__).resolve().parents[4]
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
 
 from theteam.ui.components.visibility import apply_panel_state, build_visibility, toggle_id
 

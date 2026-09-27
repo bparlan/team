@@ -15,13 +15,7 @@ reflex = pytest.importorskip("reflex", reason="dashboard requires the optional r
 
 from theteam.ui.web_dashboard.theteam_dashboard.visibility_state import VisibilityState
 
-PAGES_DIR = (
-    Path(__file__).resolve().parents[1]
-    / "ui"
-    / "web_dashboard"
-    / "theteam_dashboard"
-    / "pages"
-)
+PAGES_DIR = Path(__file__).resolve().parent.parent / "ui" / "web_dashboard" / "theteam_dashboard" / "pages"
 
 
 class TestDeclaredSurface:

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "project": {
     "name": "team-skill",
-    "root": "/Users/bparlan/devcode/team",
+    "root": ".",
     "description": "Team skill orchestrates deterministic multi-agent review and consensus building for engineering projects",
     "stack": []
   },

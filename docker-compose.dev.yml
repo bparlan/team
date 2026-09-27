@@ -24,7 +24,7 @@ services:
           cpus: "2.0"
           memory: 2G
     user: root
-    command: ["python", "-m", "theteam"]
+    command: ["python", "-m", "theteam.cli", "serve"]
 
   # Optional local Postgres for testing the failover and replica code paths.
   # Start it explicitly:  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile pg up

@@ -398,7 +398,7 @@ if __name__ == "__main__":
 
     # Simulate starting a discussion
     discussion_id = state_manager.discussion_state.start_discussion(
-        "Optimize database queries", "/Users/bparlan/devcode/team"
+        "Optimize database queries", os.getcwd()
     )
     state_manager.discussion_state.add_participant(discussion_id, "architect")
     state_manager.discussion_state.add_task(discussion_id, {
@@ -409,7 +409,7 @@ if __name__ == "__main__":
 
     # Simulate system analysis
     analysis_id = state_manager.system_awareness_state.start_analysis(
-        "infrastructure_assessment", "/Users/bparlan/devcode/team"
+        "infrastructure_assessment", os.getcwd()
     )
 
     # Simulate health metrics

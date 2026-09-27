@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Based on analysis of `/Users/bparlan/devcode/team/theteam/__init__.py`, the current implementation simulates team discussion workflows but lacks real agent interaction, context aggregation, and proper tool integration. This design provides a complete, implementation-ready framework for completing the missing discussion workflow.
+Based on analysis of `<project-root>/theteam/__init__.py`, the current implementation simulates team discussion workflows but lacks real agent interaction, context aggregation, and proper tool integration. This design provides a complete, implementation-ready framework for completing the missing discussion workflow.
 
 ## Current Implementation Analysis
 
@@ -274,7 +274,7 @@ def validate_member_note(note, expected_id):
 
 ### File Structure
 ```
-/Users/bparlan/devcode/team/theteam/
+<project-root>/theteam/
 ├── __init__.py              # Enhanced main orchestrator
 ├── bin/
 │   ├── theteam_config.py    # Enhanced validation

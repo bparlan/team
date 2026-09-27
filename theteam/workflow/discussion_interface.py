@@ -58,7 +58,10 @@ class DiscussionInterface:
         """
         self.project_root = project_root
         self.active_discussions: Dict[str, Dict[str, Any]] = {}
-        self.discussion_dir = os.path.join(project_root, ".mp", "theteam", "discussions")
+
+        from theteam.state import StateStore
+
+        self.discussion_dir = str(StateStore(str(project_root)).discussions)
         self.monitoring_active = False
         self.monitoring_thread = None
         self._member_lock = threading.RLock()

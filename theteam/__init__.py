@@ -167,8 +167,48 @@ def consolidate_notes(notes_dir, config):
         "open_questions": open_questions,
         "recommendation": recommendation
     }
+
+
+def _has_file(root, name):
+    return os.path.exists(os.path.join(root, name))
+
+
+def _file_mentions(root, name, keywords):
+    """True when a config file names one of the keywords. Unreadable is False."""
+    path = os.path.join(root, name)
+    if not os.path.exists(path):
+        return False
+    try:
+        with open(path, 'r') as f:
+            content = f.read().lower()
+    except OSError as e:
+        log_security_event(f"Error processing config file {path}: {e}")
+        return False
+    return any(keyword in content for keyword in keywords)
+
+
+def _extension_present(root, extensions, limit=400):
+    """Whether the project holds a file with one of these extensions."""
+    found = 0
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames
+                       if d not in ('.git', 'node_modules', '__pycache__', 'target', 'dist', 'build')]
+        for filename in filenames:
+            if filename.endswith(extensions):
+                found += 1
+                if found >= limit:
+                    return True
+    return False
+
+
 def analyze_project_context(project_root):
-    """Analyze project context to determine appropriate team members."""
+    """
+    Analyze project context to determine appropriate team members.
+
+    Every flag below is assigned from evidence in the project. A declared
+    focus that nothing can ever set is a lie about what the team looked at,
+    so each one has a detector and each one is reachable.
+    """
     context = {
         'security_focus': False,
         'data_science_focus': False,
@@ -178,86 +218,85 @@ def analyze_project_context(project_root):
         'infrastructure_focus': False
     }
 
-    # Enhanced security focus detection
-    security_files = [
-        # Direct security files
-        'SECURITY_POLICY.yaml',
-        'security_policy.py',
-        'audit_logger.py',
-        # CI/CD security configurations
-        '.github/workflows/*security*.yaml',
-        '.github/workflows/*scan*.yaml',
-        '.github/workflows/*auth*.yaml',
-        '.gitlab-ci.yml',
-        # Container security
-        'Dockerfile.security',
-        'Dockerfile*security*',
-        'docker-compose*.security*.yaml',
-        '.dockerignore',
-        # Dependency security
-        'requirements-dev.txt',
-        'package.json',
-        'Pipfile',
-        'pyproject.toml',
-        'setup.py',
-        # Environment and secrets
-        '.env.example',
-        '.env.template',
-        '.env.template.*',
-        # Code security analysis
-        '.bandit',
-        '.security-scan',
-        # Compliance and governance
-        'COMPLIANCE.md',
-        'GOVERNANCE.md',
-        'RISK_ASSESSMENT.md',
-        # Infrastructure security
-        'terraform.*security*',
-        'cloudformation*security*',
-        'kubernetes*security*',
-        # Authentication and authorization
-        'auth*.py',
-        'authentication*.py',
-        'authorization*.py',
-        # Database security
-        'database*.security*.py',
-        'sql*.security*.py',
-    ]
+    # Security: a policy, a scanner, or a config that names a security tool.
+    security_files = (
+        'SECURITY_POLICY.yaml', 'security_policy.py', 'audit_logger.py',
+    )
+    context['security_focus'] = any(
+        _has_file(project_root, name) for name in security_files
+    ) or _file_mentions(
+        project_root, 'pyproject.toml',
+        ('bandit', 'security', 'safety', 'pip-audit', 'vulnerability'),
+    ) or _file_mentions(
+        project_root, 'package.json', ('audit', 'snyk', 'security', 'eslint-plugin-security'),
+    ) or _file_mentions(
+        project_root, 'requirements.txt', ('bandit', 'pip-audit', 'safety', 'cryptography'),
+    )
 
-    # Check for security files and configurations
-    security_files_list = [
-        'SECURITY_POLICY.yaml',
-        'security_policy.py',
-        'audit_logger.py',
-    ]
+    # Data science: notebooks, or a project that declares a numerical stack.
+    context['data_science_focus'] = any(
+        _has_file(project_root, name)
+        for name in ('notebooks', 'analysis.ipynb', 'research', 'data')
+    ) or _file_mentions(
+        project_root, 'requirements.txt',
+        ('numpy', 'pandas', 'scikit-learn', 'matplotlib', 'torch', 'jupyter'),
+    ) or _file_mentions(
+        project_root, 'pyproject.toml', ('numpy', 'pandas', 'scikit-learn', 'torch'),
+    )
 
-    for file in security_files_list:
-        if os.path.exists(os.path.join(project_root, file)):
-            context['security_focus'] = True
-            break
+    # Frontend: UI sources, or a declared web framework.
+    context['frontend_focus'] = (
+        _has_file(project_root, 'index.html')
+        or _has_file(project_root, 'next.config.js')
+        or _has_file(project_root, 'vite.config.ts')
+        or _has_file(project_root, 'frontend')
+        or _has_file(project_root, 'src/components')
+    ) or _file_mentions(
+        project_root, 'package.json',
+        ('react', 'vue', 'svelte', 'next', 'tailwind', 'styled-components'),
+    )
 
-    # Additional security indicators check
-    if not context['security_focus']:
-        # Check for common security patterns in configuration files
-        config_patterns = ['requirements-dev.txt', 'pyproject.toml', 'package.json']
-        for pattern in config_patterns:
-            config_path = os.path.join(project_root, pattern)
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, 'r') as f:
-                        content = f.read().lower()
-                        # Look for security-related keywords
-                        security_keywords = [
-                            'bandit', 'security', 'scan', 'auth', 'authentication',
-                            'authorization', 'vulnerability', 'compliance', 'audit'
-                        ]
-                        if any(keyword in content for keyword in security_keywords):
-                            context['security_focus'] = True
-                            break
-                except (yaml.YAMLError, json.JSONDecodeError, Exception) as e:
-                    log_security_event(f"Error processing config file: {e}")
+    # API: a service definition or a route layer.
+    context['api_focus'] = (
+        _has_file(project_root, 'openapi.yaml')
+        or _has_file(project_root, 'openapi.json')
+        or _has_file(project_root, 'api')
+        or _has_file(project_root, 'routes')
+        or _has_file(project_root, 'Dockerfile')
+    ) or _file_mentions(
+        project_root, 'requirements.txt',
+        ('fastapi', 'flask', 'django', 'rest-framework', 'express'),
+    ) or _file_mentions(
+        project_root, 'package.json', ('express', 'fastify', 'apollo', 'openapi'),
+    ) or _file_mentions(
+        project_root, 'pyproject.toml', ('fastapi', 'flask', 'django'),
+    )
+
+    # Database: a migration tree, a schema, or a database client dependency.
+    context['database_focus'] = (
+        _has_file(project_root, 'migrations')
+        or _has_file(project_root, 'alembic.ini')
+        or _has_file(project_root, 'schema.sql')
+        or _has_file(project_root, 'db')
+    ) or _file_mentions(
+        project_root, 'requirements.txt',
+        ('psycopg2', 'sqlalchemy', 'pymysql', 'mongoose', 'redis', 'alembic'),
+    ) or _file_mentions(
+        project_root, 'package.json', ('prisma', 'sequelize', 'typeorm', 'pg', 'mysql'),
+    )
+
+    # Infrastructure: deploy or cluster configuration.
+    context['infrastructure_focus'] = any(
+        _has_file(project_root, name)
+        for name in ('Dockerfile', 'docker-compose.yml', 'docker-compose.yaml',
+                     'terraform', 'k8s', 'kubernetes', '.github/workflows')
+    ) or _file_mentions(
+        project_root, 'pyproject.toml', ('boto3', 'kubernetes', 'ansible', 'terraform'),
+    )
 
     return context
+
+
 def generate_team_members_from_context(project_root):
     """Generate appropriate team members based on project context."""
     try:
@@ -314,13 +353,15 @@ def generate_team_members_from_context(project_root):
             }
         ]
 
-        if context.get('security_focus'):
-            base_members.append({
+        # One member per detected focus. Every flag `analyze_project_context`
+        # can set has a reviewer here, so a Python web project and a Rust CLI
+        # do not get the same team.
+        focus_members = {
+            'security_focus': {
                 'id': 'security',
                 'role': 'Security Reviewer',
                 'expertise': 'auth, secrets handling, input validation, supply chain',
                 'voice': 'assumes hostile input until proven otherwise',
-                'enabled': True,
                 'personality': {
                     'emoji': '🔒',
                     'color': '#8B0000',
@@ -330,7 +371,89 @@ def generate_team_members_from_context(project_root):
                     'speech_pattern': 'methodical',
                     'interaction_frequency': 'as_needed'
                 }
-            })
+            },
+            'data_science_focus': {
+                'id': 'analyst',
+                'role': 'Data Analyst',
+                'expertise': 'data quality, leakage, metric definitions, reproducibility',
+                'voice': 'asks what the number was measured over, and on what sample',
+                'personality': {
+                    'emoji': '📊',
+                    'color': '#2F6F9F',
+                    'greeting': 'Let\'s look at the data before we trust the conclusion.',
+                    'closing': '📊 Analyst done — the claim now matches the sample.',
+                    'style': 'precise',
+                    'speech_pattern': 'steady',
+                    'interaction_frequency': 'balanced'
+                }
+            },
+            'frontend_focus': {
+                'id': 'designer',
+                'role': 'Interface Reviewer',
+                'expertise': 'layout, states, accessibility, visual consistency',
+                'voice': 'asks what the user sees on a slow connection and with a keyboard',
+                'personality': {
+                    'emoji': '🎨',
+                    'color': '#B56576',
+                    'greeting': 'How does this actually feel to use?',
+                    'closing': '🎨 Interface reviewed — states, contrast, focus order.',
+                    'style': 'concrete',
+                    'speech_pattern': 'observant',
+                    'interaction_frequency': 'balanced'
+                }
+            },
+            'api_focus': {
+                'id': 'api',
+                'role': 'API Reviewer',
+                'expertise': 'contracts, versioning, error shapes, backwards compatibility',
+                'voice': 'asks what breaks for the caller when this changes',
+                'personality': {
+                    'emoji': '🔌',
+                    'color': '#3F8F6B',
+                    'greeting': 'Let\'s check the contract before the implementation.',
+                    'closing': '🔌 API reviewed — the contract is the stable part.',
+                    'style': 'exact',
+                    'speech_pattern': 'deliberate',
+                    'interaction_frequency': 'balanced'
+                }
+            },
+            'database_focus': {
+                'id': 'data',
+                'role': 'Data Reviewer',
+                'expertise': 'schema, migrations, indexes, transaction boundaries',
+                'voice': 'asks what the migration does to the live table at 3am',
+                'personality': {
+                    'emoji': '🗄️',
+                    'color': '#7A5C2E',
+                    'greeting': 'Show me the migration path.',
+                    'closing': '🗄️ Data reviewed — the migration is reversible.',
+                    'style': 'grounded',
+                    'speech_pattern': 'patient',
+                    'interaction_frequency': 'as_needed'
+                }
+            },
+            'infrastructure_focus': {
+                'id': 'devops',
+                'role': 'Infrastructure Reviewer',
+                'expertise': 'deployment, resource bounds, failure and recovery behaviour',
+                'voice': 'asks what this looks like when the host goes away',
+                'personality': {
+                    'emoji': '⚙️',
+                    'color': '#5B6E7A',
+                    'greeting': 'Let\'s check how this behaves under failure.',
+                    'closing': '⚙️ Infra reviewed — bounded, observable, recoverable.',
+                    'style': 'pragmatic',
+                    'speech_pattern': 'measured',
+                    'interaction_frequency': 'as_needed'
+                }
+            },
+        }
+
+        for flag in sorted(context):
+            if context.get(flag):
+                member = dict(focus_members[flag])
+                member['enabled'] = True
+                base_members.append(member)
 
         return {
             'project': {
@@ -359,82 +482,14 @@ def generate_team_members_from_context(project_root):
             }
         }
     except Exception as e:
-        print(f"Error generating team members: {e}")
-        return {
-            'project': {
-                'name': 'team',
-                'root': '.',
-                'description': 'Orchestrates independent reviewer subagents'
-            },
-            'team': [
-                {
-                    'id': 'architect',
-                    'role': 'Systems Architect',
-                    'expertise': 'long-term maintainability, coupling, failure modes, blast radius',
-                    'voice': 'skeptical of shortcuts; asks what breaks in 6 months',
-                    'enabled': True,
-                    'personality': {
-                        'emoji': '🧱',
-                        'color': '#FF6B6B',
-                        'greeting': "Hello team! Let's architect this properly...",
-                        'closing': "🏗️ Architect signing off — think about those long-term implications",
-                        'style': 'technical',
-                        'speech_pattern': 'methodical',
-                        'interaction_frequency': 'balanced'
-                    }
-                },
-                {
-                    'id': 'pragmatist',
-                    'role': 'Delivery Pragmatist',
-                    'expertise': 'shipping speed, scope control, solo-developer bandwidth',
-                    'voice': 'pushes back on over-engineering; asks for the smallest real fix',
-                    'enabled': True,
-                    'personality': {
-                        'emoji': '⚡',
-                        'color': '#4ECDC4',
-                        'greeting': "Alright team! Let's ship this FAST! 🚀",
-                        'closing': "✅ Pragmatist done — shipping first, perfect second",
-                        'style': 'direct',
-                        'speech_pattern': 'quick',
-                        'interaction_frequency': 'high'
-                    }
-                },
-                {
-                    'id': 'skeptic',
-                    'role': 'Adversarial Reviewer',
-                    'expertise': 'edge cases, silent failure modes, unverified claims',
-                    'voice': 'distrusts prose-only completion reports; demands raw evidence',
-                    'enabled': True,
-                    'personality': {
-                        'emoji': '🔍',
-                        'color': '#95E77E',
-                        'greeting': 'Whoa whoa! Let\'s slow down and test this! 📋',
-                        'closing': '🤔 Skeptic signing off — ask again later!',
-                        'style': 'analytical',
-                        'speech_pattern': 'cautious',
-                        'interaction_frequency': 'as_needed'
-                    }
-                }
-            ],
-            'permitted_skills': ['ponytail', 'evolve-skills', 'code-search'],
-            'behavior': {
-                'proactive_plan_required': True,
-                'block_edits_without_plan': True,
-                'pre_analysis_search': True,
-                'enable_persona_comments': True,
-                'chat_mode': True,
-                'option_selection_required': True,
-                'gamification_enabled': True,
-                'auto_summarization': False,
-                'dynamic_interaction': True,
-                'max_discussion_rounds': 5,
-                'persona_response_variety': True
-            },
-            'output': {
-                'report_dir': '.omp/theteam/reports',
-                'keep_last': 20
-            }
-        }
+        # §3.3: a hardcoded roster here is a confident answer with nothing
+        # behind it. The context analysis is what the team *is*; if it failed,
+        # there is no team to describe.
+        raise RuntimeError(
+            f"Failed to analyze project context at {project_root}: {e}"
+        ) from e
+
+
 def resolve_template_path(project_root=None):
     """Find the canonical theteam-template.config path across standard locations."""
     candidates = [

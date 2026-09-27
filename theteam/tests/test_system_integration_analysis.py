@@ -51,11 +51,12 @@ class TestModuleLevelNames:
         assert hasattr(si, "sys")
 
     def test_project_root_is_defined(self):
-        # The function body builds PYTHONPATH and a subprocess cwd from it.
-        assert isinstance(si.PROJECT_ROOT, Path)
+        # The function body builds PYTHONPATH from it, and that path must
+        # contain the `theteam` package for the agent to import it.
+        assert isinstance(si.PROJECT_ROOT, str)
 
     def test_project_root_points_at_repo(self):
-        assert (si.PROJECT_ROOT / "theteam").is_dir()
+        assert (Path(si.PROJECT_ROOT) / "theteam" / "__init__.py").is_file()
 
 
 class TestReturnsResult:
@@ -99,7 +100,7 @@ class TestReturnsResult:
         # The agent imports theteam.*, so it needs the repo root on PYTHONPATH.
         integration, calls = _make(tmp_path)
         _analyze(integration, tmp_path)
-        assert calls["env"]["PYTHONPATH"] == str(si.PROJECT_ROOT)
+        assert calls["env"]["PYTHONPATH"] == si.PROJECT_ROOT
 
     def test_runner_receives_project_root_flag(self, tmp_path):
         integration, calls = _make(tmp_path)

@@ -388,8 +388,8 @@ def test_cross_phase_compatibility():
 
 ### Files Modified/Created:
 
-- `/Users/bparlan/devcode/team/theteam/core/loop_manager.py` - New loop management system
-- `/Users/bparlan/devcode/team/theteam/Phase4_LOOP_MANAGER_VALIDATION.md` - Validation documentation
+- `<project-root>/theteam/core/loop_manager.py` - New loop management system
+- `<project-root>/theteam/Phase4_LOOP_MANAGER_VALIDATION.md` - Validation documentation
 
 ### Backward Compatibility:
 

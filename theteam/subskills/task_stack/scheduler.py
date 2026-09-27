@@ -4,7 +4,7 @@ from typing import Dict, List, Optional
 import json
 
 class TaskScheduler:
-    def __init__(self, schedule_path: str = ".mp/theteam/task-schedule.json"):
+    def __init__(self, schedule_path: str):
         self.path = Path(schedule_path)
         self._schedule_data = self._load()
 

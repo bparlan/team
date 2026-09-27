@@ -12,6 +12,7 @@ import tempfile
 import unittest
 import json
 import time
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 # Add theteam to path for imports
@@ -280,14 +281,14 @@ class TestDiscussionInterface(unittest.TestCase):
     def test_token_efficiency(self):
         """Test that implementation is token-efficient (no unnecessary code)."""
         # Count lines in DiscussionInterface class
-        interface_lines = len(open("/Users/bparlan/devcode/team/theteam/workflow/discussion_interface.py").readlines())
+        interface_lines = len(Path(__file__).resolve().parent.parent.joinpath(
+            "workflow", "discussion_interface.py").read_text().splitlines())
         
         # Should be significantly reduced compared to original discussion_manager.py
         self.assertLess(interface_lines, 500, "DiscussionInterface should be token-efficient (< 500 lines)")
-        
         # Check for unnecessary complexity
-        with open("/Users/bparlan/devcode/team/theteam/workflow/discussion_interface.py", "r") as f:
-            content = f.read()
+        content = Path(__file__).resolve().parent.parent.joinpath(
+            "workflow", "discussion_interface.py").read_text()
         
         # Should not have overly complex patterns
         self.assertNotIn("class DiscussionManager:", content, "Should not include DiscussionManager")
@@ -385,7 +386,7 @@ class TestDiscussionInterface(unittest.TestCase):
         discussion_id = discussion["discussion_id"]
         
         # Verify file was created
-        discussion_path = os.path.join(self.temp_dir, ".mp", "theteam", "discussions", f"{discussion_id}.json")
+        discussion_path = os.path.join(self.temp_dir, ".omp", "theteam", "discussions", f"{discussion_id}.json")
         self.assertTrue(os.path.exists(discussion_path))
         
         # Verify file content

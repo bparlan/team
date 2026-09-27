@@ -9,8 +9,8 @@ The skill uses a `.env` file (or system environment variables) for runtime confi
 ### Template (`.env.template`)
 
 ```bash
-# Project Root (Absolute path recommended)
-PROJECT_ROOT="/Users/bparlan/devcode/team"
+# State directory override. Defaults to <project-root>/.omp/theteam.
+THETEAM_STATE_DIR="$HOME/.omp/theteam"
 
 # Task Stack Daemon Settings
 TASK_STACK_MONITORING_INTERVAL=60
@@ -59,7 +59,7 @@ python3 theteam/ui/terminal_ui.py
 ## Maintenance
 
 ### Logs
-Logs are stored in `.mp/theteam/logs/`.
+Logs are stored in `.omp/theteam/logs/`.
 - `daemon.log`: Background task execution
 - `orchestrator.log`: Task management actions
 - `theteam.log`: Skill activity
@@ -67,6 +67,6 @@ Logs are stored in `.mp/theteam/logs/`.
 ### Cleanup
 To reset the task stack state (caution: clears history):
 ```bash
-rm .mp/theteam/task-schedule.json
-rm .mp/theteam/task-stack.json
+rm .omp/theteam/task-schedule.json
+rm .omp/theteam/task-stack.json
 ```

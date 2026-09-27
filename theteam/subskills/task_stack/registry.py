@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 class TaskRegistry:
-    def __init__(self, registry_path: str = ".mp/theteam/task-registry.json"):
+    def __init__(self, registry_path: str):
         self.path = Path(registry_path)
         self.registry = self._load()
 

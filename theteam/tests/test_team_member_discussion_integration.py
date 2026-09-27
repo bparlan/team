@@ -37,7 +37,7 @@ class TestTeamMemberDiscussionIntegration(unittest.TestCase):
         self.project_root = self.test_dir
 
         # Create proper project structure
-        mp_dir = Path(self.test_dir) / ".mp" / "theteam"
+        mp_dir = Path(self.test_dir) / ".omp" / "theteam"
         mp_dir.mkdir(parents=True, exist_ok=True)
 
         # Create members directory for TeamMemberManager
@@ -247,7 +247,7 @@ class TestTeamMemberDiscussionIntegration(unittest.TestCase):
         member_id = member.member_id
 
         # Verify member file was created
-        member_path = Path(self.test_dir) / ".mp" / "theteam" / "members" / f"{member_id}.json"
+        member_path = Path(self.test_dir) / ".omp" / "theteam" / "members" / f"{member_id}.json"
         self.assertTrue(member_path.exists())
 
         # Verify file content
@@ -263,7 +263,7 @@ class TestTeamMemberDiscussionIntegration(unittest.TestCase):
         discussion_id = discussion["discussion_id"]
 
         # Verify discussion file was created
-        discussion_path = Path(self.test_dir) / ".mp" / "theteam" / "discussions" / f"{discussion_id}.json"
+        discussion_path = Path(self.test_dir) / ".omp" / "theteam" / "discussions" / f"{discussion_id}.json"
         self.assertTrue(discussion_path.exists())
 
         # Verify discussion file content

@@ -13,7 +13,7 @@ dependencies = []
 postgres = ["psycopg2-binary>=2.9.9"]
 
 [project.scripts]
-theteam = "theteam.__main__:main"
+theteam = "theteam.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["theteam*"]

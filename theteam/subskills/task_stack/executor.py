@@ -7,8 +7,10 @@ from typing import Dict
 
 class TaskExecutor:
     def __init__(self, project_root: str = "."):
+        from theteam.state import StateStore
+
         self.project_root = Path(project_root)
-        self.execution_log = self.project_root / ".mp" / "theteam" / "task-execution.log"
+        self.execution_log = StateStore(str(self.project_root)).execution_log
 
     def execute_phase(self, phase: Dict) -> Dict:
         script = phase.get("script")

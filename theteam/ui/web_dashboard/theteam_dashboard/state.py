@@ -1,11 +1,14 @@
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List
 import reflex as rx
 
-PROJECT_ROOT = Path("/Users/bparlan/devcode/team")
-MP_DIR = PROJECT_ROOT / ".mp" / "theteam"
+from theteam.state import StateStore
+
+_STORE = StateStore(os.environ.get("THETEAM_PROJECT_ROOT") or os.getcwd())
+MP_DIR = _STORE.root
 
 
 def read_json(path: Path) -> dict:

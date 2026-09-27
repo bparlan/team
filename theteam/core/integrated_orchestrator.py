@@ -861,7 +861,7 @@ if __name__ == "__main__":
     from theteam.core.state_manager import get_state_manager
     from theteam.workflow.discussion_manager_refactored import create_discussion_manager
     
-    project_root = "/Users/bparlan/devcode/team"
+    project_root = os.environ.get("THETEAM_PROJECT_ROOT") or os.getcwd()
     
     # Initialize components
     state_manager = get_state_manager()

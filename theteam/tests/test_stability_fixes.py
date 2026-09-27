@@ -59,7 +59,7 @@ class TestDaemonPidValidation(unittest.TestCase):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def _write_daemon_state(self, pid, running=True):
-        state_dir = self.tmp / ".mp" / "theteam"
+        state_dir = self.tmp / ".omp" / "theteam"
         state_dir.mkdir(parents=True, exist_ok=True)
         (state_dir / "task-stack-daemon.json").write_text(json.dumps({"running": running}))
         (state_dir / "task-stack.pid").write_text(str(pid))
@@ -72,7 +72,7 @@ class TestDaemonPidValidation(unittest.TestCase):
                          "Stale PID must be reported as invalid")
 
     def test_missing_pid_file_reports_not_running(self):
-        state_dir = self.tmp / ".mp" / "theteam"
+        state_dir = self.tmp / ".omp" / "theteam"
         state_dir.mkdir(parents=True, exist_ok=True)
         (state_dir / "task-stack-daemon.json").write_text(json.dumps({"running": True}))
         status = self.adapter._get_daemon_status()

@@ -90,13 +90,16 @@ class TaskStackAdapter:
 
     def _get_daemon_status(self) -> Dict[str, Any]:
         """Get daemon status with process validation (deterministic)."""
-        daemon_file = self.project_root / ".mp" / "theteam" / "task-stack-daemon.json"
+        from theteam.state import StateStore
+
+        state = StateStore(str(self.project_root))
+        daemon_file = state.task_daemon_status
         if daemon_file.exists():
             try:
                 with open(daemon_file, 'r') as f:
                     status = json.load(f)
                 # Validate PID against a live process using existing infra
-                pid_file = self.project_root / ".mp" / "theteam" / "task-stack.pid"
+                pid_file = state.task_daemon_pid
                 if pid_file.exists():
                     try:
                         pid = int(pid_file.read_text().strip())

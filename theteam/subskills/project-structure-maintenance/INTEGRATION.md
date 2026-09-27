@@ -45,7 +45,7 @@ Team members can propose structural maintenance by including this JSON in their 
 When a proposal is approved, the orchestrator runs:
 
 ```bash
-python3 /Users/bparlan/devcode/ledraslament/project_structure_checker.py
+python3 <project-root>/project_structure_checker.py
 ```
 
 This executes all 8 phases:
@@ -151,7 +151,7 @@ When uncertain: **Preserve the working structure and report the issue instead of
 - `skill://theteam/subskills/project-structure-maintenance/SKILL.md` - Subskill documentation
 - `skill://theteam/subskills/project-structure-maintenance/IMPLEMENTATION.md` - Implementation details
 - `skill://theteam/subskills/project-structure-maintenance/TEAM_MEMBER_PROPOSAL.md` - Team member proposal guide
-- `/Users/bparlan/devcode/ledraslament/project_structure_checker.py` - Main maintenance checker script
+- `<project-root>/project_structure_checker.py` - Main maintenance checker script
 
 ---
 

@@ -848,44 +848,42 @@ def run_task_stack(project_root, task_id, action="execute"):
     import subprocess
     import json
     
-    # Import task stack orchestrator (proper package, no sys.path hack)
-    from theteam.subskills.task_stack.orchestrator import TaskStackOrchestrator
-    
-    orchestrator = TaskStackOrchestrator(project_root)
-    
+    from theteam.tasks.repository import TaskRepository
+    from theteam.tasks.executor import TaskExecutor
+
+    repo = TaskRepository(project_root)
+    executor = TaskExecutor(project_root)
+
     if action == "list":
-        tasks = orchestrator.list_tasks()
+        tasks = repo.all_tasks()
         print("=== Registered Tasks ===")
         for task in tasks:
             print(f"  {task['id']}: {task['name']} ({task['type']})")
         return True
-    
+
     elif action == "status":
-        status = orchestrator.get_status()
+        all_tasks = repo.all_tasks()
+        scheduled = repo.schedule().get("scheduled_tasks", {})
         print("=== Task Stack Status ===")
-        print(f"  Registered: {status['registered_tasks']}")
-        print(f"  Scheduled: {status['scheduled_tasks']}")
-        print(f"  Stack size: {status['stack_size']}")
+        print(f"  Registered: {len(all_tasks)}")
+        print(f"  Scheduled: {len(scheduled)}")
+        print(f"  Stack size: {len(all_tasks)}")
         return True
-    
+
     elif action == "execute":
-        # Team review hook: before executing, check if team should comment
-        task = orchestrator.registry.get(task_id)
+        task = repo.get(task_id)
         if not task:
             print(f"Task not found: {task_id}")
             return False
-        
+
         print(f"=== Team Review: {task['name']} ===")
         print(f"  Type: {task['type']}")
         print(f"  Priority: {task.get('priority', 'medium')}")
         print(f"  Phases: {len(task.get('phases', []))}")
-        
-        # Execute the task
-        result = orchestrator.execute_task(task_id)
+
+        result = executor.execute_task(task)
         print(f"  Success: {result['overall_success']}")
         return result['overall_success']
-    
-    return False
 
 def main(project_root=None):
     """Main skill entry point."""

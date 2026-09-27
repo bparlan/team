@@ -856,29 +856,21 @@ class IntegratedOrchestrator:
 if __name__ == "__main__":
     # Example usage
     from theteam.ui.terminal_ui import TerminalUI
-    from theteam.subskills.task_stack.orchestrator import TaskStackOrchestrator
     from theteam.core.system_integration import SystemIntegration
     from theteam.core.state_manager import get_state_manager
     from theteam.workflow.discussion_manager_refactored import create_discussion_manager
-    
+
     project_root = os.environ.get("THETEAM_PROJECT_ROOT") or os.getcwd()
-    
-    # Initialize components
     state_manager = get_state_manager()
     discussion_manager = create_discussion_manager(project_root, state_manager, use_legacy=True)
-    
+
     # Initialize integrated orchestrator
     orchestrator = IntegratedOrchestrator(project_root)
-    
-    # Create components
     terminal_ui = TerminalUI(project_root, state_manager, discussion_manager)
-    task_stack = TaskStackOrchestrator(project_root)
     system_integration = SystemIntegration(project_root, state_manager, discussion_manager)
-    
-    # Initialize orchestrator with components
+
     orchestrator.initialize_components(
         terminal_ui=terminal_ui,
-        task_stack_orchestrator=task_stack,
         system_integration=system_integration,
         state_manager=state_manager,
         discussion_manager=discussion_manager

@@ -61,33 +61,34 @@ class TaskStackAdapter:
                 }
 
     def _get_task_stack_status(self) -> Dict[str, Any]:
-        """Get task stack status from orchestrator."""
+        """Get task stack status from repository."""
         try:
-            return self.orchestrator.get_status()
+            t = self.repo.list_tasks()
+            return {"registered_tasks": t["count"], "scheduled_tasks": len(self.repo.schedule().get("scheduled_tasks", {})),
+                    "stack_size": t["count"], "stack_health": "healthy" if not t.get("missing_tasks") else "degraded"}
         except Exception as e:
             return {"error": str(e), "stack_health": "unknown"}
 
     def _get_registered_tasks(self) -> List[Dict]:
         """Get list of registered tasks."""
         try:
-            return self.orchestrator.list_tasks()
+            return self.repo.all_tasks()
         except Exception as e:
             return [{"error": str(e)}]
 
     def _get_scheduled_tasks(self) -> Dict:
         """Get scheduled tasks."""
         try:
-            return self.orchestrator.get_scheduled_tasks()
+            return self.repo.schedule().get("scheduled_tasks", {})
         except Exception as e:
             return {"error": str(e)}
 
     def _get_stack_tasks(self) -> List[Dict]:
-        """Get tasks in the stack."""
+        """Get tasks. The stack store is gone; order is the store's now."""
         try:
-            return self.orchestrator.stack.get_stack()
+            return self.repo.all_tasks()
         except Exception as e:
             return [{"error": str(e)}]
-
     def _get_daemon_status(self) -> Dict[str, Any]:
         """Get daemon status with process validation (deterministic)."""
         from theteam.state import StateStore
@@ -125,7 +126,7 @@ class TaskStackAdapter:
     def get_task_details(self, task_id: str) -> Optional[Dict[str, Any]]:
         """Get detailed task information."""
         try:
-            task = self.orchestrator.registry.get(task_id)
+            task = self.repo.get(task_id)
             if task:
                 return {
                     "task_id": task_id,
@@ -140,25 +141,32 @@ class TaskStackAdapter:
             return {"error": str(e)}
 
     def trigger_task_action(self, action: str, task_id: str, **kwargs) -> Dict[str, Any]:
-        """Bridge UI actions to Task Stack operations."""
+        """Bridge UI actions to repository operations."""
         try:
             if action == "execute":
-                result = self.orchestrator.execute_task(task_id)
+                from theteam.tasks.executor import TaskExecutor
+                task = self.repo.get(task_id)
+                if not task:
+                    return {"success": False, "error": f"Task not found: {task_id}"}
+                result = TaskExecutor(str(self.project_root)).execute_task(task)
                 self.refresh_immediately()
                 return result
             elif action == "loop":
                 interval = kwargs.get("interval_minutes", 30)
-                result = self.orchestrator.loop_task(task_id, interval)
+                next_run = self.repo.schedule_task(task_id, interval)
                 self.refresh_immediately()
-                return result
+                return {"success": True, "task_id": task_id, "interval_minutes": interval, "next_run": next_run}
             elif action == "run-due":
-                results = self.orchestrator.run_due_tasks()
+                from theteam.tasks.executor import TaskExecutor
+                executor = TaskExecutor(str(self.project_root))
+                due = self.repo.due()
+                results = [executor.execute_task(t) for t in due]
                 self.refresh_immediately()
                 return {"ran_tasks": len(results), "results": results}
             elif action == "list":
-                return {"tasks": self.orchestrator.list_tasks()}
+                return {"tasks": self.repo.all_tasks()}
             elif action == "status":
-                return self.orchestrator.get_status()
+                return self._get_task_stack_status()
             else:
                 return {"success": False, "error": f"Unknown action: {action}"}
         except Exception as e:

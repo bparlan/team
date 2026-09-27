@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Simple Lifecycle",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "simple",
+        "label": "Simple lifecycle",
+        "focus": ["stopped", "running", "completed"],
+        "note": "Simple lifecycle example"
+      }
+    ]
+  },
+  "lanes": [
+    {"id": "main", "label": "Lifecycle"}
+  ],
+  "states": [
+    {"id": "stopped", "type": "start", "label": "Stopped", "lane": "main", "col": 0, "step": "1"},
+    {"id": "running", "type": "active", "label": "Running", "lane": "main", "col": 1, "step": "2"},
+    {"id": "completed", "type": "success", "label": "Completed", "lane": "main", "col": 2, "step": "3"}
+  ],
+  "transitions": [
+    {"id": "boot", "from": "stopped", "to": "running", "route": "straight"},
+    {"id": "finish", "from": "running", "to": "completed", "route": "straight"}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Simple Lifecycle", "items": ["Clean lifecycle with no edge through nodes"]}
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "team",
+  "version": "3.0.0",
+  "description": "Orchestrates independent reviewer subagents into deterministic team discussions with Pi infrastructure integration",
+  "main": "bin/theteam_orchestrator.py",
+  "scripts": {
+    "validate": "python3 bin/theteam_config.py validate",
+    "bootstrap": "python3 bin/theteam_init.py",
+    "build": "python3 bin/theteam_report.py"
+  }
+}

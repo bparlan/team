@@ -1,0 +1,139 @@
+communication:
+  command_triggers:
+    evolution_status:
+    - evolution status
+    - team status
+    - knowledge base
+    help:
+    - help
+    - commands
+    - routines
+    routine_status:
+    - routine status
+    - check routine
+    - routine progress
+    run_routine:
+    - run my routine
+    - execute routine
+    - start routine
+  conversation_style: collaborative
+  evolution_insights: true
+  maintenance_reminders: true
+  proactive_comments: true
+  suggestion_frequency: always
+dependencies:
+  monthly-evolution:
+  - daily-maintenance
+  - weekly-analysis
+  weekly-analysis:
+  - daily-maintenance
+evolution_thresholds:
+  knowledge_completeness:
+    critical_topics_required: true
+    quality_threshold: 90
+    update_frequency: monthly
+  skill_coverage:
+    continuous_improvement: true
+    minimum_coverage: 90
+    skill_rotation_period: 90
+  team_composition:
+    effectiveness_threshold: 85
+    minimum_members: 8
+    optimal_members:
+    - 8
+    - 10
+integration:
+  conversation_integration: true
+  follow_8phase_process: true
+  only_use_permitted_skills: true
+  proactive_suggestions: true
+  respect_block_edits_without_plan: true
+  use_existing_formats: true
+monitoring:
+  alert_on_failure: true
+  execution_timeout: 1800
+  log_level: INFO
+  metrics_collection: true
+routine_parameters:
+  daily-maintenance:
+    auto_report: true
+    evidence_collection: true
+    max_execution_time: 900
+    min_health_score: 85
+    validation_level: basic
+  monthly-evolution:
+    auto_report: true
+    evolution_planning: true
+    knowledge_base_updates: true
+    min_progress: 0.8
+    skill_matrix_updates: true
+    team_evolution: true
+    validation_level: full
+  weekly-analysis:
+    auto_report: true
+    evolution_planning: true
+    gap_analysis: true
+    min_accuracy: 0.9
+    pattern_detection: true
+    validation_level: comprehensive
+safety:
+  auto_rollback: true
+  evidence_required: true
+  impact_assessment: true
+  max_retries: 3
+  pre_execution_validation: true
+  retry_delay: 60
+  validation_timeout: 300
+schedules:
+  custom-routine:
+    dependencies: []
+    enabled: true
+    execution_count: 0
+    last_executed: null
+    schedule:
+      enabled: true
+      time: 02:00
+    success_rate: 1.0
+  daily-maintenance:
+    days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+    - sun
+    enabled: true
+    execution_count: 31
+    last_executed: 2026-09-19 01:53:38.072081
+    time: 00:30
+  monthly-evolution:
+    day: '1'
+    description: Monthly team evolution and knowledge base updates
+    enabled: true
+    execution_count: 0
+    time: '17:00'
+  weekly-analysis:
+    day: mon
+    enabled: true
+    execution_count: 0
+    time: 09:00
+thresholds:
+  knowledge_coverage:
+    acceptable: 85
+    complete: 95
+    concerning: 80
+    critical: 79
+    good: 90
+  project_health:
+    acceptable: 70
+    concerning: 60
+    critical: 59
+    excellent: 90
+    good: 80
+  team_effectiveness:
+    acceptable: 75
+    concerning: 65
+    critical: 64
+    excellent: 95
+    good: 85

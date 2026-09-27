@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="600" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="600" fill="#ffffff"/>
+  
+  <!-- Title -->
+  <text x="400" y="25" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="#2c3e50">Unified Loop Architecture</text>
+  
+  <!-- Main Components Layout -->
+  
+  <!-- Agent Interface -->
+  <rect x="50" y="50" width="150" height="80" rx="10" fill="#3498db" fill-opacity="0.1" stroke="#3498db" stroke-width="2"/>
+  <text x="125" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Agent Interface</text>
+  <text x="125" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">start(), stop(), pause(), resume()</text>
+  <text x="125" y="130" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">add_task(), get_status()</text>
+  
+  <!-- Unified Loop -->
+  <rect x="350" y="50" width="150" height="80" rx="10" fill="#e74c3c" fill-opacity="0.1" stroke="#e74c3c" stroke-width="2"/>
+  <text x="425" y="95" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Unified Loop</text>
+  <text x="425" y="115" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#7f8c8d">Consolidated Implementation</text>
+  
+  <!-- Core Components Grid -->
+  
+  <!-- State Engine -->
+  <rect x="50" y="150" width="150" height="60" rx="10" fill="#27ae60" fill-opacity="0.1" stroke="#27ae60" stroke-width="2"/>
+  <text x="125" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">State Engine</text>
+  <text x="125" y="200" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Phase-based execution, state transitions</text>
+  
+  <!-- Task Scheduler -->
+  <rect x="50" y="230" width="150" height="60" rx="10" fill="#f39c12" fill-opacity="0.1" stroke="#f39c12" stroke-width="2"/>
+  <text x="125" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Task Scheduler</text>
+  <text x="125" y="280" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Priority-based, retry logic</text>
+  
+  <!-- Progress Tracker -->
+  <rect x="50" y="310" width="150" height="60" rx="10" fill="#9b59b6" fill-opacity="0.1" stroke="#9b59b6" stroke-width="2"/>
+  <text x="125" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Progress Tracker</text>
+  <text x="125" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Deterministic progress reporting</text>
+  
+  <!-- Health Monitor -->
+  <rect x="50" y="390" width="150" height="60" rx="10" fill="#e67e22" fill-opacity="0.1" stroke="#e67e22" stroke-width="2"/>
+  <text x="125" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Health Monitor</text>
+  <text x="125" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">System integration, monitoring</text>
+  
+  <!-- Event System -->
+  <rect x="50" y="470" width="150" height="60" rx="10" fill="#34495e" fill-opacity="0.1" stroke="#34495e" stroke-width="2"/>
+  <text x="125" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Event System</text>
+  <text x="125" y="520" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Unified event handling</text>
+  
+  <!-- Integration Components -->
+  
+  <!-- System Integration -->
+  <rect x="350" y="150" width="150" height="60" rx="10" fill="#1abc9c" fill-opacity="0.1" stroke="#1abc9c" stroke-width="2"/>
+  <text x="425" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">System Integration</text>
+  <text x="425" y="200" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Health monitoring, analysis</text>
+  
+  <!-- State Manager -->
+  <rect x="350" y="230" width="150" height="60" rx="10" fill="#d35400" fill-opacity="0.1" stroke="#d35400" stroke-width="2"/>
+  <text x="425" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">State Manager</text>
+  <text x="425" y="280" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Unified state persistence</text>
+  
+  <!-- Event Bus -->
+  <rect x="350" y="310" width="150" height="60" rx="10" fill="#8e44ad" fill-opacity="0.1" stroke="#8e44ad" stroke-width="2"/>
+  <text x="425" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Event Bus</text>
+  <text x="425" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Centralized event system</text>
+  
+  <!-- Task Registry -->
+  <rect x="350" y="390" width="150" height="60" rx="10" fill="#c0392b" fill-opacity="0.1" stroke="#c0392b" stroke-width="2"/>
+  <text x="425" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Task Registry</text>
+  <text x="425" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Consolidated TaskManager/Stack</text>
+  
+  <!-- Supporting Components -->
+  
+  <!-- Event Handlers -->
+  <rect x="550" y="150" width="150" height="60" rx="10" fill="#95a5a6" fill-opacity="0.1" stroke="#95a5a6" stroke-width="2"/>
+  <text x="625" y="180" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Event Handlers</text>
+  <text x="625" y="200" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Loop phase management</text>
+  
+  <!-- Configuration -->
+  <rect x="550" y="230" width="150" height="60" rx="10" fill="#16a085" fill-opacity="0.1" stroke="#16a085" stroke-width="2"/>
+  <text x="625" y="260" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Configuration</text>
+  <text x="625" y="280" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Unified config system</text>
+  
+  <!-- Monitoring -->
+  <rect x="550" y="310" width="150" height="60" rx="10" fill="#2980b9" fill-opacity="0.1" stroke="#2980b9" stroke-width="2"/>
+  <text x="625" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Monitoring</text>
+  <text x="625" y="360" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Performance metrics</text>
+  
+  <!-- Error Recovery -->
+  <rect x="550" height="390" width="150" height="60" rx="10" fill="#e74c3c" fill-opacity="0.1" stroke="#e74c3c" stroke-width="2"/>
+  <text x="625" y="420" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#2c3e50">Error Recovery</text>
+  <text x="625" y="440" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">Graceful failure handling</text>
+  
+  <!-- Data Flow Arrows -->
+  
+  <!-- Top level flows -->
+  <line x1="200" y1="95" x2="350" y2="95" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="95" x2="550" y2="95" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <line x1="200" y1="180" x2="350" y2="180" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="180" x2="550" y2="180" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <line x1="200" y1="260" x2="350" y2="260" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="260" x2="550" y2="260" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <line x1="200" y1="340" x2="350" y2="340" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="340" x2="550" y2="340" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <line x1="200" y1="420" x2="350" y2="420" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="420" x2="550" y2="420" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <line x1="200" y1="500" x2="350" y2="500" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <!-- Bottom level flows -->
+  <line x1="350" y1="240" x2="350" y2="380" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <!-- Right side flows -->
+  <line x1="700" y1="210" x2="550" y2="210" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  <line x1="700" y1="280" x2="550" y2="280" stroke="#7f8c8d" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <!-- Mental Model Note -->
+  <rect x="450" y="520" width="400" height="60" rx="10" fill="#ecf0f1" fill-opacity="0.5" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="650" y="550" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#2c3e50">Simple Mental Model for Agents</text>
+  <text x="650" y="570" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" fill="#7f8c8d">"Start → Run → Pause/Stop → Monitor → Continue"</text>
+  
+  <!-- Footer -->
+  <line x1="50" y1="590" x2="750" y2="590" stroke="#bdc3c7" stroke-width="1"/>
+  <text x="400" y="605" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#7f8c8d">Unified Loop Architecture - Single Stable Implementation</text>

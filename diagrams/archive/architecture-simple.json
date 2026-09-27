@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Simple Architecture",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {"id": "user", "type": "external", "label": "User", "pos": [100, 100]},
+    {"id": "system", "type": "backend", "label": "System", "pos": [400, 100]},
+    {"id": "database", "type": "database", "label": "Database", "pos": [100, 300]},
+    {"id": "cache", "type": "database", "label": "Cache", "pos": [400, 300]}
+  ],
+  "connections": [
+    {"from": "user", "to": "system", "label": "requests"},
+    {"from": "system", "to": "database", "label": "reads"},
+    {"from": "system", "to": "cache", "label": "caches"}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Simple Architecture", "items": ["Clean architecture with proper component placement"]}
+  ]
+}

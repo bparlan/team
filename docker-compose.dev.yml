@@ -1,0 +1,51 @@
+# Development override.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Development uses SQLite by default so there is no cluster to run locally,
+# mounts the source tree for live reload, and drops the resource ceilings that
+# get in the way of a debugger. Grafana is intentionally omitted.
+services:
+  theteam:
+    environment:
+      - ENVIRONMENT=development
+      - THETEAM_LOG_LEVEL=DEBUG
+      # No DATABASE_URL: state_manager falls back to SQLite.
+      - THETEAM_LIMIT_TASKS=100
+      - THETEAM_MAX_ALERTS=100
+    volumes:
+      # Live source mount: edits are picked up without rebuilding.
+      - .:/app
+      - theteam_state_dev:/app/state
+      - theteam_backups_dev:/app/backups
+    # Debuggers and profilers need more headroom than production.
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    user: root
+    command: ["python", "-m", "theteam"]
+
+  # Optional local Postgres for testing the failover and replica code paths.
+  # Start it explicitly:  docker compose -f docker-compose.yml -f docker-compose.dev.yml --profile pg up
+  postgres-dev:
+    image: postgres:16-alpine
+    profiles: ["pg"]
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=theteam
+      - POSTGRES_DB=theteam_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theteam -d theteam_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  theteam_state_dev:
+  theteam_backups_dev:
+  pg_dev_data:

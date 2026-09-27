@@ -1,0 +1,113 @@
+# Streaming replication topology used to PROVE the failover claim.
+#
+#   docker compose -f docker-compose.replication.yml up -d
+#
+# `docker-compose.prod.yml` declares a primary, a standby and two replicas but
+# configures no replication at all, so failover there has only ever been proven
+# at the TCP level. This file wires the real mechanism:
+#
+#   pg-primary    wal_level=logical, max_wal_senders=10, plus a pg_hba entry
+#                 that ALLOWS REPLICATION (a server flag cannot express this)
+#   pg-standby    pg_basebackup -R clone + standby.signal, streamed, read-only
+#   pg-replica-1  same, and is what ReadReplicaRouter round-robins reads across
+#
+# Promotion is what FailoverManager does in production: `pg_ctl promote` makes
+# the standby accept writes and leaves the replica set.
+services:
+  pg-primary:
+    image: postgres:16-alpine
+    container_name: tt-pg-primary
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=theteam
+      - POSTGRES_DB=theteam
+    # A replica cannot stream unless wal_level and the walsender limit allow it.
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - hot_standby=on
+    # MUST be a named volume. pg-bootstrap edits this pg_hba.conf; with the
+    # image's default anonymous volume the two containers would not share it.
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theteam -d theteam"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  # One-shot. Appends the replication rule to pg_hba.conf inside the primary and
+  # reloads it. Without this, pg_basebackup fails with "no pg_hba.conf entry for
+  # replication connection" - the most common streaming-setup failure.
+  pg-bootstrap:
+    image: postgres:16-alpine
+    container_name: tt-pg-bootstrap
+    environment:
+      - PGPASSWORD=theteam
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./scripts/replica:/scripts:ro
+    entrypoint: ["/bin/sh", "/scripts/bootstrap-hba.sh"]
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    restart: "no"
+
+  # Clones the primary and follows it. The init script waits for the primary,
+  # so a clone never races an empty cluster.
+  pg-standby:
+    image: postgres:16-alpine
+    container_name: tt-pg-standby
+    environment:
+      - PGHOST=pg-primary
+      - PGPORT=5432
+      - PGUSER=theteam
+      - PGPASSWORD=theteam
+      - PGDATABASE=theteam
+      - REPLICA_NAME=tt_standby
+    entrypoint: ["/bin/sh", "/scripts/init-replica.sh"]
+    volumes:
+      - pg_standby_data:/var/lib/postgresql/data
+      - ./scripts/replica:/scripts:ro
+    depends_on:
+      pg-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theteam -d theteam"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  pg-replica-1:
+    image: postgres:16-alpine
+    container_name: tt-pg-replica-1
+    environment:
+      - PGHOST=pg-primary
+      - PGPORT=5432
+      - PGUSER=theteam
+      - PGPASSWORD=theteam
+      - PGDATABASE=theteam
+      - REPLICA_NAME=tt_replica1
+    entrypoint: ["/bin/sh", "/scripts/init-replica.sh"]
+    volumes:
+      - pg_replica1_data:/var/lib/postgresql/data
+      - ./scripts/replica:/scripts:ro
+    depends_on:
+      pg-bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theteam -d theteam"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pg_primary_data:
+  pg_standby_data:
+  pg_replica1_data:

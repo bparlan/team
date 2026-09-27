@@ -1,0 +1,145 @@
+{
+  "pattern_detection": {
+    "enabled": true,
+    "min_confidence": 0.7,
+    "patterns": {
+      "ai_modules": {
+        "keywords": [
+          "ai",
+          "llm",
+          "gemini",
+          "openai",
+          "model"
+        ],
+        "file_patterns": [
+          "ai/",
+          "llm/",
+          "model/",
+          "neural/"
+        ],
+        "confidence": 0.9
+      },
+      "browser_automation": {
+        "keywords": [
+          "playwright",
+          "selenium",
+          "browser",
+          "automation"
+        ],
+        "file_patterns": [
+          "browser/",
+          "playwright/",
+          "selenium/"
+        ],
+        "confidence": 0.8
+      },
+      "security": {
+        "keywords": [
+          "security",
+          "auth",
+          "token",
+          "credential",
+          "encryption"
+        ],
+        "file_patterns": [
+          "security/",
+          "auth/",
+          "credential/"
+        ],
+        "confidence": 0.85
+      },
+      "database": {
+        "keywords": [
+          "database",
+          "sql",
+          "postgres",
+          "mysql",
+          "redis",
+          "sqlite"
+        ],
+        "file_patterns": [
+          "db/",
+          "database/",
+          "migration/"
+        ],
+        "confidence": 0.8
+      },
+      "platform_handlers": {
+        "keywords": [
+          "platform",
+          "handler",
+          "adapter",
+          "integrator"
+        ],
+        "file_patterns": [
+          "platform/",
+          "handler/",
+          "adapter/"
+        ],
+        "confidence": 0.75
+      },
+      "sdp_pipeline": {
+        "keywords": [
+          "sdp",
+          "pipeline",
+          "specification",
+          "stage",
+          "milestone"
+        ],
+        "file_patterns": [
+          "pipeline/",
+          "specification/",
+          "stage/"
+        ],
+        "confidence": 0.85
+      }
+    }
+  },
+  "gap_analysis": {
+    "enabled": true,
+    "thresholds": {
+      "skill_coverage": 0.9,
+      "knowledge_completeness": 0.95,
+      "team_alignment": 0.85
+    },
+    "gap_categories": [
+      "skill_match",
+      "knowledge_coverage",
+      "experience_alignment",
+      "resource_availability"
+    ]
+  },
+  "evolution_detection": {
+    "enabled": true,
+    "change_patterns": {
+      "new_requirements": {
+        "keywords": [
+          "new",
+          "additional",
+          "extra",
+          "missing"
+        ],
+        "confidence": 0.8
+      },
+      "optimization_opportunities": {
+        "keywords": [
+          "optimize",
+          "improve",
+          "enhance",
+          "refactor"
+        ],
+        "confidence": 0.75
+      },
+      "team_evolution": {
+        "keywords": [
+          "team",
+          "person",
+          "member",
+          "role",
+          "expertise"
+        ],
+        "confidence": 0.7
+      }
+    }
+  }
+}

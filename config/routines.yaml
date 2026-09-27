@@ -1,0 +1,40 @@
+dependencies:
+  monthly-evolution:
+  - weekly-analysis
+  - daily-maintenance
+  weekly-analysis:
+  - daily-maintenance
+safety:
+  auto_rollback: true
+  max_retries: 3
+  pre_execution_validation: true
+  retry_delay: 60
+schedules:
+  custom-routine:
+    dependencies: []
+    enabled: true
+    execution_count: 0
+    last_executed: null
+    schedule:
+      enabled: true
+      time: 02:00
+    success_rate: 1.0
+  daily-maintenance:
+    days:
+    - mon
+    - tue
+    - wed
+    - thu
+    - fri
+    - sat
+    - sun
+    enabled: true
+    time: 00:30
+  monthly-evolution:
+    day: '1'
+    enabled: true
+    time: '17:00'
+  weekly-analysis:
+    day: mon
+    enabled: true
+    time: 09:00

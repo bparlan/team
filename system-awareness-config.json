@@ -1,0 +1,61 @@
+{
+  "project_root": "/Users/bparlan/devcode/team",
+  "output_paths": {
+    "ledger": "/Users/bparlan/devcode/team/.mp/theteam/ledger.json",
+    "reports": "/Users/bparlan/devcode/team/theteam/reports",
+    "health_score": "/Users/bparlan/devcode/team/.mp/theteam/health-score.json",
+    "architecture_report": "/Users/bparlan/devcode/team/theteam/reports/architecture-analysis.md",
+    "documentation_report": "/Users/bparlan/devcode/team/theteam/reports/documentation-audit-report.md",
+    "infrastructure_report": "/Users/bparlan/devcode/team/theteam/reports/infrastructure-assessment.md",
+    "optimization_recommendations": "/Users/bparlan/devcode/team/theteam/reports/optimization-recommendations.md"
+  },
+  "phases": [
+    {
+      "id": "structure_analysis",
+      "name": "Project Structure Analysis",
+      "required": true,
+      "description": "Analyze project structure, modules, dependencies, and complexity"
+    },
+    {
+      "id": "documentation_audit",
+      "name": "Documentation Audit",
+      "required": true,
+      "description": "Evaluate documentation completeness and quality"
+    },
+    {
+      "id": "architecture_review",
+      "name": "Architecture Review",
+      "required": true,
+      "description": "Review design patterns and architectural decisions"
+    },
+    {
+      "id": "infrastructure_assessment",
+      "name": "Infrastructure Assessment",
+      "required": true,
+      "description": "Assess build systems and infrastructure configuration"
+    }
+  ],
+  "hitl_settings": {
+    "phase_review_required": false,
+    "team_discussion_trigger": true,
+    "optimization_recommendations": true,
+    "continuity_checkpoint": true
+  },
+  "team_discussion": {
+    "enabled": true,
+    "topic": "System Architecture Analysis Results",
+    "required_for_completion": true,
+    "manager_type": "lightweight",
+    "discussion_manager_class": "theteam.workflow.discussion_manager_refactored",
+    "use_legacy": true,
+    "integration_enabled": true
+  },
+  "integration": {
+    "theteam_enabled": true,
+    "state_manager": true,
+    "discussion_manager": true,
+    "discussion_interface": true,
+    "real_time_monitoring": true,
+    "event_bus_enabled": true
+  }
+}

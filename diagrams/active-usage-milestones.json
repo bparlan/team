@@ -1,0 +1,146 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Active Usage Delivery Order",
+    "subtitle": "Six milestones ordered by user-visible outcome, each a runnable command with a falsification test",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "full",
+        "label": "Full pipeline",
+        "focus": ["m0", "m1", "m2", "m3", "m4", "m5"],
+        "note": "M5 is a gate, not a promise"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "honesty",
+      "label": "Honesty"
+    },
+    {
+      "id": "reach",
+      "label": "Reach"
+    },
+    {
+      "id": "visible",
+      "label": "Visible"
+    },
+    {
+      "id": "crud",
+      "label": "CRUD"
+    },
+    {
+      "id": "safe",
+      "label": "Safe"
+    },
+    {
+      "id": "advisory",
+      "label": "Advisory"
+    }
+  ],
+  "phases": [
+    {
+      "id": "cut",
+      "label": "Cut",
+      "fromCol": 0,
+      "toCol": 1
+    },
+    {
+      "id": "wire",
+      "label": "Wire",
+      "fromCol": 2,
+      "toCol": 3
+    },
+    {
+      "id": "bound",
+      "label": "Bound",
+      "fromCol": 4,
+      "toCol": 5
+    }
+  ],
+  "nodes": [
+    {
+      "id": "m0",
+      "label": "M0: Team cannot lie",
+      "sublabel": "Delete MockAPI and dead code",
+      "lane": "honesty",
+      "col": 0,
+      "type": "security",
+      "width": 200
+    },
+    {
+      "id": "m1",
+      "label": "M1: Reach it from a shell",
+      "sublabel": "cli.py, state unification, bootstrap",
+      "lane": "reach",
+      "col": 1,
+      "type": "backend",
+      "width": 220
+    },
+    {
+      "id": "m2",
+      "label": "M2: Tasks visible and runnable",
+      "sublabel": "YAML cutover, guarded switch",
+      "lane": "visible",
+      "col": 2,
+      "type": "database",
+      "width": 220
+    },
+    {
+      "id": "m3",
+      "label": "M3: Create, edit, delete",
+      "sublabel": "Full task CRUD surface",
+      "lane": "crud",
+      "col": 3,
+      "type": "backend",
+      "width": 200
+    },
+    {
+      "id": "m4",
+      "label": "M4: Loop is safe",
+      "sublabel": "Breaker, limiter, isolation, audit",
+      "lane": "safe",
+      "col": 4,
+      "type": "security",
+      "width": 210
+    },
+    {
+      "id": "m5",
+      "label": "M5: Team comments",
+      "sublabel": "Conditional on three gates",
+      "lane": "advisory",
+      "col": 5,
+      "type": "messagebus",
+      "width": 200
+    }
+  ],
+  "edges": [
+    {
+      "from": "m0",
+      "to": "m1",
+      "label": "no fabricated output"
+    },
+    {
+      "from": "m1",
+      "to": "m2",
+      "label": "bootstrap reachable"
+    },
+    {
+      "from": "m2",
+      "to": "m3",
+      "label": "4 tasks still run"
+    },
+    {
+      "from": "m3",
+      "to": "m4",
+      "label": "CRUD works"
+    },
+    {
+      "from": "m4",
+      "to": "m5",
+      "label": "loop bounded"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "Stability State Lifecycle",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {"id": "main", "label": "Main Path"},
+    {"id": "recovery", "label": "Recovery"},
+    {"id": "terminal", "label": "Terminal"}
+  ],
+  "states": [
+    {"id": "stopped", "label": "Stopped", "lane": "main", "col": 0, "type": "start"},
+    {"id": "starting", "label": "Starting", "lane": "main", "col": 1, "type": "neutral"},
+    {"id": "running", "label": "Running", "lane": "main", "col": 2, "type": "active"},
+    {"id": "completed", "label": "Completed", "lane": "main", "col": 3, "type": "success"},
+    {"id": "error", "label": "Error", "lane": "recovery", "col": 0, "type": "failure"},
+    {"id": "recovering", "label": "Recovering", "lane": "recovery", "col": 1, "type": "neutral"},
+    {"id": "failed", "label": "Failed", "lane": "terminal", "col": 0, "type": "failure"},
+    {"id": "corrupt", "label": "Corrupt", "lane": "terminal", "col": 2, "type": "failure"}
+  ],
+  "transitions": [
+    {"from": "stopped", "to": "starting", "label": "start", "variant": "default", "route": "straight"},
+    {"from": "starting", "to": "running", "label": "validated", "variant": "default", "route": "straight"},
+    {"from": "running", "to": "completed", "label": "done", "variant": "default", "route": "straight"},
+    {"from": "running", "to": "error", "label": "fault", "variant": "security"},
+    {"from": "error", "to": "recovering", "label": "rollback", "variant": "default", "route": "straight"},
+    {"from": "recovering", "to": "running", "label": "retry", "variant": "default", "route": "straight"},
+    {"from": "recovering", "to": "failed", "label": "exhausted", "variant": "security", "route": "straight"},
+    {"from": "starting", "to": "corrupt", "label": "invalid", "variant": "security"},
+    {"from": "corrupt", "to": "stopped", "label": "reset", "variant": "default", "route": "top-channel"}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Stable States", "items": ["Stopped -> Starting -> Running -> Completed"]},
+    {"dot": "cyan", "title": "Recovery Loop", "items": ["Error -> Recovering -> Running"]},
+    {"dot": "rose", "title": "Terminal Exits", "items": ["Corrupt -> reset", "Failed -> stop"]}
+  ]
+}

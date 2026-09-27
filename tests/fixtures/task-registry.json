@@ -1,0 +1,23 @@
+{
+  "tasks": [
+    {
+      "id": "test-task-1",
+      "name": "Folder Monitor",
+      "type": "loop",
+      "priority": "medium",
+      "schedule": {
+        "mode": "interval",
+        "interval_minutes": 30
+      }
+    },
+    {
+      "id": "test-task-2",
+      "name": "Disk Usage",
+      "type": "one-shot",
+      "priority": "high",
+      "schedule": {
+        "mode": "once"
+      }
+    }
+  ]
+}

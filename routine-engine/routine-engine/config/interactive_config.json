@@ -1,0 +1,59 @@
+{
+  "conversation": {
+    "enabled": true,
+    "proactive_comments": true,
+    "suggestion_frequency": "always",
+    "conversation_style": "collaborative"
+  },
+  "commands": {
+    "run_routine": {
+      "triggers": [
+        "run my routine",
+        "execute routine",
+        "start routine",
+        "run routine"
+      ],
+      "parameters": [
+        "routine_name",
+        "parameters"
+      ]
+    },
+    "routine_status": {
+      "triggers": [
+        "routine status",
+        "check routine",
+        "routine progress"
+      ],
+      "parameters": [
+        "routine_name"
+      ]
+    },
+    "evolution_status": {
+      "triggers": [
+        "evolution status",
+        "team status",
+        "knowledge base"
+      ],
+      "parameters": []
+    },
+    "help": {
+      "triggers": [
+        "help",
+        "commands",
+        "routines"
+      ],
+      "parameters": []
+    }
+  },
+  "conversation_patterns": {
+    "proactive_suggestions": true,
+    "routine_recommendations": true,
+    "evolution_insights": true,
+    "maintenance_reminders": true
+  },
+  "capabilities": [
+    "daily-maintenance",
+    "weekly-analysis",
+    "monthly-evolution"
+  ]
+}

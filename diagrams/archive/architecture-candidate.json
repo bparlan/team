@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Core Unified Loop Architecture",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    {
+      "id": "presentation",
+      "type": "frontend",
+      "label": "Presentation Layer",
+      "pos": [
+        50,
+        100
+      ],
+      "size": [
+        120,
+        60
+      ]
+    },
+    {
+      "id": "unified_loop",
+      "type": "backend",
+      "label": "UnifiedLoop",
+      "pos": [
+        250,
+        100
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "task_manager",
+      "type": "backend",
+      "label": "TaskManager",
+      "pos": [
+        450,
+        100
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "event_bus",
+      "type": "messagebus",
+      "label": "EventBus",
+      "pos": [
+        650,
+        100
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "state_manager",
+      "type": "backend",
+      "label": "StateManager",
+      "pos": [
+        850,
+        100
+      ],
+      "size": [
+        140,
+        60
+      ]
+    },
+    {
+      "id": "data_store",
+      "type": "database",
+      "label": "DataStore",
+      "pos": [
+        450,
+        300
+      ],
+      "size": [
+        140,
+        60
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "presentation",
+      "to": "unified_loop",
+      "label": "invokes"
+    },
+    {
+      "from": "unified_loop",
+      "to": "task_manager",
+      "label": "dispatches"
+    },
+    {
+      "from": "task_manager",
+      "to": "event_bus",
+      "label": "publishes"
+    },
+    {
+      "from": "event_bus",
+      "to": "state_manager",
+      "label": "notifies"
+    },
+    {
+      "from": "task_manager",
+      "to": "data_store",
+      "label": "persists",
+      "labelAt": [
+        520,
+        174
+      ]
+    }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Core Architecture",
+      "items": [
+        "Clean, simple architecture with single source of truth",
+        "Event-driven communication with clear boundaries",
+        "Scalable design with separation of concerns"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Target Stability Architecture",
+    "quality_profile": "showcase",
+    "viewBox": [1200, 750]
+  },
+  "components": [
+    { "id": "unified_loop", "type": "backend", "label": "UnifiedLoop", "pos": [500, 40], "size": [180, 60] },
+    { "id": "task_contract", "type": "backend", "label": "Task Contract", "pos": [850, 40], "size": [180, 60] },
+    { "id": "event_bus", "type": "messagebus", "label": "EventBus", "pos": [150, 160], "size": [160, 60] },
+    { "id": "state_store", "type": "database", "label": "StateStore", "pos": [500, 160], "size": [180, 60] },
+    { "id": "event_log", "type": "database", "label": "Event Log", "pos": [850, 160], "size": [180, 60] },
+    { "id": "health_monitor", "type": "backend", "label": "HealthMonitor", "pos": [150, 300], "size": [160, 60] },
+    { "id": "circuit_breaker", "type": "security", "label": "CircuitBreaker", "pos": [500, 300], "size": [180, 60] },
+    { "id": "resource_limiter", "type": "backend", "label": "ResourceLimiter", "pos": [850, 300], "size": [180, 60] },
+    { "id": "task_executor", "type": "backend", "label": "TaskExecutor", "pos": [150, 440], "size": [160, 60] },
+    { "id": "agent_registry", "type": "backend", "label": "AgentRegistry", "pos": [500, 440], "size": [180, 60] },
+    { "id": "tool_manifest", "type": "backend", "label": "ToolManifest", "pos": [850, 440], "size": [180, 60] },
+    { "id": "observability", "type": "external", "label": "Observability", "pos": [150, 580], "size": [160, 60] },
+    { "id": "ci_cd", "type": "external", "label": "CI/CD Pipeline", "pos": [500, 580], "size": [180, 60] },
+    { "id": "containerization", "type": "external", "label": "Docker", "pos": [850, 580], "size": [180, 60] },
+    { "id": "activity_stream", "type": "frontend", "label": "Activity Stream", "pos": [150, 700], "size": [160, 60] },
+    { "id": "health_dashboard", "type": "frontend", "label": "Health Dashboard", "pos": [500, 700], "size": [180, 60] },
+    { "id": "agent_roster", "type": "frontend", "label": "Agent Roster", "pos": [850, 700], "size": [180, 60] }
+  ],
+  "connections": [
+    { "from": "unified_loop", "to": "task_contract", "label": "uses", "variant": "emphasis" },
+    { "from": "unified_loop", "to": "event_bus", "label": "emits", "variant": "dashed" },
+    { "from": "unified_loop", "to": "state_store", "label": "reads", "variant": "emphasis" },
+    { "from": "unified_loop", "to": "health_monitor", "label": "reports", "variant": "dashed" },
+    { "from": "event_bus", "to": "event_log", "label": "logs", "variant": "emphasis" },
+    { "from": "event_bus", "to": "state_store", "label": "notifies", "variant": "emphasis" },
+    { "from": "event_bus", "to": "circuit_breaker", "label": "triggers", "variant": "security" },
+    { "from": "state_store", "to": "event_log", "label": "syncs", "variant": "emphasis" },
+    { "from": "health_monitor", "to": "circuit_breaker", "label": "controls", "variant": "security" },
+    { "from": "health_monitor", "to": "resource_limiter", "label": "advises", "variant": "dashed" },
+    { "from": "circuit_breaker", "to": "task_executor", "label": "gates", "variant": "security" },
+    { "from": "resource_limiter", "to": "task_executor", "label": "limits", "variant": "security" },
+    { "from": "task_executor", "to": "agent_registry", "label": "spawns", "variant": "emphasis" },
+    { "from": "task_executor", "to": "tool_manifest", "label": "uses", "variant": "emphasis" },
+    { "from": "agent_registry", "to": "tool_manifest", "label": "registers", "variant": "emphasis" },
+    { "from": "task_executor", "to": "observability", "label": "emits", "variant": "dashed" },
+    { "from": "ci_cd", "to": "unified_loop", "label": "tests", "variant": "dashed" },
+    { "from": "containerization", "to": "task_executor", "label": "isolates", "variant": "dashed" },
+    { "from": "event_bus", "to": "activity_stream", "label": "streams", "variant": "dashed" },
+    { "from": "health_monitor", "to": "health_dashboard", "label": "displays", "variant": "dashed" },
+    { "from": "agent_registry", "to": "agent_roster", "label": "populates", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "emerald", "title": "Stability Pillars", "items": ["Single UnifiedLoop (not two)", "One Task Contract (not three)", "EventBus-only integration", "Health-score-driven circuit breakers"] },
+    { "dot": "cyan", "title": "State Integrity", "items": ["Atomic state persistence", "Write-ahead logging", "Event sourcing for replay", "Schema versioning"] },
+    { "dot": "rose", "title": "Production Readiness", "items": ["Containerization with Docker", "CI/CD pipeline", "Prometheus/Grafana monitoring", "Resource bounds and retention"] },
+    { "dot": "yellow", "title": "Visibility Layer", "items": ["Real-time ActivityStream", "Health Dashboard", "Agent Roster", "Progressive disclosure"] }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "project": {
+    "name": "team-skill",
+    "root": "/Users/bparlan/devcode/team",
+    "description": "Team skill orchestrates deterministic multi-agent review and consensus building for engineering projects",
+    "stack": []
+  },
+  "team": [
+    {
+      "id": "architect",
+      "role": "Systems Architect",
+      "expertise": "long-term maintainability, coupling, failure modes, blast radius",
+      "voice": "skeptical of shortcuts; asks what breaks in 6 months",
+      "enabled": true,
+      "personality": {
+        "color": "#FF6B6B",
+        "emoji": "\ud83e\udde0",
+        "greeting": "Hello team! Let's architect this properly...",
+        "interaction_frequency": "balanced",
+        "speech_pattern": "methodical",
+        "style": "technical",
+        "closing": "Architect signing off \u2014 think about those long-term implications"
+      }
+    }
+  ],
+  "permitted_skills": [
+    "ponytail",
+    "evolve-skills",
+    "code-search"
+  ],
+  "behavior": {
+    "auto_summarization": false,
+    "block_edits_without_plan": true,
+    "chat_mode": true,
+    "dynamic_interaction": true,
+    "enable_persona_comments": true,
+    "gamification_enabled": true,
+    "max_discussion_rounds": 5,
+    "option_selection_required": true,
+    "persona_response_variety": true,
+    "pre_analysis_search": true,
+    "proactive_plan_required": true
+  },
+  "output": {
+    "report_dir": ".omp/theteam/reports",
+    "keep_last": 20
+  }
+}

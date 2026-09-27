@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "System Monitoring & Health Architecture",
+    "quality_profile": "showcase",
+    "viewBox": [1100, 700]
+  },
+  "components": [
+    {"id": "health_monitor", "type": "backend", "label": "HealthMonitor", "pos": [60, 120], "size": [140, 60]},
+    {"id": "metrics_store", "type": "database", "label": "Metrics Store", "pos": [60, 300], "size": [140, 60]},
+    {"id": "alerting", "type": "security", "label": "Alerting", "pos": [60, 480], "size": [140, 60]},
+    {"id": "event_bus", "type": "messagebus", "label": "EventBus", "pos": [300, 300], "size": [140, 60]},
+    {"id": "unified_loop", "type": "backend", "label": "UnifiedLoop", "pos": [500, 120], "size": [140, 60]},
+    {"id": "task_manager", "type": "backend", "label": "TaskManager", "pos": [500, 300], "size": [140, 60]},
+    {"id": "state_manager", "type": "backend", "label": "StateManager", "pos": [500, 480], "size": [140, 60]},
+    {"id": "system_integration", "type": "backend", "label": "SystemIntegration", "pos": [700, 120], "size": [160, 60]},
+    {"id": "dashboard", "type": "frontend", "label": "Dashboard", "pos": [700, 300], "size": [140, 60]},
+    {"id": "operations", "type": "external", "label": "Operations", "pos": [700, 480], "size": [140, 60]},
+    {"id": "grafana", "type": "external", "label": "Grafana", "pos": [900, 300], "size": [140, 60]},
+    {"id": "prometheus", "type": "external", "label": "Prometheus", "pos": [900, 120], "size": [140, 60]}
+  ],
+  "boundaries": [
+    {"kind": "region", "label": "Monitoring Layer", "wraps": ["health_monitor", "metrics_store", "alerting"], "pad": 14},
+    {"kind": "region", "label": "Business Logic Layer", "wraps": ["unified_loop", "task_manager", "state_manager", "system_integration"], "pad": 14},
+    {"kind": "region", "label": "External Tools", "wraps": ["grafana", "prometheus", "operations", "dashboard"], "pad": 14}
+  ],
+  "connections": [
+    {"from": "unified_loop", "to": "health_monitor", "label": "emits", "fromSide": "left", "toSide": "right"},
+    {"from": "task_manager", "to": "health_monitor", "label": "metrics", "fromSide": "top", "toSide": "bottom"},
+    {"from": "state_manager", "to": "health_monitor", "label": "state", "fromSide": "top", "toSide": "bottom"},
+    {"from": "system_integration", "to": "health_monitor", "label": "health", "fromSide": "left", "toSide": "right"},
+    {"from": "health_monitor", "to": "metrics_store", "label": "stores", "fromSide": "bottom", "toSide": "top"},
+    {"from": "health_monitor", "to": "event_bus", "label": "routes", "fromSide": "right", "toSide": "left"},
+    {"from": "event_bus", "to": "alerting", "label": "triggers", "fromSide": "left", "toSide": "right"},
+    {"from": "metrics_store", "to": "alerting", "label": "threshold", "fromSide": "bottom", "toSide": "top"},
+    {"from": "alerting", "to": "operations", "label": "notifies", "fromSide": "right", "toSide": "left"},
+    {"from": "health_monitor", "to": "dashboard", "label": "shows", "fromSide": "right", "toSide": "left"},
+    {"from": "metrics_store", "to": "prometheus", "label": "scrapes", "fromSide": "right", "toSide": "left"},
+    {"from": "dashboard", "to": "grafana", "label": "renders", "fromSide": "right", "toSide": "left"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Monitoring Flow", "items": ["Components emit health and metrics to HealthMonitor", "HealthMonitor stores metrics and routes events", "Alerting triggers on threshold or event"]},
+    {"dot": "emerald", "title": "Observability", "items": ["Prometheus scrapes metrics store", "Grafana renders dashboards", "Operations receives alerts"]},
+    {"dot": "rose", "title": "Failure Modes", "items": ["HealthMonitor failure does not stop the loop", "Metrics store loss is recoverable", "Alerting is fire-and-forget"]}
+  ]
+}

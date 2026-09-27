@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Task & Loop Management Architecture",
+    "quality_profile": "showcase",
+    "viewBox": [1100, 700]
+  },
+  "components": [
+    {"id": "task_manager", "type": "backend", "label": "TaskManager", "pos": [60, 120], "size": [140, 60]},
+    {"id": "task_store", "type": "database", "label": "TaskStore", "pos": [60, 300], "size": [140, 60]},
+    {"id": "task_executor", "type": "backend", "label": "TaskExecutor", "pos": [60, 480], "size": [140, 60]},
+    {"id": "unified_loop", "type": "backend", "label": "UnifiedLoop", "pos": [300, 120], "size": [140, 60]},
+    {"id": "state_engine", "type": "backend", "label": "StateEngine", "pos": [300, 300], "size": [140, 60]},
+    {"id": "progress_tracker", "type": "backend", "label": "ProgressTracker", "pos": [300, 480], "size": [140, 60]},
+    {"id": "task_scheduler", "type": "backend", "label": "TaskScheduler", "pos": [500, 120], "size": [140, 60]},
+    {"id": "state_store", "type": "database", "label": "StateStore", "pos": [500, 300], "size": [140, 60]},
+    {"id": "config_store", "type": "database", "label": "ConfigStore", "pos": [500, 480], "size": [140, 60]},
+    {"id": "event_bus", "type": "messagebus", "label": "EventBus", "pos": [700, 300], "size": [140, 60]},
+    {"id": "state_manager", "type": "backend", "label": "StateManager", "pos": [900, 120], "size": [140, 60]},
+    {"id": "ledger_store", "type": "database", "label": "LedgerStore", "pos": [900, 300], "size": [140, 60]}
+  ],
+  "boundaries": [
+    {"kind": "region", "label": "Task Management", "wraps": ["task_manager", "task_store", "task_executor"], "pad": 14},
+    {"kind": "region", "label": "Loop Management", "wraps": ["unified_loop", "state_engine", "progress_tracker", "task_scheduler"], "pad": 14},
+    {"kind": "region", "label": "State & Config", "wraps": ["state_store", "config_store", "ledger_store"], "pad": 14},
+    {"kind": "region", "label": "Integration", "wraps": ["event_bus", "state_manager"], "pad": 14}
+  ],
+  "connections": [
+    {"from": "task_manager", "to": "task_store", "label": "persists", "fromSide": "bottom", "toSide": "top"},
+    {"from": "task_manager", "to": "task_executor", "label": "delegates", "fromSide": "bottom", "toSide": "top"},
+    {"from": "task_executor", "to": "task_manager", "label": "reports", "fromSide": "top", "toSide": "bottom"},
+    {"from": "unified_loop", "to": "state_engine", "label": "drives", "fromSide": "bottom", "toSide": "top"},
+    {"from": "unified_loop", "to": "progress_tracker", "label": "updates", "fromSide": "bottom", "toSide": "top"},
+    {"from": "unified_loop", "to": "task_scheduler", "label": "queries", "fromSide": "right", "toSide": "left"},
+    {"from": "task_scheduler", "to": "task_manager", "label": "schedules", "fromSide": "left", "toSide": "right"},
+    {"from": "state_engine", "to": "state_store", "label": "persists", "fromSide": "bottom", "toSide": "top"},
+    {"from": "progress_tracker", "to": "config_store", "label": "reads", "fromSide": "right", "toSide": "left"},
+    {"from": "task_manager", "to": "event_bus", "label": "publishes", "fromSide": "right", "toSide": "left"},
+    {"from": "state_engine", "to": "event_bus", "label": "emits", "fromSide": "right", "toSide": "left"},
+    {"from": "event_bus", "to": "state_manager", "label": "notifies", "fromSide": "right", "toSide": "left"},
+    {"from": "state_manager", "to": "ledger_store", "label": "logs", "fromSide": "bottom", "toSide": "top"}
+  ],
+  "cards": [
+    {"dot": "cyan", "title": "Task Lifecycle", "items": ["TaskManager owns task state", "TaskStore persists tasks", "TaskExecutor runs handlers"]},
+    {"dot": "emerald", "title": "Loop Control", "items": ["UnifiedLoop drives StateEngine and ProgressTracker", "TaskScheduler queries TaskManager for work", "StateEngine persists to StateStore"]},
+    {"dot": "rose", "title": "Integration", "items": ["EventBus is the only integration mechanism", "StateManager receives events and logs to LedgerStore", "No direct cross-component references"]}
+  ]
+}

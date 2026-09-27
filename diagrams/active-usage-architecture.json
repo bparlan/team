@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Active Usage Architecture",
+    "subtitle": "Unified task surface, loop controller, and safety — grounded in theteam/core and theteam/subskills/task_stack",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "entry",
+        "label": "Entry & CLI",
+        "focus": ["theteam_cli", "task_store", "task_manager", "task_executor"]
+      },
+      {
+        "id": "loop",
+        "label": "Loop Execution",
+        "focus": ["theteam_cli", "unified_loop", "task_executor", "event_bus"]
+      },
+      {
+        "id": "safety",
+        "label": "Safety & Telemetry",
+        "focus": ["circuit_breaker", "resource_limiter", "audit_logger", "agent_isolation", "health_monitor"]
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "theteam_cli",
+      "type": "backend",
+      "label": "theteam CLI",
+      "pos": [600, 40],
+      "size": [200, 60]
+    },
+    {
+      "id": "unified_loop",
+      "type": "backend",
+      "label": "UnifiedLoop",
+      "pos": [610, 200],
+      "size": [180, 60]
+    },
+    {
+      "id": "task_store",
+      "type": "database",
+      "label": "TaskStore",
+      "pos": [60, 370],
+      "size": [160, 60]
+    },
+    {
+      "id": "task_manager",
+      "type": "backend",
+      "label": "TaskManager",
+      "pos": [310, 370],
+      "size": [160, 60]
+    },
+    {
+      "id": "task_executor",
+      "type": "backend",
+      "label": "TaskExecutor",
+      "pos": [580, 370],
+      "size": [200, 60]
+    },
+    {
+      "id": "circuit_breaker",
+      "type": "security",
+      "label": "CircuitBreaker",
+      "pos": [60, 570],
+      "size": [170, 60]
+    },
+    {
+      "id": "resource_limiter",
+      "type": "security",
+      "label": "ResourceLimiter",
+      "pos": [280, 570],
+      "size": [170, 60]
+    },
+    {
+      "id": "audit_logger",
+      "type": "database",
+      "label": "AuditLogger",
+      "pos": [500, 570],
+      "size": [170, 60]
+    },
+    {
+      "id": "agent_isolation",
+      "type": "security",
+      "label": "AgentIsolation",
+      "pos": [720, 570],
+      "size": [170, 60]
+    },
+    {
+      "id": "health_monitor",
+      "type": "backend",
+      "label": "HealthMonitor",
+      "pos": [350, 780],
+      "size": [180, 60]
+    },
+    {
+      "id": "event_bus",
+      "type": "messagebus",
+      "label": "EventBus",
+      "pos": [700, 780],
+      "size": [180, 60]
+    }
+  ],
+  "connections": [
+    {
+      "from": "theteam_cli",
+      "to": "unified_loop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "task_manager",
+      "fromSide": "left",
+      "toSide": "top"
+    },
+    {
+      "from": "unified_loop",
+      "to": "task_executor",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "task_store",
+      "to": "task_manager",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "task_manager",
+      "to": "task_executor",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "from": "task_executor",
+      "to": "circuit_breaker",
+      "fromSide": "left",
+      "toSide": "top"
+    },
+    {
+      "from": "task_executor",
+      "to": "resource_limiter",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "task_executor",
+      "to": "audit_logger",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "task_executor",
+      "to": "agent_isolation",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "from": "resource_limiter",
+      "to": "health_monitor",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "from": "agent_isolation",
+      "to": "health_monitor",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "from": "health_monitor",
+      "to": "event_bus",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ]
+}

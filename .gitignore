@@ -1,0 +1,111 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Node / JS
+node_modules/
+.npm/
+.yarn/
+.pnp/
+*.tsbuildinfo
+.next/
+.nuxt/
+dist/
+build/
+public/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+*~
+Thumbs.db
+.vs/
+
+# State directories — runtime, not source
+.mp/
+.omp/
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Runtime artifacts
+*.pid
+*.lock
+*.sqlite
+*.sqlite3
+*.db
+*.db3
+*.bak
+*.backup
+*.swp
+*.tmp
+*.temp
+
+# Generated reports
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.gif
+*.svg
+!diagrams/*.svg
+!diagrams/*.png
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.tar.xz
+*.rar
+*.7z
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials*
+secrets*
+*-backup*
+
+# TheTeam runtime state
+team/.omp/
+team/.mp/
+team/context/
+team/.team/

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Stability Loop Workflow",
+    "quality_profile": "showcase"
+  },
+  "lanes": [
+    {"id": "loop", "label": "UnifiedLoop"},
+    {"id": "state", "label": "State & Events"},
+    {"id": "health", "label": "Health & Safety"},
+    {"id": "execution", "label": "Task Execution"}
+  ],
+  "phases": [
+    {"id": "init", "label": "Initialize", "fromCol": 0, "toCol": 1},
+    {"id": "run", "label": "Run Loop", "fromCol": 2, "toCol": 3},
+    {"id": "monitor", "label": "Monitor", "fromCol": 4, "toCol": 5}
+  ],
+  "nodes": [
+    {"id": "start", "label": "Start", "lane": "loop", "col": 0, "type": "backend"},
+    {"id": "load_state", "label": "Load State", "lane": "loop", "col": 1, "type": "backend"},
+    {"id": "validate_state", "label": "Validate", "lane": "state", "col": 1, "type": "backend"},
+    {"id": "check_health", "label": "Health Check", "lane": "health", "col": 2, "type": "backend"},
+    {"id": "circuit_check", "label": "Circuit Check", "lane": "health", "col": 3, "type": "backend"},
+    {"id": "fetch_task", "label": "Fetch Task", "lane": "loop", "col": 4, "type": "backend"},
+    {"id": "dispatch", "label": "Dispatch", "lane": "execution", "col": 5, "type": "backend"},
+    {"id": "execute_task", "label": "Execute", "lane": "execution", "col": 0, "type": "backend"},
+    {"id": "record_result", "label": "Record", "lane": "state", "col": 0, "type": "backend"},
+    {"id": "emit_event", "label": "Emit Event", "lane": "state", "col": 2, "type": "backend"},
+    {"id": "persist_state", "label": "Persist", "lane": "state", "col": 3, "type": "backend"},
+    {"id": "complete", "label": "Complete", "lane": "loop", "col": 4, "type": "backend"}
+  ],
+  "edges": [
+    {"from": "start", "to": "load_state", "label": "init", "variant": "default"},
+    {"from": "load_state", "to": "validate_state", "label": "read", "variant": "default"},
+    {"from": "validate_state", "to": "check_health", "label": "ok", "variant": "default"},
+    {"from": "check_health", "to": "circuit_check", "label": "healthy", "variant": "default"},
+    {"from": "circuit_check", "to": "fetch_task", "label": "pass", "variant": "default"},
+    {"from": "fetch_task", "to": "dispatch", "label": "available", "variant": "default"},
+    {"from": "dispatch", "to": "execute_task", "label": "run", "variant": "default"},
+    {"from": "execute_task", "to": "record_result", "label": "done", "variant": "default"},
+    {"from": "record_result", "to": "emit_event", "label": "emit", "variant": "default"},
+    {"from": "emit_event", "to": "persist_state", "label": "persist", "variant": "default"},
+    {"from": "persist_state", "to": "complete", "label": "commit", "variant": "default"},
+    {"from": "circuit_check", "to": "complete", "label": "open", "variant": "security", "role": "error", "route": "drop"},
+    {"from": "validate_state", "to": "complete", "label": "corrupt", "variant": "security", "role": "error", "route": "drop"}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Stable Loop", "items": ["Single loop, single contract", "State validated before use", "Health checked every iteration"]},
+    {"dot": "cyan", "title": "Safe Execution", "items": ["Circuit breaker gates tasks", "Events emitted atomically", "CI/CD validates every commit"]},
+    {"dot": "rose", "title": "Failure Modes", "items": ["Corrupt state -> stop, don't drift", "Circuit open -> stop, don't cascade", "CI fail -> stop, don't ship"]}
+  ]
+}

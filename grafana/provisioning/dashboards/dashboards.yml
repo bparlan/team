@@ -1,0 +1,18 @@
+# Grafana dashboard provisioning.
+# Scans /etc/grafana/dashboards for JSON dashboards and loads them.
+#
+# Grafana 9+ requires `path` to live under `options`; the legacy flat form
+# fails at startup with "path param is not a string".
+apiVersion: 1
+
+providers:
+  - name: theteam
+    orgId: 1
+    folder: theteam
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/dashboards
+      foldersFromFilesStructure: false

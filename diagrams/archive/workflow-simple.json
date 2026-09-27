@@ -1,0 +1,41 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "Simple Workflow",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "simple",
+        "label": "Simple path",
+        "focus": ["create", "dispatch", "execute", "complete"],
+        "note": "Simple workflow example"
+      }
+    ]
+  },
+  "lanes": [
+    {"id": "agent", "label": "Agent"},
+    {"id": "loop", "label": "UnifiedLoop"},
+    {"id": "task", "label": "TaskManager"}
+  ],
+  "phases": [
+    {"id": "intake", "label": "Intake", "fromCol": 0, "toCol": 1},
+    {"id": "execution", "label": "Execution", "fromCol": 2, "toCol": 3},
+    {"id": "completion", "label": "Completion", "fromCol": 4, "toCol": 5}
+  ],
+  "mainPath": ["create", "dispatch", "execute", "complete"],
+  "nodes": [
+    {"id": "create", "lane": "agent", "col": 0, "type": "frontend", "label": "Create Task", "sublabel": "add_task()"},
+    {"id": "dispatch", "lane": "loop", "col": 1, "type": "backend", "label": "Dispatch", "sublabel": "scheduler picks"},
+    {"id": "execute", "lane": "task", "col": 2, "type": "backend", "label": "Execute", "sublabel": "run handler"},
+    {"id": "complete", "lane": "task", "col": 3, "type": "backend", "label": "Complete", "sublabel": "mark done"}
+  ],
+  "edges": [
+    {"from": "create", "to": "dispatch", "label": "submit"},
+    {"from": "dispatch", "to": "execute", "label": "schedule"},
+    {"from": "execute", "to": "complete", "label": "success"}
+  ],
+  "cards": [
+    {"dot": "emerald", "title": "Simple Workflow", "items": ["Clean workflow with no routing issues"]}
+  ]
+}

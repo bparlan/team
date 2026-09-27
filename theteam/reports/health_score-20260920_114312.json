@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-09-20T11:43:12.935008+00:00",
+  "project": "/Users/bparlan/devcode/team",
+  "health_score": {
+    "timestamp": "2026-09-20T11:43:12.934971+00:00",
+    "overall_score": 0.4858196721311475,
+    "component_scores": {
+      "project_structure": 1.0,
+      "documentation": 0.5360655737704918,
+      "architecture": 0.3,
+      "infrastructure": 0.0
+    },
+    "grade": "F",
+    "recommendations": [
+      "Improve documentation completeness",
+      "Review and refactor complex functions",
+      "Enhance test coverage",
+      "Standardize configuration management"
+    ]
+  },
+  "generated_by": "optimized_system_awareness_runner",
+  "version": "2.0.0"
+}

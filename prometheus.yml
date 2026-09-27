@@ -1,0 +1,26 @@
+# Prometheus scrape configuration for the theteam platform.
+#
+# Retention is configured on the command line (see docker-compose.prod.yml,
+# owned by Main):
+#   --storage.tsdb.retention.time=15d
+#   --storage.tsdb.retention.size=5GB
+# Prometheus itself does not accept these flags in the config file.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # The theteam orchestrator exposes /metrics on port 8000.
+  - job_name: theteam
+    static_configs:
+      - targets: ['theteam:8000']
+    metrics_path: /metrics
+    scrape_interval: 15s
+
+  # Prometheus self-scrape so the server's own health is visible.
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+    scrape_interval: 15s

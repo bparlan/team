@@ -1,0 +1,118 @@
+# Production override.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# Production runs PostgreSQL as a primary with a standby and read replicas,
+# enables resource bounds via environment, and keeps metrics retention finite.
+services:
+  theteam:
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql://theteam:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres-primary:5432/theteam
+      - PG_PRIMARY_HOST=postgres-primary
+      - PG_STANDBY_HOST=postgres-standby
+      - PG_REPLICA_HOSTS=postgres-replica-1,postgres-replica-2
+      - PG_POOL_MIN=2
+      - PG_POOL_MAX=20
+      # Resource bounds, mirrored from the container limits below.
+      - THETEAM_LIMIT_TASKS=500
+      - THETEAM_LIMIT_CONNECTIONS=100
+      - THETEAM_LIMIT_THREADS=200
+      - THETEAM_LIMIT_MEMORY=768
+      - THETEAM_MAX_ALERTS=5000
+      - THETEAM_MAX_USAGE_HISTORY=50000
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # Primary: accepts all writes and serves reads when replicas are down.
+  postgres-primary:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=theteam
+      # Hot standby / replication settings for the standby.
+      - PGHOST=postgres-primary
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U theteam -d theteam"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    restart: always
+
+  # Synchronous-ish standby: promoted by FailoverManager when the primary dies.
+  postgres-standby:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=theteam
+    volumes:
+      - pg_standby_data:/var/lib/postgresql/data
+    depends_on:
+      - postgres-primary
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+    restart: always
+
+  # Read replicas: the ReadReplicaRouter round-robins reads across these.
+  postgres-replica-1:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=theteam
+    volumes:
+      - pg_replica1_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+    restart: always
+
+  postgres-replica-2:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=theteam
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      - POSTGRES_DB=theteam
+    volumes:
+      - pg_replica2_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+    restart: always
+
+  prometheus:
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=20GB"
+
+volumes:
+  pg_primary_data:
+  pg_standby_data:
+  pg_replica1_data:
+  pg_replica2_data:

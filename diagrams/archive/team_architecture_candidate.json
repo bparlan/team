@@ -1,0 +1,92 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Team Skill Architecture",
+    "quality_profile": "showcase",
+    "viewBox": [1000, 600]
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "User",
+      "pos": [500, 40],
+      "size": [200, 80]
+    },
+    {
+      "id": "theteam_cli",
+      "type": "backend",
+      "label": "theteam CLI",
+      "pos": [500, 160],
+      "size": [200, 80]
+    },
+    {
+      "id": "theteam_config",
+      "type": "backend",
+      "label": "config",
+      "pos": [150, 320],
+      "size": [180, 80]
+    },
+    {
+      "id": "context_aggregator",
+      "type": "backend",
+      "label": "context_agg",
+      "pos": [500, 320],
+      "size": [180, 80]
+    },
+    {
+      "id": "theteam_report",
+      "type": "backend",
+      "label": "report",
+      "pos": [850, 320],
+      "size": [180, 80]
+    },
+    {
+      "id": "members",
+      "type": "backend",
+      "label": "members",
+      "pos": [150, 500],
+      "size": [180, 80]
+    },
+    {
+      "id": "archify",
+      "type": "backend",
+      "label": "archify",
+      "pos": [500, 500],
+      "size": [180, 80]
+    }
+  ],
+  "connections": [
+    {
+      "from": "user",
+      "to": "theteam_cli",
+      "label": "invokes"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "theteam_config",
+      "label": "validates config"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "context_aggregator",
+      "label": "aggregates context"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "theteam_report",
+      "label": "generates report"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "members",
+      "label": "spawns"
+    },
+    {
+      "from": "theteam_cli",
+      "to": "archify",
+      "label": "invokes"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+# ponytail config — team project
+# Runs after every phase to detect drift and bloat.
+
+mode: analyze
+
+# Files that are never allowed in the project root during implementation
+forbidden_patterns:
+  - "PHASE*_*.md"
+  - "*_PLAN.md"
+  - "*_STATUS.md"
+  - "*_STRATEGY.md"
+  - "*_SUMMARY.md"
+  - "*_REPORT.md"
+  - "*_ANALYSIS.md"
+  - "*_IMPLEMENTATION*.md"
+  - "*_FINAL*.md"
+  - "*_PRIORITY*.md"
+
+# Rules for orphaned files
+orphaned_file_check:
+  enabled: true
+  description: "New .py files in theteam/core/ must be imported by at least one other module"
+  scan_dir: "theteam/core/"
+  min_imports: 1
+  exclude:
+    - "__init__.py"
+    - "test_*.py"
+
+# Rules for code duplication
+duplication_check:
+  enabled: true
+  min_lines: 5
+  description: "Flag duplicate code blocks of 5+ lines"
+
+# Rules for redundant wrappers
+wrapper_check:
+  enabled: true
+  description: "Flag functions that merely wrap standard library calls"
+
+# Rules for unused imports
+unused_import_check:
+  enabled: true
+  description: "Flag imports that are never used in the file"
+
+# Output format
+output:
+  format: "markdown"
+  show_line_numbers: true
+  show_suggestions: true
+  max_findings: 20

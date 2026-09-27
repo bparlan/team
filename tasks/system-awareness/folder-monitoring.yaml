@@ -1,0 +1,38 @@
+id: folder-monitoring
+name: Folder Structure Monitoring
+type: loop
+priority: medium
+schedule:
+  mode: interval
+  interval_minutes: 30
+  start_delay_minutes: 0
+  max_iterations: null
+  retry_on_failure: true
+phases:
+  - name: assess_structure
+    script: theteam/core/folder_monitor.py
+    args: ["--compact"]
+    timeout_seconds: 60
+    condition: always
+outputs:
+  - path: .mp/theteam/folder-monitor.log
+    type: log
+    retention_days: 30
+  - path: .mp/theteam/structure-summary.json
+    type: json
+    overwrite: true
+actions:
+  on_success: update_ledger
+  on_failure: notify_agent
+  on_issue:
+    safe_auto_fix: true
+    notify_team: true
+team_review:
+  enabled: true
+  required_verdicts:
+    - architect
+    - pragmatist
+metadata:
+  created_by: agent
+  created_at: "2026-09-20T17:50:00Z"
+  last_modified: "2026-09-20T17:50:00Z"

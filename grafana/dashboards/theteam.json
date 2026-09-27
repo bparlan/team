@@ -1,0 +1,417 @@
+{
+  "title": "theteam Production",
+  "uid": "theteam-prod",
+  "tags": [
+    "theteam"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": null,
+      "title": "Health Score",
+      "type": "stat",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_health_score",
+          "legendFormat": "",
+          "instant": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "/.*/"
+        },
+        "show": "all",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Active Tasks",
+      "type": "stat",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_tasks_active",
+          "legendFormat": "",
+          "instant": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "/.*/"
+        },
+        "show": "all",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Tasks/s",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "rate(theteam_tasks_total[5m])",
+          "legendFormat": "tasks/s",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Resource Utilization %",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_resource_utilization_percent",
+          "legendFormat": "{{resource}}",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "DB Connections Active",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 32
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_db_connections_active",
+          "legendFormat": "{{role}}",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Circuit Breaker State",
+      "type": "stat",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_circuit_breaker_state",
+          "legendFormat": "",
+          "instant": false
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "mean"
+          ],
+          "fields": "/.*/"
+        },
+        "show": "all",
+        "orientation": "horizontal",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Events/s",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "rate(theteam_events_total[5m])",
+          "legendFormat": "events/s",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "DB Failovers Total",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "theteam_db_failovers_total",
+          "legendFormat": "failovers",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": null,
+      "title": "Task Duration p95",
+      "type": "timeseries",
+      "datasource": {
+        "uid": "theteam-prometheus",
+        "type": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "uid": "theteam-prometheus",
+            "type": "prometheus"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(theteam_task_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95",
+          "instant": false
+        }
+      ],
+      "options": {
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom",
+          "displayMode": "table"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "decreasing"
+        },
+        "timezone": "browser"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

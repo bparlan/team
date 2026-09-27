@@ -1,0 +1,7 @@
+# theteam runtime dependencies.
+#
+# These are hard requirements: `theteam/__init__.py` imports yaml at module
+# level, so the package will not import without it. Everything else degrades
+# gracefully when absent - psycopg2 is only needed for PostgreSQL deployments.
+PyYAML>=6.0
+psycopg2-binary>=2.9.9

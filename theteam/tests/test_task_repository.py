@@ -304,15 +304,14 @@ def test_run_skips_a_due_task_whose_script_is_missing(tmp_path, capsys):
     assert schedule["last_run"]["gone"]["result"] == "skipped"
 
 
-# ======= 7. the migration safety net: a lost YAML file is still a task =======
+# ======= 7. YAML is the only source =======
 
 
-def test_task_order_id_served_from_the_legacy_registry_is_still_listed(tmp_path):
+def test_the_registry_is_no_longer_a_source_of_tasks(tmp_path):
     """
-    An id named in `TASK_ORDER` whose YAML file is gone but which the legacy
-    registry still knows stays in the listing, flagged in `legacy_only`. This is
-    the migration safety net: a file that failed to convert must read as a
-    visible fallback, not as a task that stopped existing.
+    The dual-read path is closed. An id the order names whose YAML file is
+    gone is reported missing, not served from the legacy registry: a second
+    store is how a deleted task keeps running from a file nobody edits.
     """
     root = _project(
         tmp_path,
@@ -321,19 +320,17 @@ def test_task_order_id_served_from_the_legacy_registry_is_still_listed(tmp_path)
         registry={"ghost": {"id": "ghost", "name": "From the registry", "priority": 2}},
     )
 
-    payload = TaskRepository(str(root)).list_tasks()
+    repo = TaskRepository(str(root))
+    payload = repo.list_tasks()
 
-    ids = [t["id"] for t in payload["tasks"]]
-    assert ids == ["alpha", "ghost"], "a task that lost its YAML is not gone"
-    assert payload["legacy_only"] == ["ghost"]
-    ghost = next(t for t in payload["tasks"] if t["id"] == "ghost")
-    assert ghost["name"] == "From the registry"
-    assert ghost["priority"] == 2
-    # The read found the task, but not in YAML - the two numbers differ on
-    # purpose, and that difference is the migration's progress report.
-    assert payload["count"] == 2
+    assert [t["id"] for t in payload["tasks"]] == ["alpha"]
+    assert payload["count"] == 1
     assert payload["yaml_count"] == 1
-    assert payload["missing_tasks"] == []
+    assert repo.get("ghost") is None
+    # Named rather than vanished, so a broken order is never read as a
+    # shorter task list.
+    assert payload["missing_tasks"] == ["ghost"]
+    assert "legacy_only" not in payload
 
 
 def test_legacy_only_entry_is_surfaced_by_the_tasks_command(tmp_path, capsys):

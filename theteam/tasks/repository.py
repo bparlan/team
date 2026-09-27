@@ -2,9 +2,9 @@
 """
 Task repository with full CRUD operations.
 
-The repository manages tasks from two sources:
-  1. Canonical YAML files under `tasks/` (new M2 layout)
-  2. Legacy JSON registry under `.omp/theteam/` (M1 layout)
+Tasks are canonical YAML files under `tasks/`. That is the only source: the
+legacy JSON registry that M2 dual-read is gone, so a task the read cannot find
+does not exist rather than hiding in a second store.
 
 The repository is the single source of truth for task membership and order.
 Tasks are owned by a specific project root.
@@ -20,7 +20,6 @@ import yaml
 
 TASKS_DIRNAME = "tasks"
 TASK_ORDER_FILENAME = "TASK_ORDER"
-REGISTRY_FILENAME = "task-registry.json"
 SCHEDULE_FILENAME = "task-schedule.json"
 
 # A task is readable if it names an id. Everything else is optional, and a
@@ -138,7 +137,7 @@ def _parse_next_run(value: Any) -> Optional[datetime]:
 
 
 class TaskRepository:
-    """Reads tasks from YAML, falling back to the legacy registry."""
+    """The task store. YAML under `tasks/` is the only source."""
 
     def __init__(self, project_root: str) -> None:
         self.project_root = os.path.abspath(project_root)
@@ -146,7 +145,6 @@ class TaskRepository:
         self._order = read_task_order(self.project_root)
         self._rank = {task_id: i for i, task_id in enumerate(self._order)}
         self._yaml = self._read_yaml()
-        self._legacy = self._read_legacy()
 
     # -- sources -----------------------------------------------------------
 
@@ -172,18 +170,6 @@ class TaskRepository:
         from theteam.state import state_dir
         return str(state_dir(self.project_root) / filename)
 
-    def _read_legacy(self) -> Dict[str, Any]:
-        """Registered tasks from the pre-M2 JSON registry, or `{}`.
-
-        Read directly rather than through `TaskRegistry`: that class is the
-        loader M2 replaces, and the CLI must not depend on code it is deleting.
-        """
-        path = self._state_path(REGISTRY_FILENAME)
-        if not os.path.exists(path):
-            return {}
-        with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle).get("tasks", {})
-
     def schedule(self) -> Dict[str, Any]:
         path = self._state_path(SCHEDULE_FILENAME)
         if not os.path.exists(path):
@@ -200,19 +186,8 @@ class TaskRepository:
     def yaml_ids(self) -> List[str]:
         return sorted(self._yaml)
 
-    @property
-    def legacy_only(self) -> List[str]:
-        """Named ids whose YAML file is gone. Empty means the switch is done."""
-        return [t for t in self._order if t in self._legacy and t not in self._yaml]
-
-    @property
-    def unregistered_tasks(self) -> List[Dict[str, Any]]:
-        """Registry entries with no order position. Listed, never executed."""
-        extras = {t: v for t, v in self._legacy.items() if t not in self._rank}
-        return sorted(extras.values(), key=lambda t: (-_priority(t), t["id"]))
-
     def get(self, task_id: str) -> Optional[Dict[str, Any]]:
-        return self._yaml.get(task_id) or self._legacy.get(task_id)
+        return self._yaml.get(task_id)
 
     @property
     def missing_tasks(self) -> List[str]:
@@ -253,9 +228,9 @@ class TaskRepository:
         """
         The `theteam tasks` payload.
 
-        `yaml_count` and `legacy_only` are the migration reporting itself, so a
-        caller can tell "this project has no tasks" from "the read found none",
-        which are indistinguishable from the outside and mean opposite things.
+        `yaml_count` stays, so a caller can tell "this project has no tasks"
+        from "the read found none" - indistinguishable from the outside, and
+        they mean opposite things.
         """
         schedule = self.schedule()
         tasks = self.all_tasks()
@@ -263,8 +238,6 @@ class TaskRepository:
             "tasks": [self._row(t, schedule) for t in tasks],
             "count": len(tasks),
             "yaml_count": len(self._yaml),
-            "legacy_only": self.legacy_only,
-            "legacy_tasks": [t["id"] for t in self.unregistered_tasks],
             "missing_tasks": self.missing_tasks,
         }
 
@@ -444,7 +417,7 @@ class TaskRepository:
             TaskDefinitionError: the definition is not writable.
         """
         task_id = task_data["id"]
-        if task_id in self._yaml or task_id in self._legacy:
+        if task_id in self._yaml:
             raise ValueError(f"Task '{task_id}' already exists")
 
         name = f"task-{task_id}.yaml"
@@ -469,7 +442,6 @@ class TaskRepository:
 __all__ = [
     "TASKS_DIRNAME",
     "TASK_ORDER_FILENAME",
-    "REGISTRY_FILENAME",
     "SCHEDULE_FILENAME",
     "REQUIRED_FIELDS",
     "TaskDefinitionError",

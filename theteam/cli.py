@@ -155,13 +155,11 @@ def cmd_tasks(args: argparse.Namespace) -> int:
             f"{task['priority']:>3}  {task['next_run'] or 'not scheduled'}"
         )
     lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
-    # Say out loud what the migration is holding, so a fallback is never
-    # mistaken for the task being gone.
-    for label, ids in (("still only in the legacy registry", payload["legacy_only"]),
-                       ("registered but not in TASK_ORDER", payload["legacy_tasks"]),
-                       ("in TASK_ORDER but unreadable", payload["missing_tasks"])):
-        if ids:
-            lines.append(f"note: {label}: {', '.join(ids)}")
+    # An id the order names but no file answers to is reported, so a broken
+    # order is never mistaken for a shorter task list.
+    if payload["missing_tasks"]:
+        lines.append(f"note: in TASK_ORDER but unreadable: "
+                     f"{', '.join(payload['missing_tasks'])}")
     return _emit(args, payload, "\n".join(lines))
 
 

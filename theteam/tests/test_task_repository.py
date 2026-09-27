@@ -23,7 +23,11 @@ import pytest
 import yaml
 
 from theteam.cli import main
-from theteam.tasks.repository import TaskDefinitionError, TaskRepository
+from theteam.tasks.repository import (
+    TaskDefinitionError,
+    TaskRepository,
+    read_task_order,
+)
 
 
 # ======= scratch project =======
@@ -441,3 +445,106 @@ def test_a_malformed_task_file_fails_the_command_with_a_reason(tmp_path, capsys)
     err = capsys.readouterr().err
     assert "task-broken.yaml" in err
     assert "Traceback" not in err
+
+
+# ======= 11. the write path: create, edit, delete =======
+#
+# Everything above reads. These four are the write path, and each one pins a
+# defect that shipped because nothing here exercised it. A write that is not
+# read back is the one §3.3 is about: a plausible-looking result with nothing
+# behind it.
+
+
+def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path):
+    """
+    Deleting `check` must not delete the `health-check` line. Matching the id
+    with a bare substring test took out every line mentioning the id, so the
+    file was emptied while the surviving task's own YAML file was untouched -
+    a task that still exists and can no longer be ordered.
+    """
+    root = _project(
+        tmp_path,
+        order=["check", "health-check"],
+        tasks={"check": {"name": "C"}, "health-check": {"name": "H"}},
+    )
+
+    TaskRepository(str(root)).delete("check")
+
+    assert read_task_order(str(root)) == ["health-check"]
+    # The unrelated task is intact: still on disk, still listed, still first.
+    assert (root / "tasks" / "task-health-check.yaml").exists()
+    payload = TaskRepository(str(root)).list_tasks()
+    assert [t["id"] for t in payload["tasks"]] == ["health-check"]
+    assert [t["order"] for t in payload["tasks"]] == [0]
+
+
+def test_update_writes_no_content_that_fails_validation_on_reload(tmp_path):
+    """
+    A patch that would not survive a read is refused at the write. Validating
+    the file on disk before the patch is applied meant the write was never
+    checked, so the invalid content landed and the *next*
+    `TaskRepository()` construction raised - a task edit made the whole
+    project unreadable.
+    """
+    root = _project(tmp_path, order=["t1"], tasks={"t1": {"name": "T"}})
+
+    with pytest.raises(TaskDefinitionError):
+        TaskRepository(str(root)).update(
+            "t1", {"phases": [{"name": "run", "script": ".mp/theteam/loop.py"}]}
+        )
+
+    # Nothing landed, and the task is still readable.
+    assert TaskRepository(str(root)).get("t1")["name"] == "T"
+    assert ".mp/theteam" not in (root / "tasks" / "task-t1.yaml").read_text()
+
+
+def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
+    """
+    A rename moves the file, the order entry, the schedule entry and the run
+    history. The schedule was the reason the case was refused: a renamed task
+    whose schedule stayed on the old id stops being due, and one that
+    orphaned it fires forever at a missing task.
+    """
+    root = _project(
+        tmp_path,
+        order=["old", "keeper"],
+        tasks={"old": {"name": "O"}, "keeper": {"name": "K"}},
+        schedule={
+            "scheduled_tasks": {
+                "old": {"next_run": "2030-01-01T00:00:00+00:00", "interval_minutes": 60}
+            },
+            "last_run": {"old": {"result": "ok", "detail": "", "at": "2026-01-01T00:00:00+00:00"}},
+        },
+    )
+
+    TaskRepository(str(root)).update("old", {"id": "new"})
+
+    # The file moved with the id.
+    assert not (root / "tasks" / "task-old.yaml").exists()
+    assert (root / "tasks" / "task-new.yaml").exists()
+    # The order follows, by parsed id, and the unrelated task is untouched.
+    assert read_task_order(str(root)) == ["new", "keeper"]
+    # A rename must not orphan a schedule.
+    fresh = TaskRepository(str(root))
+    assert list(fresh.schedule()["scheduled_tasks"]) == ["new"]
+    assert list(fresh.schedule()["last_run"]) == ["new"]
+    assert [t["id"] for t in fresh.due()] == ["new"]
+
+
+def test_create_appends_a_parseable_numbered_line(tmp_path):
+    """
+    `create` appends to a numbered list. Numbering from the line count rather
+    than the task count, and joining a trailing newline, produced a blank line
+    and a number that skipped ahead - the file is the order, and an order that
+    no longer parses stops ordering anything.
+    """
+    root = _project(tmp_path, order=["alpha", "beta"], tasks={"alpha": {}, "beta": {}})
+
+    repo = TaskRepository(str(root))
+    repo.create({"id": "probe"})
+    TaskRepository(str(root)).create({"id": "probe2"})
+
+    assert read_task_order(str(root)) == ["alpha", "beta", "probe", "probe2"]
+    body = (root / "tasks" / "TASK_ORDER").read_text()
+    assert "\n\n" not in body, "a blank line splits the order file"
+    assert [line for line in body.splitlines() if not line.strip()] == []

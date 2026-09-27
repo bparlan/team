@@ -56,6 +56,22 @@ def _load_yaml(path: str) -> Dict[str, Any]:
     for field in REQUIRED_FIELDS:
         if not data.get(field):
             raise TaskDefinitionError(f"{path}: missing required field '{field}'")
+    # Reject paths that reference the deleted .mp/theteam directory,
+    # since that layout was removed and any task pointing there is dead.
+    dead_dir = ".mp/theteam"
+    for section in ("outputs", "phases"):
+        for item in data.get(section, []) or []:
+            if not isinstance(item, dict):
+                continue
+            for key in ("path", "script"):
+                value = item.get(key)
+                if not value or not isinstance(value, str):
+                    continue
+                # Reject any path containing the dead directory
+                if dead_dir in value:
+                    raise TaskDefinitionError(
+                        f"{path}: {section} entry '{key}' references dead directory '{dead_dir}'"
+                    )
     return data
 
 

@@ -80,7 +80,7 @@ def test_basic_functionality():
     print("✓ Cleanup completed")
     
     print("\nAll tests passed! UnifiedLoop implementation is working correctly.")
-    return True
+    assert True
 
 if __name__ == "__main__":
     try:

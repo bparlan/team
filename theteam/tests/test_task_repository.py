@@ -38,13 +38,14 @@ def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=())
     state files under `<root>/.omp/theteam/`. Nothing is read from the real repo.
     """
     tasks = tasks or {}
-    for i, task_id in enumerate(order):
-        payload = {"id": task_id, "order": i}
-        payload.update(tasks.get(task_id, {}))
+    rank = {t: i for i, t in enumerate(order)}
+    for task_id, fields in tasks.items():
+        payload = {"id": task_id, "order": rank.get(task_id, len(rank))}
+        payload.update(fields)
         (tasks_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
-    for name, text in extra:
+    for name, text in extra or ():
         (tasks_dir / name).write_text(text, encoding="utf-8")
 
     state = root / ".omp" / "theteam"

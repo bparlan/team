@@ -160,7 +160,7 @@ def cmd_tasks(args: argparse.Namespace) -> int:
     lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
     # An id the order names but no file answers to is reported, so a broken
     # order is never mistaken for a shorter task list.
-    if payload["missing_tasks"]:
+    if payload.get("missing_tasks"):
         lines.append(f"note: in TASK_ORDER but unreadable: "
                      f"{', '.join(payload['missing_tasks'])}")
     return _emit(args, payload, "\n".join(lines))

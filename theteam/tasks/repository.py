@@ -162,18 +162,13 @@ class TaskRepository:
     def get(self, task_id: str) -> Optional[Dict[str, Any]]:
         return self._yaml.get(task_id)
 
-    @property
-    def missing_tasks(self) -> List[str]:
-        """Ids TASK_ORDER names that no source can supply. Reported, never hidden."""
-        return [t for t in self._order if self.get(t) is None]
-
     def all_tasks(self) -> List[Dict[str, Any]]:
-        """The project's tasks, in TASK_ORDER sequence.
+        """The project's tasks, in `order` sequence.
 
         Ids past the end of the file still resolve, so an unlisted task is not
-        dropped; it just sorts last. An id that resolves to nothing is left out
-        and named in `missing_tasks` — dropping it without saying so is the
-        quiet-empty-failure this module exists to prevent.
+        dropped; it just sorts last. The `order` key is a per-task value, and
+        the listing is positional, so a sparse or duplicated key prints as a
+        position rather than the raw value.
         """
         tail = len(self._rank)
         tasks = [t for t in (self.get(i) for i in self._order) if t is not None]
@@ -181,7 +176,7 @@ class TaskRepository:
         return sorted(tasks, key=lambda t: (self._rank.get(t["id"], tail),
                                            -_priority(t), t["id"]))
 
-    def _row(self, task: Dict[str, Any], schedule: Dict[str, Any]) -> Dict[str, Any]:
+    def _row(self, task: Dict[str, Any], schedule: Dict[str, Any], rank: Dict[str, int]) -> Dict[str, Any]:
         """One `theteam tasks` row. State is real or absent, never guessed."""
         entry = schedule["scheduled_tasks"].get(task["id"], {})
         last = schedule["last_run"].get(task["id"], {})
@@ -190,7 +185,7 @@ class TaskRepository:
             "name": task.get("name", task["id"]),
             "type": task.get("type"),
             "priority": _priority(task),
-            "order": self._rank.get(task["id"]),
+            "order": rank.get(task["id"]),
             "next_run": entry.get("next_run"),
             "interval_minutes": entry.get("interval_minutes"),
             "last_result": last.get("result"),
@@ -207,11 +202,13 @@ class TaskRepository:
         """
         schedule = self.schedule()
         tasks = self.all_tasks()
+        # Positional, not the raw YAML value: sparse or duplicated `order`
+        # keys would print as 0, 5, 5.
+        rank = {t["id"]: i for i, t in enumerate(tasks)}
         return {
-            "tasks": [self._row(t, schedule) for t in tasks],
+            "tasks": [self._row(t, schedule, rank) for t in tasks],
             "count": len(tasks),
             "yaml_count": len(self._yaml),
-            "missing_tasks": self.missing_tasks,
         }
 
     # -- due ---------------------------------------------------------------
@@ -274,6 +271,27 @@ class TaskRepository:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
+
+    def schedule_task(self, task_id: str, interval_minutes: int) -> str:
+        """
+        Schedule a task on an interval, returning its ISO `next_run`.
+
+        Scheduling lives here so the state directory is resolved in one place.
+        The CLI must not assemble a schedule file by hand.
+
+        Raises:
+            KeyError: the id names no task.
+        """
+        if self.get(task_id) is None:
+            raise KeyError(f"Task '{task_id}' not found")
+        next_run = _now() + timedelta(minutes=int(interval_minutes))
+        schedule = self.schedule()
+        schedule["scheduled_tasks"][task_id] = {
+            "next_run": next_run.isoformat(),
+            "interval_minutes": int(interval_minutes),
+        }
+        self._save_schedule(schedule)
+        return next_run.isoformat()
 
     def _write_task(self, name: str, task: Dict[str, Any]) -> None:
         """Write the task as the operator's file, not as the reader sees it.
@@ -407,11 +425,9 @@ class TaskRepository:
 # Export public API
 __all__ = [
     "TASKS_DIRNAME",
-    "TASK_ORDER_FILENAME",
     "SCHEDULE_FILENAME",
     "REQUIRED_FIELDS",
     "TaskDefinitionError",
-    "read_task_order",
     "_priority",
     "_parse_next_run",
     "_now",

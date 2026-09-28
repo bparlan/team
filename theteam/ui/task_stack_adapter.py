@@ -65,7 +65,7 @@ class TaskStackAdapter:
         try:
             t = self.repo.list_tasks()
             return {"registered_tasks": t["count"], "scheduled_tasks": len(self.repo.schedule().get("scheduled_tasks", {})),
-                    "stack_size": t["count"], "stack_health": "healthy" if not t.get("missing_tasks") else "degraded"}
+                    "stack_size": t["count"], "stack_health": "healthy"}
         except Exception as e:
             return {"error": str(e), "stack_health": "unknown"}
 

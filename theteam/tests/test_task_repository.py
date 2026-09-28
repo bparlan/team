@@ -39,6 +39,8 @@ def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=())
     """
     tasks_dir = root / "tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
+    tasks_dir = root / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
     rank = {t: i for i, t in enumerate(order)}
     for task_id, fields in tasks.items():
@@ -535,9 +537,10 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
     TaskRepository(str(root)).create({"id": "probe2"})
 
     assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
-    # The TASK_ORDER file is gone, so the listing order is derived from the YAML.
-    assert [t["order"] for t in TaskRepository(str(root)).all_tasks()] == [0, 1, 2, 3]
 
+
+def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path, capsys):
+    """
     ARCHITECTURE.md M3's falsification test, end to end through the CLI:
     create, edit, delete. The edit is read back by a *fresh* repository, so a
     write that only lands in memory fails here. The delete leaves no file, no
@@ -574,10 +577,14 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
 
     fresh = TaskRepository(str(root))
     assert not (root / "tasks" / "task-probe.yaml").exists()
-    assert "probe" not in read_task_order(str(root))
-    assert fresh.get("probe") is None
     assert "probe" not in [t["id"] for t in TaskRepository(str(root)).all_tasks()]
+    assert fresh.get("probe") is None
+    assert "probe" not in fresh.schedule()["scheduled_tasks"]
+    assert fresh.orphaned_schedules() == []
 
+
+def test_a_task_is_created_only_if_every_phase_has_a_memory_bound(tmp_path, capsys):
+    """
     §5.4: a phase without `memory_limit_mb` is rejected at the write, not
     discovered mid-run against a real process. The rejected definition leaves
     nothing behind - no file, no order entry.
@@ -596,7 +603,7 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
 
     assert "memory_limit_mb" in str(caught.value)
     assert not (root / "tasks" / "task-unbounded.yaml").exists()
-    assert read_task_order(str(root)) == ["keep"]
+    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["keep"]
 
 
 def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):

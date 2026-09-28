@@ -11,8 +11,11 @@ import json
 import subprocess
 from pathlib import Path
 from datetime import datetime, timezone
-import sys
 from typing import Dict
+
+# TODO(M4): wire CircuitBreaker/ResourceLimiter/AgentIsolation/AuditLogger into
+# execute_phase. Every subprocess site below is a Layer 3 call with no Layer 4
+# guard in the same frame; §5.1 forbids it, §7.2 invariants 1 and 2 enforce it.
 
 
 class TaskExecutor:

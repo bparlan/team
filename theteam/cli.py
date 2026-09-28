@@ -402,6 +402,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         return args.func(args)
     except KeyboardInterrupt:
         return EXIT_ERROR
+    except (KeyError, ValueError) as exc:
+        # str(KeyError("x")) wraps the message in quotes ("'x'"). The user sees
+        # the cause, not its repr. Same for ValueError if it leaks a repr.
+        message = exc.args[0] if exc.args else str(exc)
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": False, "error": message}, indent=2))
+        else:
+            print(f"theteam {args.command}: {message}", file=sys.stderr)
+        return EXIT_ERROR
     except Exception as exc:
         # A named failure with its cause. Never a stack trace the user has to
         # read, never a value that looks like a result.

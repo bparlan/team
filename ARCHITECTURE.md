@@ -260,6 +260,7 @@ Seven layers. Dependencies point downward only. No layer reaches past the one be
 theteam/
   cli.py                     # Layer 0. the only entry point.
   state.py                   # the single state directory resolver.
+  __init__.py                # skill entry point: bootstrap, discussion, context analysis.
   core/
     unified_loop.py          # Layer 1. already correct — keep as-is.
     circuit_breaker.py       # Layer 4.
@@ -269,18 +270,24 @@ theteam/
     health_monitor.py        # Layer 4.
     event_bus.py             # Layer 5.
     metrics.py               # Layer 5.
+    # … plus the other Layer 4/5 modules (backup, state_manager, event_log, …).
   tasks/                     # NEW. absorbs subskills/task_stack/.
-    schema.py                # task contract + validation
-    repository.py            # YAML canonical. ONE store.
-    scheduler.py             # due / next-run. gains unschedule.
-    executor.py              # gains mandatory safety wrapper
-  advisory/                  # NEW.
-    engine.py                # one-shot discussion. unchanged behaviour.
-    commentary.py            # controller. calls engine, never forks it.
-    session_reader.py        # reads OMP session JSONL
-    selector.py              # picks active members. no LLM call.
-    roster.py                # bootstrap + roster persistence
-  ui/                        # dashboard, reads through state.py
+    repository.py            # YAML canonical. ONE store. Schema, schedule, and
+                             # due/next-run all live here; no separate schema.py or
+                             # scheduler.py. Gains the M4 safety wrapper on executor.
+    executor.py              # runs one phase, collects its result. Gains the
+                             # mandatory Layer 4 safety wrapper in M4.
+  workflow/                  # discussion and member management.
+    discussion_manager_refactored.py
+    discussion_interface.py
+    team_member_manager.py
+    context_aggregator.py
+  ui/                        # terminal UI plus an optional dashboard.
+    terminal_ui.py           # the only UI entry point the orchestrator calls.
+    components/              # panel widgets: roster, activity, metrics, …
+    web_dashboard/           # optional reflex dashboard (extra). Reads through
+                             # state.py; absent unless the reflex extra is installed.
+  security/                  # path validation, audit logging, secrets handling.
 ```
 
 `subskills/task_stack/` is not a package anyone may extend. Its contents move; the directory goes.

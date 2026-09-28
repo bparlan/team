@@ -622,3 +622,26 @@ def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):
     fresh = TaskRepository(str(root))
     assert fresh.get("t1")["name"] == "Renamed"
     assert fresh.get("t2")["source_file"] == "task-t2.yaml"
+
+
+def test_delete_of_an_unknown_id_reports_a_message_naming_only_the_id(tmp_path, capsys):
+    """
+    Deleting an id that does not exist reports the id and nothing else: no
+    `legacy-only` suffix, no wrapping quotes from str(KeyError).
+    """
+    root = _project(
+        tmp_path,
+        order=["alpha"],
+        tasks={"alpha": {"name": "Alpha"}},
+    )
+
+    code = main(["--project-root", str(root), "task", "delete", "nope", "--yes"])
+    err = capsys.readouterr().err
+
+    assert code == 1
+    assert "nope" in err
+    assert "legacy-only" not in err
+    # str(KeyError(...)) wraps the message in quotes. The old path printed
+    # `theteam task: 'Task 'nope' not found'`. The new one prints the args
+    # entry verbatim, with no outer wrapping quotes.
+    assert "'Task 'nope' not found'" not in err

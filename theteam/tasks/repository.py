@@ -318,7 +318,7 @@ class TaskRepository:
                 id is already taken. Nothing is written in either case.
         """
         if task_id not in self._yaml:
-            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
+            raise KeyError(f"Task '{task_id}' not found")
 
         old_name = self._yaml[task_id]["source_file"]
         merged = {k: v for k, v in self._yaml[task_id].items() if k != "source_file"}
@@ -370,7 +370,7 @@ class TaskRepository:
             KeyError: the task is not a YAML task.
         """
         if task_id not in self._yaml:
-            raise KeyError(f"Task '{task_id}' not found or is legacy-only")
+            raise KeyError(f"Task '{task_id}' not found")
 
         os.remove(os.path.join(self.tasks_dir, self._yaml[task_id]["source_file"]))
         del self._yaml[task_id]

@@ -546,7 +546,9 @@ A scheduled task running arbitrary project scripts is the exact threat `AgentIso
 2. `selector` picks different members for a frontend session and a database session. Deterministic, no LLM.
 3. A tick over 10 events produces at most 2 rendered fragments, and a quiet tick costs zero calls.
 
-If any gate fails, cut M5. `engine.py`, `selector.py`, and `roster.py` still ship — one-shot discussion, member selection, and bootstrap are useful without the loop.
+If any gate fails, cut M5. `selector.py` and `roster.py` still ship — member selection and
+bootstrap are useful without the loop — and the one-shot discussion path, `run_discussion()` in
+`theteam/__init__.py`, is untouched by this milestone either way.
 
 **Falsification test:** run commentary for 10 turns. At most 2 fragments per turn. `stop` in the user message produces `{spoke: false, reason: "stopped"}`. `theteam status` shows the session path and event count.
 

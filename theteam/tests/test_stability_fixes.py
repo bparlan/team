@@ -4,7 +4,7 @@ Regression tests for the 5 stability/consistency fixes.
 
 Each test defends one specific gap identified in the project-wide analysis:
   1. Duplicate/corrupted sa_runner variants (scripts/ canonical uniqueness)
-  2. Stale daemon state (PID validation in task_stack_adapter)
+  2. (removed in M4: task_stack_adapter PID validation, along with the adapter)
   3. Ledger bloat (size-based rotation in optimized runner)
   4. Test isolation leaks (no module-level sys.path mutation)
   5. Deterministic report writing (generic_writer contract)
@@ -47,37 +47,6 @@ class TestCanonicalScriptsUniqueness(unittest.TestCase):
             self.assertTrue(hasattr(sa_runner, name), f"sa_runner missing: {name}")
 
 
-class TestDaemonPidValidation(unittest.TestCase):
-    """Fix 2: task_stack_adapter must validate daemon PID against a live process."""
-
-    def setUp(self):
-        from theteam.ui.task_stack_adapter import TaskStackAdapter
-        self.tmp = Path(tempfile.mkdtemp())
-        self.adapter = TaskStackAdapter(str(self.tmp))
-
-    def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
-
-    def _write_daemon_state(self, pid, running=True):
-        state_dir = self.tmp / ".omp" / "theteam"
-        state_dir.mkdir(parents=True, exist_ok=True)
-        (state_dir / "task-stack-daemon.json").write_text(json.dumps({"running": running}))
-        (state_dir / "task-stack.pid").write_text(str(pid))
-
-    def test_stale_pid_reports_not_running(self):
-        # PID 999999 is extremely unlikely to be a real process
-        self._write_daemon_state(999999, running=True)
-        status = self.adapter._get_daemon_status()
-        self.assertFalse(status.get("pid_valid", True),
-                         "Stale PID must be reported as invalid")
-
-    def test_missing_pid_file_reports_not_running(self):
-        state_dir = self.tmp / ".omp" / "theteam"
-        state_dir.mkdir(parents=True, exist_ok=True)
-        (state_dir / "task-stack-daemon.json").write_text(json.dumps({"running": True}))
-        status = self.adapter._get_daemon_status()
-        self.assertFalse(status.get("daemon_running", True),
-                         "Missing PID file must mean daemon not running")
 class TestTestIsolation(unittest.TestCase):
     """Fix 4: No module-level sys.path mutation in test files."""
 

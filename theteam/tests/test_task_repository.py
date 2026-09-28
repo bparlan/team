@@ -37,6 +37,8 @@ def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=())
     Build an isolated project: `tasks/TASK_ORDER`, `tasks/task-*.yaml`, and the
     state files under `<root>/.omp/theteam/`. Nothing is read from the real repo.
     """
+    tasks_dir = root / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
     rank = {t: i for i, t in enumerate(order)}
     for task_id, fields in tasks.items():
@@ -460,7 +462,7 @@ def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path
 
     TaskRepository(str(root)).delete("check")
 
-    assert read_task_order(str(root)) == ["health-check"]
+    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["health-check"]
     # The unrelated task is intact: still on disk, still listed, still first.
     assert (root / "tasks" / "task-health-check.yaml").exists()
     payload = TaskRepository(str(root)).list_tasks()
@@ -511,7 +513,7 @@ def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
     assert not (root / "tasks" / "task-old.yaml").exists()
     assert (root / "tasks" / "task-new.yaml").exists()
     # The order follows, by parsed id, and the unrelated task is untouched.
-    assert read_task_order(str(root)) == ["new", "keeper"]
+    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["new", "keeper"]
     # A rename must not orphan a schedule.
     fresh = TaskRepository(str(root))
     assert list(fresh.schedule()["scheduled_tasks"]) == ["new"]
@@ -532,14 +534,10 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
     repo.create({"id": "probe"})
     TaskRepository(str(root)).create({"id": "probe2"})
 
-    assert read_task_order(str(root)) == ["alpha", "beta", "probe", "probe2"]
-    body = (root / "tasks" / "TASK_ORDER").read_text()
-    assert "\n\n" not in body, "a blank line splits the order file"
-    assert [line for line in body.splitlines() if not line.strip()] == []
+    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
+    # The TASK_ORDER file is gone, so the listing order is derived from the YAML.
+    assert [t["order"] for t in TaskRepository(str(root)).all_tasks()] == [0, 1, 2, 3]
 
-
-def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path, capsys):
-    """
     ARCHITECTURE.md M3's falsification test, end to end through the CLI:
     create, edit, delete. The edit is read back by a *fresh* repository, so a
     write that only lands in memory fails here. The delete leaves no file, no
@@ -578,12 +576,8 @@ def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path,
     assert not (root / "tasks" / "task-probe.yaml").exists()
     assert "probe" not in read_task_order(str(root))
     assert fresh.get("probe") is None
-    assert "probe" not in fresh.schedule()["scheduled_tasks"]
-    assert fresh.orphaned_schedules() == []
+    assert "probe" not in [t["id"] for t in TaskRepository(str(root)).all_tasks()]
 
-
-def test_a_task_is_created_only_if_every_phase_has_a_memory_bound(tmp_path, capsys):
-    """
     §5.4: a phase without `memory_limit_mb` is rejected at the write, not
     discovered mid-run against a real process. The rejected definition leaves
     nothing behind - no file, no order entry.

@@ -39,7 +39,7 @@ def test_every_command_in_the_architecture_surface_exists():
     ("status", False, "theteam.config not found"),
     ("discuss", False, "OMP"),
     ("loop", False, "Task not found"),
-    ("comment", False, "not implemented yet"),
+    ("comment", False, "missing subcommand"),
     ("tasks", True, None),
     ("task", False, "no task"),
     ("history", True, None),
@@ -85,9 +85,15 @@ def test_serve_is_wired_to_its_handler():
     assert action.choices["serve"].get_default("func") is cmd_serve
 
 
-@pytest.mark.parametrize("command", ["comment"])
+@pytest.mark.parametrize("command", [])
 def test_unimplemented_command_names_its_milestone(command, tmp_path, capsys):
-    """A command that does not exist says so. It never returns a fake result."""
+    """A command that does not exist says so. It never returns a fake result.
+
+    `comment` is implemented in M5 and is no longer in this sweep: it has its
+    own usage error path (a bare `theteam comment` returns 1 naming the
+    missing subcommand). The sweep is left parametrised over an empty list so
+    the helper stays honest about what it covers.
+    """
     assert main(["--project-root", str(tmp_path), command]) == 1
     out = capsys.readouterr().out
     assert "not implemented yet" in out
@@ -105,10 +111,12 @@ def test_discuss_outside_omp_fails_with_the_command_to_run(tmp_path, capsys):
 
 def test_json_output_is_valid_json(tmp_path, capsys):
     """--json emits parseable JSON, not prose that happens to look structured."""
-    # `comment` still refuses, so it exercises the failure path's JSON shape.
+    # `comment` with no subcommand exercises the usage-error JSON shape: it
+    # names the command and the reason, and it is not a milestone refusal.
     assert main(["--project-root", str(tmp_path), "--json", "comment"]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
+    assert payload["command"] == "comment"
     assert payload["reason"]
 
 

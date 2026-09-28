@@ -14,7 +14,6 @@ writes it, so there is one writer and one reader and no race between them.
 """
 
 import json
-import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -68,14 +67,9 @@ def load_roster(project_root: Optional[str]) -> Optional[Dict[str, Any]]:
 def save_roster(project_root: str, roster: Dict[str, Any]) -> None:
     """Write `roster` to `<state_dir>/roster.json`.
 
-    The state directory is created if it does not exist, so a fresh project
-    can bootstrap without a separate setup step. The write is atomic-ish in
-    the sense that a reader either sees the old file or the new one: this
-    module writes the whole document in one `open(..., "w")`, and `load_roster`
-    only returns after `path.exists()` is true.
+    The state directory is created if it does not exist, so a fresh project can
+    bootstrap without a separate setup step.
     """
-    store = StateStore(project_root)
-    store.ensure()
-    path = store.root / ROSTER_FILE
-    with open(path, "w", encoding="utf-8") as handle:
+    StateStore(project_root).ensure()
+    with open(_roster_path(project_root), "w", encoding="utf-8") as handle:
         json.dump(roster, handle, indent=2, sort_keys=True, default=str)

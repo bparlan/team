@@ -17,6 +17,7 @@ import functools
 import json
 import os
 import sys
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 import yaml
 
@@ -414,6 +415,16 @@ def _now_iso() -> str:
     return datetime.datetime.now(datetime.timezone.utc).isoformat()
 
 
+def _comment_state_path(store: StateStore) -> Path:
+    """The one path the commentary state lives at.
+
+    Three call sites need it - status, the read-modify-write in `on`/`off`, and
+    the future controller - and a filename spelled out three times is three
+    chances to end up reading different files.
+    """
+    return store.root / "commentary.json"
+
+
 def _comment_status_payload(store: StateStore) -> Dict[str, Any]:
     """The `status` view: whether commentary is on, and what it last did.
 
@@ -422,7 +433,7 @@ def _comment_status_payload(store: StateStore) -> Dict[str, Any]:
     whether the team is meant to be speaking.
     """
     on_marker = store.root / "commentary.on"
-    state = store.read_json(store.root / "commentary.json")
+    state = store.read_json(_comment_state_path(store))
     return {
         "on": on_marker.exists(),
         "marker": str(on_marker) if on_marker.exists() else None,
@@ -440,7 +451,7 @@ def _comment_read_state(store: StateStore) -> Dict[str, Any]:
     count); `on`/`off` own only `on` and `max_members`. Both read through here,
     so neither has to know the file name.
     """
-    return store.read_json(store.root / "commentary.json")
+    return store.read_json(_comment_state_path(store))
 
 
 def _comment_write_state(store: StateStore, state: Dict[str, Any]) -> None:
@@ -451,8 +462,7 @@ def _comment_write_state(store: StateStore, state: Dict[str, Any]) -> None:
     `read_json` rather than resetting to defaults: a state file that cannot be
     parsed is evidence, and overwriting it would destroy the evidence.
     """
-    path = store.root / "commentary.json"
-    with open(path, "w", encoding="utf-8") as handle:
+    with open(_comment_state_path(store), "w", encoding="utf-8") as handle:
         json.dump(state, handle, indent=2, sort_keys=True, default=str)
 
 
@@ -495,6 +505,12 @@ def cmd_comment(args: argparse.Namespace) -> int:
                         "started_at": _now_iso()}),
             encoding="utf-8",
         )
+        # `off` writes the stop sentinel, so `on` has to remove it. Without
+        # this the sentinel outranks the on-marker in every tick and `off` is
+        # permanent: the user turns commentary back on and every tick still
+        # reports `stopped`.
+        if store.commentary_stop.exists():
+            store.commentary_stop.unlink()
         _comment_write_state(store, dict(state, on=True,
                                          max_members=args.max_members))
         return _emit(args, {"ok": True, "on": True,

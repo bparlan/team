@@ -639,9 +639,9 @@ def test_delete_of_an_unknown_id_reports_a_message_naming_only_the_id(tmp_path, 
     err = capsys.readouterr().err
 
     assert code == 1
-    assert "nope" in err
+    assert err == "theteam task: Task 'nope' not found\n"
+    # The old path printed str(KeyError(...)), which wraps the message in
+    # quotes: `theteam task: 'Task 'nope' not found'`. The new handler prints
+    # exc.args[0] verbatim, so no outer wrapping quotes and no legacy-only.
     assert "legacy-only" not in err
-    # str(KeyError(...)) wraps the message in quotes. The old path printed
-    # `theteam task: 'Task 'nope' not found'`. The new one prints the args
-    # entry verbatim, with no outer wrapping quotes.
     assert "'Task 'nope' not found'" not in err

@@ -41,3 +41,10 @@ jobs:
 
     - name: Verify entry point
       run: python -m theteam --help || true
+
+
+    - name: Verify engineering invariants (§7.2)
+      # Six greppable invariants. Checks 1 and 2 are M4's falsification
+      # tests and fail today by design; the exemption is a `# TODO(M4)`
+      # comment in the source, not a deleted check.
+      run: bash scripts/check_invariants.sh

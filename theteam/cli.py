@@ -18,7 +18,6 @@ import json
 import os
 import sys
 from typing import Any, Dict, List, Optional
-
 import yaml
 
 from theteam.state import StateStore
@@ -393,10 +392,136 @@ def _delete_plan(repo, task_id: str) -> Dict[str, Any]:
     return {"id": task_id, "will_remove": will}
 
 
+# ======= comment (M5) =======
+
+# ARCHITECTURE.md §2: `comment on` takes --max-members, default 3, hard cap 4.
+# The cap is the ceiling on how many members the commentary layer may call in
+# one tick. Exceeding it is a bug in the caller, and clamping silently would
+# hide that bug behind a command that looks like it worked, so the request is
+# refused with a named reason instead.
+COMMENT_MAX_MEMBERS = 4
+COMMENT_MAX_MEMBERS_DEFAULT = 3
+
+
+def _now_iso() -> str:
+    """UTC timestamp for the on-marker.
+
+    UTC, not local: the controller compares this against its own clock to
+    report the marker's age, and a timezone that changes under a moving user
+    would make that age wrong.
+    """
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+
+def _comment_status_payload(store: StateStore) -> Dict[str, Any]:
+    """The `status` view: whether commentary is on, and what it last did.
+
+    `on` is the presence of the on-marker, nothing else. The marker is the same
+    file the commentary controller checks, so the two cannot disagree about
+    whether the team is meant to be speaking.
+    """
+    on_marker = store.root / "commentary.on"
+    state = store.read_json(store.root / "commentary.json")
+    return {
+        "on": on_marker.exists(),
+        "marker": str(on_marker) if on_marker.exists() else None,
+        "max_members": state.get("max_members", COMMENT_MAX_MEMBERS_DEFAULT),
+        "last_digest": state.get("last_digest"),
+        "last_opinion": state.get("last_opinion"),
+        "tick_count": state.get("tick_count", 0),
+    }
+
+
+def _comment_read_state(store: StateStore) -> Dict[str, Any]:
+    """The commentary state document, or an empty one before the first write.
+
+    The controller owns the fields it produces (last digest, last opinion, tick
+    count); `on`/`off` own only `on` and `max_members`. Both read through here,
+    so neither has to know the file name.
+    """
+    return store.read_json(store.root / "commentary.json")
+
+
+def _comment_write_state(store: StateStore, state: Dict[str, Any]) -> None:
+    """Write the commentary state document.
+
+    One file at the state root, one writer path, so `comment status` and the
+    controller read the same document. A malformed file raises out of
+    `read_json` rather than resetting to defaults: a state file that cannot be
+    parsed is evidence, and overwriting it would destroy the evidence.
+    """
+    path = store.root / "commentary.json"
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(state, handle, indent=2, sort_keys=True, default=str)
+
+
+def cmd_comment(args: argparse.Namespace) -> int:
+    """Continuous in-context commentary: `comment on|off|status`.
+
+    `on` writes the on-marker and records the member budget. `off` removes it
+    and writes the stop sentinel the controller reads on its next tick.
+    `status` reports what is currently true. All three support `--json`.
+    """
+    action = getattr(args, "comment_action", None)
+    if action is None:
+        # A bare `theteam comment`. argparse's own exit here would be 2; the
+        # surface contract names 1 for a usage mistake, and every other command
+        # in this file returns 1, so the command reports it itself.
+        if getattr(args, "json", False):
+            print(json.dumps({"ok": False, "command": "comment",
+                              "reason": "missing subcommand: on|off|status"},
+                             indent=2))
+        else:
+            print("theteam comment: missing subcommand: on|off|status",
+                  file=sys.stderr)
+        return EXIT_ERROR
+
+    # The cap is checked before anything is created, so a refused request
+    # leaves no state behind at all.
+    if action == "on" and args.max_members > COMMENT_MAX_MEMBERS:
+        return _fail(args, "comment on",
+                     f"--max-members {args.max_members} exceeds the cap of "
+                     f"{COMMENT_MAX_MEMBERS}")
+
+    store = StateStore(_project_root(args))
+    store.ensure()
+    state = _comment_read_state(store)
+
+    if action == "on":
+        marker = store.root / "commentary.on"
+        marker.write_text(
+            json.dumps({"max_members": args.max_members,
+                        "started_at": _now_iso()}),
+            encoding="utf-8",
+        )
+        _comment_write_state(store, dict(state, on=True,
+                                         max_members=args.max_members))
+        return _emit(args, {"ok": True, "on": True,
+                            "max_members": args.max_members,
+                            "marker": str(marker)},
+                     f"commentary on (max {args.max_members} members)")
+
+    if action == "off":
+        marker = store.root / "commentary.on"
+        if marker.exists():
+            marker.unlink()
+        # The sentinel is written, not just the marker removed: a controller
+        # mid-tick must still see the stop and report `spoke: false,
+        # reason: "stopped"` rather than reading the marker's absence.
+        store.commentary_stop.write_text("stop\n", encoding="utf-8")
+        _comment_write_state(store, dict(state, on=False))
+        return _emit(args, {"ok": True, "on": False,
+                            "sentinel": str(store.commentary_stop)},
+                     "commentary off")
+
+    payload = _comment_status_payload(store)
+    return _emit(args, payload, f"commentary {'on' if payload['on'] else 'off'}")
+
+
 # ======= parser =======
 
 MILESTONE_OF = {
-    "comment": "M5",
 }
 
 
@@ -493,6 +618,38 @@ def build_parser() -> argparse.ArgumentParser:
     task_show.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                            help="Machine-readable output.")
     task_show.set_defaults(func=cmd_task)
+
+    comment = sub.add_parser("comment", help="Continuous in-context commentary.")
+    # `required=False` so a bare `theteam comment` reaches `cmd_comment`
+    # rather than argparse exiting 2. The command then prints its own usage
+    # error and returns 1, which is the exit code §2 promises for a usage
+    # mistake. argparse's default of 2 would also be honest, but it is not
+    # the one the surface contract names.
+    comment_action = comment.add_subparsers(dest="comment_action", required=False)
+
+    comment_on = comment_action.add_parser("on", help="Start commentary for the session.")
+    comment_on.add_argument("--max-members", type=int, default=COMMENT_MAX_MEMBERS_DEFAULT,
+                            help=f"Members the commentary layer may call per tick. "
+                                 f"Default {COMMENT_MAX_MEMBERS_DEFAULT}, hard cap "
+                                 f"{COMMENT_MAX_MEMBERS}. Above the cap is refused, not clamped.")
+    comment_on.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                            help="Machine-readable output.")
+    comment_on.set_defaults(func=cmd_comment)
+
+    comment_off = comment_action.add_parser("off", help="Stop commentary. Takes effect next tick.")
+    comment_off.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                             help="Machine-readable output.")
+    comment_off.set_defaults(func=cmd_comment)
+
+    comment_status = comment_action.add_parser("status", help="Is commentary on, and what did it last do?")
+    comment_status.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                                help="Machine-readable output.")
+    comment_status.set_defaults(func=cmd_comment)
+
+    # The bare `comment` still needs a handler, and it is the one that reports
+    # the missing subcommand. Without this default argparse has no `func` and
+    # the command dies on an AttributeError instead of a usage error.
+    comment.set_defaults(func=cmd_comment)
 
     # Declared so the rest of the surface in ARCHITECTURE.md §2 is discoverable
     # from `--help`; each refuses until its milestone lands.

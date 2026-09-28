@@ -306,13 +306,13 @@ def test_run_skips_a_due_task_whose_script_is_missing(tmp_path, capsys):
 
 def test_the_registry_is_no_longer_a_source_of_tasks(tmp_path):
     """
-    The dual-read path is closed. An id the order names whose YAML file is
-    gone is reported missing, not served from the legacy registry: a second
-    store is how a deleted task keeps running from a file nobody edits.
+    The dual-read path is closed. An id in the registry whose YAML file is
+    gone is not served from the legacy registry: a second store is how a
+    deleted task keeps running from a file nobody edits.
     """
     root = _project(
         tmp_path,
-        order=["alpha", "ghost"],
+        order=["alpha"],
         tasks={"alpha": {"name": "A"}},
         registry={"ghost": {"id": "ghost", "name": "From the registry", "priority": 2}},
     )
@@ -324,21 +324,17 @@ def test_the_registry_is_no_longer_a_source_of_tasks(tmp_path):
     assert payload["count"] == 1
     assert payload["yaml_count"] == 1
     assert repo.get("ghost") is None
-    # Named rather than vanished, so a broken order is never read as a
-    # shorter task list.
-    assert payload["missing_tasks"] == ["ghost"]
     assert "legacy_only" not in payload
-
-
 def test_legacy_only_entry_is_surfaced_by_the_tasks_command(tmp_path, capsys):
     """
-    `theteam tasks` prints a note naming the ids still served from the registry.
-    The JSON payload carries the data; the human line is where an operator
-    actually sees that the migration is not finished.
+    `theteam tasks` does not list a task that exists only in the legacy
+    registry. After the fold, order is a property of the YAML file, so an id
+    with no YAML file is not representable as a task.
     """
     root = _project(
         tmp_path,
-        order=["ghost"],
+        order=["alpha"],
+        tasks={"alpha": {"name": "Alpha"}},
         registry={"ghost": {"id": "ghost", "name": "From the registry"}},
     )
 
@@ -346,28 +342,21 @@ def test_legacy_only_entry_is_surfaced_by_the_tasks_command(tmp_path, capsys):
     out = capsys.readouterr().out
 
     assert code == 0
-    assert "note:" in out
-    assert "ghost" in out
-
-
-# ======= 8. an id no source can supply is reported, not vanished =======
-
-
-def test_task_order_id_with_no_source_is_reported_missing(tmp_path):
+    assert "alpha" in out
+    assert "ghost" not in out
+def test_a_task_with_no_yaml_file_does_not_exist(tmp_path):
     """
-    An id in `TASK_ORDER` with no YAML file and no registry entry appears in
-    `missing_tasks` and not in the listing. Silently dropping it would make a
-    broken TASK_ORDER look like a shorter task list.
+    Under the fold, order is a property of the YAML file itself. An id
+    without a YAML file is not representable as a task.
     """
     root = _project(
         tmp_path,
-        order=["alpha", "phantom"],
+        order=["alpha"],
         tasks={"alpha": {"name": "A"}},
     )
 
     payload = TaskRepository(str(root)).list_tasks()
 
-    assert payload["missing_tasks"] == ["phantom"]
     assert [t["id"] for t in payload["tasks"]] == ["alpha"]
     assert payload["count"] == 1
 

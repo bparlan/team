@@ -449,20 +449,16 @@ def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path
         tmp_path,
         order=["check", "health-check"],
         tasks={"check": {"name": "C"}, "health-check": {"name": "H"}},
-def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path):
-    """
-    Deleting `check` must not delete the `health-check` task. The old
-    `TASK_ORDER` reader matched ids by substring, so every line mentioning
-    the id went out and the surviving task lost its position while its file
-    was untouched. Order is now a per-task key, so removing the file removes
-    the entry and nothing else.
-    """
+    )
+
+    TaskRepository(str(root)).delete("check")
+
+    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["health-check"]
     # The unrelated task is intact: still on disk, still listed, still first.
     assert (root / "tasks" / "task-health-check.yaml").exists()
     payload = TaskRepository(str(root)).list_tasks()
     assert [t["id"] for t in payload["tasks"]] == ["health-check"]
     assert [t["order"] for t in payload["tasks"]] == [0]
-
 
 def test_update_writes_no_content_that_fails_validation_on_reload(tmp_path):
     """

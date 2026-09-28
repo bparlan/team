@@ -42,8 +42,7 @@ def test_every_command_in_the_architecture_surface_exists():
     ("comment", False, "not implemented yet"),
     ("tasks", True, None),
     ("task", False, "no task"),
-    ("run", True, None),
-    ("history", False, "not implemented yet"),
+    ("history", True, None),
 ])
 def test_command_returns_an_int_exit_code(command, succeeds, diagnostic, tmp_path, capsys):
     """
@@ -86,7 +85,7 @@ def test_serve_is_wired_to_its_handler():
     assert action.choices["serve"].get_default("func") is cmd_serve
 
 
-@pytest.mark.parametrize("command", ["history", "comment"])
+@pytest.mark.parametrize("command", ["comment"])
 def test_unimplemented_command_names_its_milestone(command, tmp_path, capsys):
     """A command that does not exist says so. It never returns a fake result."""
     assert main(["--project-root", str(tmp_path), command]) == 1
@@ -106,11 +105,28 @@ def test_discuss_outside_omp_fails_with_the_command_to_run(tmp_path, capsys):
 
 def test_json_output_is_valid_json(tmp_path, capsys):
     """--json emits parseable JSON, not prose that happens to look structured."""
-    # `history` still refuses, so it exercises the failure path's JSON shape.
-    assert main(["--project-root", str(tmp_path), "--json", "history"]) == 1
+    # `comment` still refuses, so it exercises the failure path's JSON shape.
+    assert main(["--project-root", str(tmp_path), "--json", "comment"]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["ok"] is False
     assert payload["reason"]
+
+
+def test_history_json_is_valid_json_with_a_rate_per_task(tmp_path, capsys):
+    """
+    `history --json` parses and reports a per-task rate. A task that has never
+    run reports `null`, not 0.0 - a zero rate is indistinguishable from a task
+    that has never once passed, and §3.3 forbids the second reading.
+    """
+    assert main(["--project-root", str(tmp_path), "--json", "history"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["count"] == len(payload["tasks"])
+    for row in payload["tasks"]:
+        assert set(row) == {"id", "runs", "successes", "failures", "success_rate",
+                            "last_run", "last_result", "last_failure", "breaker",
+                            "consecutive_failures"}
+        assert row["success_rate"] is None, "an unrun task has no rate to report"
+
 
 
 def test_tasks_json_is_valid_json_with_the_task_list(tmp_path, capsys):

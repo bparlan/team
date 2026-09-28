@@ -46,6 +46,13 @@ WORKSPACE_MOUNT = "/workspace"
 OOM_KILL_EXIT_CODE = 137
 TIMEOUT_EXIT_CODE = 124
 
+#: Retention for the execution log: keep the newest N lines, drop the rest.
+#: `ResourceLimiter` is a counter registry with no file retention path, so the
+#: precedent for a bounded append-only log is `AuditLogger._enforce_retention`
+#: (trim to newest, keep it parseable). The log was unbounded at 282 KB / 334
+#: lines with no cap of any kind; `history` reads it, so it must stay finite.
+EXECUTION_LOG_MAX_LINES = 1000
+
 
 class TaskExecutor:
     def __init__(self, project_root: str = ".", breaker_states: Optional[Dict] = None):
@@ -248,6 +255,21 @@ class TaskExecutor:
         self.execution_log.parent.mkdir(parents=True, exist_ok=True)
         with open(self.execution_log, 'a') as f:
             f.write(json.dumps(result) + "\n")
+        self._trim_execution_log()
+
+    def _trim_execution_log(self) -> int:
+        """Keep the newest EXECUTION_LOG_MAX_LINES lines. Returns lines dropped."""
+        try:
+            with open(self.execution_log, "r", encoding="utf-8") as handle:
+                lines = handle.readlines()
+        except OSError:
+            return 0
+        if len(lines) <= EXECUTION_LOG_MAX_LINES:
+            return 0
+        keep = lines[-EXECUTION_LOG_MAX_LINES:]
+        with open(self.execution_log, "w", encoding="utf-8") as handle:
+            handle.writelines(keep)
+        return len(lines) - len(keep)
 
 
 def _container_script(project_root: Path, script_path: Path) -> str:

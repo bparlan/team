@@ -25,22 +25,14 @@ else
   m4_pending=1
 fi
 
-# 2. Every subprocess site in executor.py sits inside a Layer 4 guard. M4.
-if grep -q "subprocess" theteam/tasks/executor.py 2>/dev/null; then
-  # The exemption is a `# TODO(M4)` comment, not a pass: the gate must stay
-  # red until M4 actually wraps the call in a Layer 4 guard. Otherwise the
-  # presence of a comment would green-light an unguarded subprocess.
-  if grep -q "# TODO(M4)" theteam/tasks/executor.py; then
-    echo "check 2 FAIL (exempt, owns M4): subprocess in Layer 3 with no Layer 4 guard"
-    grep -n "subprocess" theteam/tasks/executor.py
-    m4_pending=1
-  else
-    echo "check 2 FAIL: subprocess call site in theteam/tasks/executor.py without a Layer 4 guard — owns M4"
-    grep -n "subprocess" theteam/tasks/executor.py
-    hard_fail=1
-  fi
+# 2. No subprocess call site in Layer 3. Checked by AST, not grep: the word
+# "subprocess" in a docstring describing the pre-M4 behaviour is not a call
+# site, and a gate that fires on its own documentation is one people ignore.
+if out=$(python3 scripts/check_call_sites.py subprocess theteam/tasks/executor.py); then
+  echo "check 2 PASS: no subprocess call sites in theteam/tasks/executor.py"
 else
-  echo "check 2 PASS: no subprocess sites in theteam/tasks/executor.py"
+  echo "check 2 FAIL: $out"
+  hard_fail=1
 fi
 
 # 3. No hardcoded /Users/bparlan in the package.
@@ -75,17 +67,13 @@ else
   hard_fail=1
 fi
 
-# 6. No MockAPI in the package.
-if grep -rn "MockAPI" theteam/ --include="*.py" >/dev/null 2>&1; then
-  echo "check 6 FAIL: MockAPI in theteam/"
-  grep -rn "MockAPI" theteam/ --include="*.py"
-  hard_fail=1
-else
+# 6. No MockAPI in the package. AST, not grep: naming the §3.3 defect in a
+# docstring, in order to forbid it, is the opposite of a violation.
+if out=$(python3 scripts/check_call_sites.py MockAPI $(find theteam -name '*.py' -not -path '*/__pycache__/*')); then
   echo "check 6 PASS: no MockAPI in theteam/"
-fi
-
-if [ "$m4_pending" -ne 0 ]; then
-  echo "M4 pending: checks 1 and 2 are M4's falsification tests; reported, not blocking."
+else
+  echo "check 6 FAIL: $out"
+  hard_fail=1
 fi
 
 if [ "$hard_fail" -ne 0 ]; then

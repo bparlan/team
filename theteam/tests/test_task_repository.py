@@ -23,6 +23,7 @@ import pytest
 import yaml
 
 from theteam.cli import main
+from theteam.core.agent_isolation import AgentIsolation
 from theteam.tasks.repository import (
     TaskDefinitionError,
     TaskRepository,

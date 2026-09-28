@@ -84,7 +84,7 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """The trust surface: roster, state directory, task counts."""
+    """The trust surface: roster, state, task counts, audit chain, breaker states."""
     from theteam.core.audit_chain import chain_line, read_chain_state
     from theteam.core.member import load_config
 
@@ -96,21 +96,37 @@ def cmd_status(args: argparse.Namespace) -> int:
 
     roster = [m.get("id") for m in config.get("team", []) if m.get("enabled", True)]
     tasks = store.read_json(store.task_registry).get("tasks", {})
-    scheduled = store.read_json(store.task_schedule).get("scheduled_tasks", {})
+    schedule = store.read_json(store.task_schedule)
+    scheduled = schedule.get("scheduled_tasks", {})
+    last_run = schedule.get("last_run", {})
     chain = read_chain_state(project_root)
+
+    # Breaker state is read from what a real CircuitBreaker wrote, never
+    # inferred. A task that has never run has no measured breaker, and says so.
+    breakers = {
+        task_id: {
+            "state": entry.get("breaker"),
+            "consecutive_failures": entry.get("breaker_consecutive_failures"),
+        }
+        for task_id, entry in last_run.items()
+    }
+    trips = sorted(t for t, b in breakers.items() if b["state"] == "open")
 
     payload = {
         "project_root": project_root,
         "state_dir": str(store.root),
         "roster": {"active": len(roster), "members": roster},
-        "tasks": {"registered": len(tasks), "scheduled": len(scheduled)},
+        "tasks": {"registered": len(tasks), "scheduled": len(scheduled),
+                  "breaker_trips": trips},
+        "breakers": breakers,
         "audit_chain": chain,
     }
     lines = [
         f"project        {project_root}",
         f"state          {store.root}",
         f"roster         {len(roster)} members active ({', '.join(roster) or 'none'})",
-        f"tasks          {len(tasks)} registered, {len(scheduled)} scheduled",
+        f"tasks          {len(tasks)} registered, {len(scheduled)} scheduled, "
+        f"{len(trips)} breaker trips",
         chain_line(chain),
     ]
     return _emit(args, payload, "\n".join(lines))
@@ -222,6 +238,76 @@ def cmd_run(args: argparse.Namespace) -> int:
                  f"{payload['failures']} failed")
     return _emit(args, payload, "\n".join(lines))
 
+def cmd_history(args: argparse.Namespace) -> int:
+    """Per-task success rate, last run, last failure, consecutive failures (§7.1.7).
+
+    Reads the two states S1 and S3 wrote: the schedule's `last_run` entry for
+    breaker state, and the execution log for the run record. A task with no
+    runs reports that, not a 0% success rate that reads like a measurement.
+    """
+    from theteam.tasks.repository import TaskRepository
+
+    project_root = _project_root(args)
+    repo = TaskRepository(project_root)
+    schedule = repo.schedule()
+    rows = []
+    for task_id in [t["id"] for t in repo.all_tasks()]:
+        last = schedule["last_run"].get(task_id, {})
+        runs = _task_runs(project_root, task_id)
+        failures = [r for r in runs if not r.get("overall_success")]
+        rows.append({
+            "id": task_id,
+            "runs": len(runs),
+            "successes": len(runs) - len(failures),
+            "failures": len(failures),
+            # None, not 0.0: with no runs there is no rate to report, and 0.0
+            # is indistinguishable from a task that has never once passed.
+            "success_rate": (round(100.0 * (len(runs) - len(failures)) / len(runs), 1)
+                             if runs else None),
+            "last_run": last.get("at"),
+            "last_result": last.get("result"),
+            "last_failure": failures[-1].get("timestamp") if failures else None,
+            "breaker": last.get("breaker"),
+            "consecutive_failures": last.get("breaker_consecutive_failures"),
+        })
+    if args.task:
+        rows = [r for r in rows if r["id"] == args.task]
+        if not rows:
+            return _fail(args, "history", f"no task '{args.task}'")
+
+    payload = {"tasks": rows, "count": len(rows)}
+    if not rows:
+        return _emit(args, payload, "no tasks")
+    lines = [f"{'id':<24} {'runs':>4} {'rate':>6} {'consec':>6}  breaker"]
+    for row in rows:
+        rate = f"{row['success_rate']:.1f}%" if row["success_rate"] is not None else "-"
+        lines.append(
+            f"{row['id']:<24} {row['runs']:>4} {rate:>6} "
+            f"{str(row['consecutive_failures'] if row['consecutive_failures'] is not None else '-'):>6}  "
+            f"{row['breaker'] or 'never run'}"
+        )
+    return _emit(args, payload, "\n".join(lines))
+
+
+def _task_runs(project_root: str, task_id: str) -> List[Dict]:
+    """Every logged execution of one task, oldest first. Unparseable lines skipped."""
+    path = StateStore(project_root).execution_log
+    if not path.exists():
+        return []
+    runs = []
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if record.get("task_id") == task_id:
+                runs.append(record)
+    return runs
+
 
 def cmd_serve(args: argparse.Namespace) -> int:
     """The metrics endpoint. The only thing in the product that starts a server."""
@@ -311,7 +397,6 @@ def _delete_plan(repo, task_id: str) -> Dict[str, Any]:
 
 MILESTONE_OF = {
     "comment": "M5",
-    "history": "M4",
 }
 
 
@@ -373,6 +458,13 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
     run.set_defaults(func=cmd_run)
+
+    history = sub.add_parser("history", help="Success rate, last run, last failure.")
+    history.add_argument("--task", help="One task id, ignoring the rest.")
+    history.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                         help="Machine-readable output.")
+    history.set_defaults(func=cmd_history)
+
     task = sub.add_parser("task", help="Create, edit, delete or show one task.")
     task_action = task.add_subparsers(dest="task_command", required=True)
 

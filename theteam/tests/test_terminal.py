@@ -7,6 +7,7 @@ import of an undeclared library would pass the suite on a developer machine
 and turn it red on every clean runner.
 """
 
+import ast
 import io
 import json
 import os
@@ -232,3 +233,73 @@ class TestMachineSurfaceUnchanged:
         _, lines = cli.tasks_payload(unrun_task)
         frame = render_tasks(payload(unrun_task, "tasks"))
         assert frame.strip() != "\n".join(lines).strip()
+
+
+# ======= R1: one boundary, written down =======
+
+class TestSingleBoundary:
+    """
+    R1, asserted rather than documented: the renderer reads `cli.py`'s
+    `*_payload` functions and nothing else. A second data source is a second
+    adapter, which is how `task_stack_adapter.py` came to exist in M2.
+    """
+
+    READERS = ("status_payload", "tasks_payload", "history_payload")
+
+    def test_renderer_reads_only_the_three_payload_functions(self):
+        for reader in self.READERS:
+            assert f"cli.{reader}" in _code()
+        # The whole import surface, by AST rather than by text: a docstring
+        # that *mentions* a module in order to say it does not use one is not
+        # a use of it. `theteam` is the function-local `from theteam import cli`
+        # the watch loop uses - the one data source it is allowed.
+        assert {name for name, _ in _imports()} == {
+            "theteam",
+            "theteam.core.audit_chain",
+            "theteam.ui.components.design_tokens",
+            "shutil",
+            "sys",
+            "time",
+            "typing",
+        }
+
+    def test_renderer_does_not_import_the_peer_view_model(self):
+        """
+        `build_visibility` is a peer builder for the unwired reflex dashboard,
+        not this renderer's source. Importing it would be the second adapter
+        R1 forbids, and the peer docstring says so in as many words.
+        """
+        names = {name for name, _ in _imports()}
+        assert "theteam.ui.components.visibility" not in names
+
+    def test_renderer_does_not_reach_past_the_payloads(self):
+        """It reads payloads, not files. `state.py` and the store stay below."""
+        names = {name for name, _ in _imports()}
+        for forbidden in ("theteam.state", "theteam.tasks",
+                          "theteam.core.member"):
+            assert forbidden not in names, (
+                f"the renderer must read payloads, not {forbidden!r}"
+            )
+
+
+def _code():
+    """The renderer's own source."""
+    with open(terminal.__file__, "r", encoding="utf-8") as handle:
+        return handle.read()
+
+
+def _imports():
+    """Every `import X` / `from X import` in the renderer, as `(module, name)`.
+
+    Parsed rather than grepped so a function-local import - which is how the
+    renderer reaches `cli` without a module-scope dependency - counts the same
+    as any other.
+    """
+    found = []
+    tree = ast.parse(_code())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found.extend((alias.name, alias.asname) for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            found.extend((node.module, alias.asname) for alias in node.names)
+    return found

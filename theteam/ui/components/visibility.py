@@ -6,6 +6,13 @@ mutation cannot be unit-tested outside a running reflex runtime. All the real
 work therefore lives here as plain stdlib functions, and `VisibilityState`
 only stores their results. This module imports no Reflex, so it is covered by
 CI even where Reflex is not installed.
+
+No production caller as of M6. The reflex dashboard this was written for is
+not in the tree, and M6's terminal renderer reads `cli.py`'s `*_payload`
+functions rather than this module. The builders are kept - they are tested,
+they are pure, and the dashboard is a future surface - but nothing wires
+them to the product today, and a docstring that implies otherwise is worse
+than no docstring.
 """
 
 from typing import Any, Dict, List, Sequence
@@ -25,11 +32,13 @@ def build_visibility(data: Dict[str, Any]) -> Dict[str, Any]:
     Everything a template touches is resolved here: reflex Vars cannot be
     f-stringed, iterated, or branched on inside a page render function.
 
-    This function is the **only** data source a renderer may read. A renderer
-    that reaches past it - resolving paths, reading files, spawning a
-    subprocess - is a second adapter, and that is how
-    `task_stack_adapter.py` came to exist in M2. Presentation is a pure
-    function of this view model, never a peer of it.
+    This is the view-model boundary for the **reflex dashboard** built in
+    M4, which is not wired into the product. It is not the renderer's data
+    source: M6's `theteam/ui/terminal.py` reads the `*_payload` functions in
+    `cli.py` instead, because that is where status/tasks/history actually
+    live. Two render surfaces, two view-model builders, and neither adapts
+    the other's shape - a renderer that translates one into the other is
+    the second adapter that produced `task_stack_adapter.py` in M2.
 
     Purity contract: the returned dict contains no path resolution, no file
     reads, and no subprocess calls. Same input, same output, every time.

@@ -7,7 +7,7 @@
 | Diagram | Renders | File |
 |---|---|---|
 | System architecture | Part 5 §5.2 package layout, §5.1 layers, the three command entry points | `diagrams/active-usage-architecture.html` |
-| Delivery order | Part 6, all six milestones and their gates | `diagrams/active-usage-milestones.html` |
+| Delivery order | Part 6, all seven milestones and their gates | `diagrams/active-usage-milestones.html` |
 
 Sources of truth, in conflict order: this document defines intent; the two HTML diagrams define the rendered shape; the YAML task files define task content. If this document and a diagram disagree, this document wins. If this document and the running code disagree, **the code is the defect** — that is the next milestone's work, not a reason to edit the intent.
 
@@ -65,8 +65,8 @@ theteam task create|edit|delete|show  single-task operations
 theteam run                           execute everything currently due
 theteam history                       per-task success rate, last run, last failure
 theteam status                        trust surface — see §3
+theteam watch [status|tasks|history]  the trust surface, rendered, in the terminal
 theteam serve                         metrics endpoint
-```
 
 | Command | Arguments | Output you can predict |
 |---|---|---|
@@ -82,9 +82,12 @@ theteam serve                         metrics endpoint
 | `run` | `--json`, `--only <id>` | `{ran: N, skipped: M, failures: K}` with per-task results. Idempotent. |
 | `history` | `--task <id>`, `--json` | Success rate, last run, last failure, consecutive failures. |
 | `status` | `--json` | Roster, session binding, audit chain integrity, breaker states. |
+| `watch` | `status\|tasks\|history`, `--once`, `--interval N` | The same data, rendered. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. |
 | `serve` | `--port` | Prometheus endpoint. Nothing else starts a server. |
 
-Every command takes an explicit `project_root`. Every command returns a real exit code. Every command supports `--json`.
+`status`, `tasks`, and `history` are the **machine surface**: their output is a contract with agentic consumers (§3.3) and M6 did not change one byte of it. `watch` reads the same payloads through the same functions; it is a renderer, not a second source.
+
+Every command takes an explicit `project_root`. Every command returns a real exit code. Every command that produces data supports `--json` — `watch` is the exception and deliberately so: it is a renderer, and the machine-readable form of what it draws is the `--json` of the command it reads. Rendering is not a data surface.
 
 ---
 
@@ -282,9 +285,12 @@ theteam/
     discussion_interface.py
     team_member_manager.py
     context_aggregator.py
-  ui/                        # panel widgets. The terminal UI entry point the
-                             # orchestrator used to call was deleted in M4;
-                             # no TUI is wired into the product.
+  ui/                        # panel widgets, and the terminal renderer.
+    terminal.py              # the trust surface, rendered. `theteam watch`.
+                             # Stdlib only, by measurement: `rich` is
+                             # installed in one developer's pyenv transitively
+                             # and declared nowhere, so a module-scope import
+                             # of it is green locally and red in CI.
     components/              # panel widgets: roster, activity, metrics, …
     web_dashboard/           # optional reflex dashboard (extra). Reads through
                              # state.py; absent unless the reflex extra is
@@ -383,7 +389,7 @@ Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, *
 
 # Part 6 — Delivery Order
 
-Six milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test.
+Seven milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real.
 
 The ordering rule: **at every intermediate commit, all four existing tasks still execute.** The switch from the current store to the YAML repository is the one place that can silently break that, and it gets an explicit guard.
 
@@ -507,6 +513,22 @@ If any gate fails, cut M5. `engine.py`, `selector.py`, and `roster.py` still shi
 
 **Guard:** `advisory/engine.py` must be byte-identical before and after M5. If it changed, the controller forked the discussion path and the whole premise of the layer is broken.
 
+## M6 — The terminal shows the truth
+
+`theteam/ui/terminal.py` and `theteam watch status|tasks|history`. The first milestone not named in the earlier draft of this document; it was deferred by a five-member review until after M4, so that what the renderer displays is real.
+
+**The boundary is written down before the renderer exists.** `state.py` → `status_payload` / `tasks_payload` / `history_payload` in `cli.py` → one renderer. The three `*_payload` functions return the same data the commands emit, so the renderer and the command cannot drift because there is one implementation. Presentation is a pure function of the payload, never a peer of it.
+
+### The `rich` decision, by measurement
+
+`rich` 14.3.4 is installed in one developer's pyenv, transitively. `pyproject.toml` declared `dependencies = []` and CI installs from that, so a module-scope import of `rich` passes the suite locally and turns it red on every clean runner — the exact "green locally, red in CI" failure `test_invariant_gate.py` exists to close. **M6 uses stdlib**, and `test_terminal.py::TestDependencies` asserts the absence of any undeclared import so the choice is enforced rather than documented.
+
+The same measurement found a real defect: `theteam/__init__.py:21` imports `yaml` at module scope, `requirements.txt` listed it, and `pyproject.toml` declared nothing — so `pip install -e .` produced a package that could not import itself. `PyYAML>=6.0` is now a declared dependency.
+
+**Falsification test:** in a project with no audit chain and no run tasks, `watch status --once` shows `absent` and `never run` and never the literal `closed`, `intact`, or `0%`. In a project with a tripped breaker, the trip and its consecutive-failure count are shown. `status --json` is byte-identical before and after.
+
+**Guard:** the audit row is rendered by `audit_chain.chain_line()`, the one function that already states absent/empty/intact/BROKEN honestly, so a fourth spelling cannot grow in the renderer. Every `None` is gated **before** it reaches `circuit_visual()`: `circuit_visual(None)` returns `UNKNOWN_VISUAL`, which is a real-looking state nobody measured.
+
 # Part 7 — Invariants
 
 ## 7.1 Product invariants
@@ -521,6 +543,7 @@ A user can check every one of these by running a command.
 6. A phase over its memory bound is killed and reported, never left running.
 7. `theteam history` shows per-task success rate, last run, last failure.
 8. Every tick reports `spoke: true` with at most 2 fragments, or `spoke: false` with a reason.
+9. `theteam watch status --once` on a project with no audit chain and no run tasks shows `absent` / `never run`, and never prints `closed`, `intact`, or `0%` for anything it did not measure.
 
 ## 7.2 Engineering invariants
 
@@ -532,6 +555,7 @@ A user can check every one of these by running a command.
 6. `grep -rn "MockAPI" theteam/` returns nothing.
 7. `advisory/engine.py` is byte-identical after M5.
 8. Layer 3 contains no `subprocess` call without a Layer 4 guard in the same call frame.
+9. `grep -rn "^import rich\|^from rich" theteam/` returns nothing. `rich` is not a declared dependency, so importing it at module scope is green locally and red in CI.
 
 ---
 

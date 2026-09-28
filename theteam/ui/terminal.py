@@ -13,6 +13,13 @@ opens a file, never spawns a process, and never computes a value the payload
 does not already carry. A second renderer that grows its own adapter breaks
 this chain, which is how `task_stack_adapter.py` came to exist in M2.
 
+`ui/components/visibility.py::build_visibility` is a **peer** view-model
+builder, not a step in this chain. It builds activity/roster/metrics rows for
+the reflex dashboard, which is not wired into the product; it has no
+production caller. Adapting its output into a frame here would be the second
+adapter the paragraph above forbids, so this renderer does not use it and
+does not import it.
+
 **The honesty rule (§3.3).** Every cell traces to a command output. A `None`
 is not `0`, not `closed`, not `intact`, not `0%` - it is the word for "nothing
 was measured yet", which is `-` for an unknown cell and `never run` for a

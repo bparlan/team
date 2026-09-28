@@ -158,11 +158,6 @@ def cmd_tasks(args: argparse.Namespace) -> int:
             f"{task['priority']:>3}  {task['next_run'] or 'not scheduled'}"
         )
     lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
-    # An id the order names but no file answers to is reported, so a broken
-    # order is never mistaken for a shorter task list.
-    if payload.get("missing_tasks"):
-        lines.append(f"note: in TASK_ORDER but unreadable: "
-                     f"{', '.join(payload['missing_tasks'])}")
     return _emit(args, payload, "\n".join(lines))
 
 
@@ -287,14 +282,14 @@ def _delete_plan(repo, task_id: str) -> Dict[str, Any]:
     schedule = repo.schedule()
     will = [f"tasks/{repo._yaml[task_id]['source_file']}"] if task_id in repo._yaml else []
     if task_id in repo._order:
-        will.append("tasks/TASK_ORDER")
+    """What a delete will touch, named before it does."""
+    schedule = repo.schedule()
+    will = [f"tasks/{repo._yaml[task_id]['source_file']}"] if task_id in repo._yaml else []
     if task_id in schedule["scheduled_tasks"]:
         will.append("schedule entry")
     if task_id in schedule["last_run"]:
         will.append("run history")
     return {"id": task_id, "will_remove": will}
-
-
 # ======= parser =======
 
 MILESTONE_OF = {

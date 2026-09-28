@@ -281,15 +281,13 @@ def _delete_plan(repo, task_id: str) -> Dict[str, Any]:
     """What a delete will touch, named before it does."""
     schedule = repo.schedule()
     will = [f"tasks/{repo._yaml[task_id]['source_file']}"] if task_id in repo._yaml else []
-    if task_id in repo._order:
-    """What a delete will touch, named before it does."""
-    schedule = repo.schedule()
-    will = [f"tasks/{repo._yaml[task_id]['source_file']}"] if task_id in repo._yaml else []
     if task_id in schedule["scheduled_tasks"]:
         will.append("schedule entry")
     if task_id in schedule["last_run"]:
         will.append("run history")
     return {"id": task_id, "will_remove": will}
+
+
 # ======= parser =======
 
 MILESTONE_OF = {

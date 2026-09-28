@@ -8,15 +8,24 @@ behaviour is unchanged; the M4 safety wrapper (`ResourceLimiter`,
 that is on its way out.
 """
 import json
-import subprocess
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict
 
-# TODO(M4): wire CircuitBreaker/ResourceLimiter/AgentIsolation/AuditLogger into
-# execute_phase. Every subprocess site below is a Layer 3 call with no Layer 4
-# guard in the same frame; §5.1 forbids it, §7.2 invariants 1 and 2 enforce it.
+from theteam.core.agent_isolation import AgentIsolation, IsolationError, IsolationPolicy
 
+# M4 wiring. §5.1: every phase runs inside an AgentIsolation container, so no
+# Layer 3 call to subprocess is left without a Layer 4 guard in the same call
+# frame. CircuitBreaker/ResourceLimiter/AuditLogger call sites live in the
+# siblings' surfaces (S1, S3) and are not duplicated here.
+
+# Image used for isolated phase execution. Override per environment; the
+# default is a tag that exists on this machine (the bare `theteam` image
+# does not). Kept as a named constant so the choice is visible and the
+# literal is not scattered through the method body.
+IMAGE_ENV_VAR = "THETEAM_AGENT_IMAGE"
+DEFAULT_IMAGE = "theteam:p4final"
 
 class TaskExecutor:
     def __init__(self, project_root: str = "."):

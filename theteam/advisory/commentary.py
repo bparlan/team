@@ -133,7 +133,16 @@ class CommentaryController:
         # last tick saw is read back, not just held in memory. Without this a
         # fresh process sees an unchanged session as new work and spends a
         # member call on it - which is the budget 4.6 promises is zero.
-        state = self.load_state()
+        # An unreadable state file leaves the digest *unknown*, not empty. A
+        # corrupt commentary.json must not stop the controller from existing:
+        # a constructor that raises is silence with no reason, which is the
+        # 3.2 failure this layer exists to avoid. So the tick runs, and the
+        # first tick after a corrupt read speaks - it cannot honestly claim
+        # the session is unchanged when it does not know what it last saw.
+        try:
+            state = self.load_state()
+        except (OSError, ValueError):
+            state = {}
         self._last_digest: Optional[str] = state.get("last_digest")
         self._tick_count = int(state.get("tick_count") or 0)
 
@@ -149,7 +158,14 @@ class CommentaryController:
         """Persist what happened, so `comment status` can report it after a
         restart. Written only from a real tick result."""
         self.store.ensure()
-        state = self.load_state()
+        # A corrupt file is replaced, not merged with. Reading it would raise
+        # here and take the tick down with it, and a tick that raises after
+        # the team already spoke is the worst outcome: the opinion was
+        # rendered and the caller never learned it.
+        try:
+            state = self.load_state()
+        except (OSError, ValueError):
+            state = {}
         state["tick_count"] = self._tick_count
         state["last_digest"] = result.digest
         state["last_opinion"] = (

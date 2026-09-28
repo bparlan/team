@@ -24,6 +24,15 @@ def build_visibility(data: Dict[str, Any]) -> Dict[str, Any]:
 
     Everything a template touches is resolved here: reflex Vars cannot be
     f-stringed, iterated, or branched on inside a page render function.
+
+    This function is the **only** data source a renderer may read. A renderer
+    that reaches past it - resolving paths, reading files, spawning a
+    subprocess - is a second adapter, and that is how
+    `task_stack_adapter.py` came to exist in M2. Presentation is a pure
+    function of this view model, never a peer of it.
+
+    Purity contract: the returned dict contains no path resolution, no file
+    reads, and no subprocess calls. Same input, same output, every time.
     """
     stream = ActivityStream()
     stream.extend(data.get("events") or [])
@@ -48,8 +57,7 @@ def build_visibility(data: Dict[str, Any]) -> Dict[str, Any]:
             for a in actions
         ],
         "recovery_summary": f"{len(actions)} suggested" if actions else "No actions",
-        # Joined text, not a list: reflex cannot foreach an untyped nested Var.
-        "recovery_lines": "\n".join(f"{a.action}: {a.description}" for a in actions),
+        "recovery_lines": [f"{a.action}: {a.description}" for a in actions],
         "metrics_rows": panel.counters(exposition),
         "metrics_summary": f"{panel.summary(exposition)['series']} series reported",
         "roster_summary": roster.summary_line(),

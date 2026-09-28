@@ -122,14 +122,16 @@ class TestHealthSection:
     def test_recovery_suggested(self, built):
         assert built["recovery_summary"] == "1 suggested"
 
-    def test_recovery_lines_joined(self, built):
-        assert isinstance(built["recovery_lines"], str)
-        assert "Wait for reset timeout" in built["recovery_lines"]
+    def test_recovery_lines_is_a_list(self, built):
+        # C1: the field is a list of strings, not a joined string. The renderer
+        # owns the join; a UI framework constraint is not a domain contract.
+        assert isinstance(built["recovery_lines"], list)
+        assert any("Wait for reset timeout" in line for line in built["recovery_lines"])
 
     def test_no_recovery_when_healthy(self):
         result = build_visibility({})
         assert result["recovery_summary"] == "No actions"
-        assert result["recovery_lines"] == ""
+        assert result["recovery_lines"] == []
 
 
 class TestMetricsSection:
@@ -231,3 +233,74 @@ class TestToggleId:
     def test_round_trip(self):
         once = toggle_id([], "a")
         assert toggle_id(once, "a") == []
+
+
+class TestBuildVisibilityPurity:
+    """
+    R1: `build_visibility` is the only data source a renderer may read, and it
+    is a pure function of its input. Two halves of the contract: determinism,
+    and the absence of side effects.
+    """
+
+    def test_same_input_produces_same_output(self, sample_data):
+        a = build_visibility(sample_data)
+        b = build_visibility(sample_data)
+        assert a == b
+
+    def test_different_inputs_produce_different_view_models(self, sample_data):
+        empty = build_visibility({})
+        populated = build_visibility(sample_data)
+        assert empty != populated
+
+    def test_opens_no_file(self, sample_data, monkeypatch):
+        # The view model must not reach for the filesystem. A renderer that
+        # does is a second adapter (§R1); this is the assertion that keeps it
+        # from growing unnoticed.
+        import builtins
+
+        def _explode(*args, **kwargs):
+            raise AssertionError(
+                "build_visibility opened a file: it must be a pure function"
+            )
+
+        monkeypatch.setattr(builtins, "open", _explode)
+        build_visibility(sample_data)
+
+    def test_runs_no_subprocess(self, sample_data, monkeypatch):
+        import theteam.ui.components.visibility as vis
+
+        def _explode(*args, **kwargs):
+            raise AssertionError(
+                "build_visibility spawned a subprocess: it must be a pure function"
+            )
+
+        if hasattr(vis, "subprocess"):
+            monkeypatch.setattr(vis.subprocess, "run", _explode)
+            build_visibility(sample_data)
+        else:
+            # The module imports no subprocess at all - the stronger result.
+            import sys
+
+            mod = sys.modules.get("theteam.ui.components.visibility")
+            assert mod is None or not hasattr(mod, "subprocess")
+
+    def test_view_model_contains_no_path_resolution(self, sample_data):
+        result = build_visibility(sample_data)
+        flat = _flatten(result)
+        # No absolute path, no state directory, no project root in the model.
+        assert not any(
+            isinstance(v, str) and (v.startswith("/") or ".omp/theteam" in v)
+            for v in flat
+        )
+
+
+def _flatten(obj):
+    """Yield every scalar leaf of a nested structure."""
+    if isinstance(obj, dict):
+        for v in obj.values():
+            yield from _flatten(v)
+    elif isinstance(obj, (list, tuple)):
+        for v in obj:
+            yield from _flatten(v)
+    else:
+        yield obj

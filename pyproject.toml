@@ -7,7 +7,11 @@ name = "theteam"
 version = "1.0.0"
 description = "Stability architecture for theteam: single unified loop, unified task contract, event-driven state"
 requires-python = ">=3.9"
-dependencies = []
+# PyYAML is a hard requirement: `theteam/__init__.py` imports it at module
+# scope and `cli.py` parses task definitions with it. Leaving it in
+# requirements.txt alone meant CI (`pip install -e .`) installed a package
+# that could not import itself. The two files must agree.
+dependencies = ["PyYAML>=6.0"]
 
 [project.optional-dependencies]
 postgres = ["psycopg2-binary>=2.9.9"]

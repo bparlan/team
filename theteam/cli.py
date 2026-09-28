@@ -83,16 +83,22 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
                  f"Config written to {config_path}\nState directory: {state}")
 
 
-def cmd_status(args: argparse.Namespace) -> int:
-    """The trust surface: roster, state, task counts, audit chain, breaker states."""
+def status_payload(project_root: str):
+    """The `status` view, as data: `(payload, lines)` on success,
+    `(None, error_message)` when the project is not bootstrapped.
+
+    Split out from `cmd_status` so the terminal renderer reads the same surface
+    without emitting it. `status` keeps sole ownership of formatting and of the
+    `--json` switch: a renderer that reprints the command output is breaking
+    the agentic contract §2 promises.
+    """
     from theteam.core.audit_chain import chain_line, read_chain_state
     from theteam.core.member import load_config
 
-    project_root = _project_root(args)
     store = StateStore(project_root)
     config, error = load_config(project_root)
     if config is None:
-        return _fail(args, "status", f"{error}. Run: theteam bootstrap {project_root}")
+        return None, error
 
     roster = [m.get("id") for m in config.get("team", []) if m.get("enabled", True)]
     tasks = store.read_json(store.task_registry).get("tasks", {})
@@ -129,6 +135,15 @@ def cmd_status(args: argparse.Namespace) -> int:
         f"{len(trips)} breaker trips",
         chain_line(chain),
     ]
+    return payload, lines
+
+
+def cmd_status(args: argparse.Namespace) -> int:
+    """The trust surface: roster, state, task counts, audit chain, breaker states."""
+    payload, lines = status_payload(_project_root(args))
+    if payload is None:
+        return _fail(args, "status", f"{lines}. Run: theteam bootstrap "
+                                    f"{_project_root(args)}")
     return _emit(args, payload, "\n".join(lines))
 
 
@@ -157,11 +172,15 @@ def cmd_loop(args: argparse.Namespace) -> int:
                  f"{args.task_id} scheduled every {args.interval}m, "
                  f"next run {next_run}")
 
-def cmd_tasks(args: argparse.Namespace) -> int:
-    """Every task and its state. An empty list reports why it is empty."""
+def tasks_payload(project_root: str):
+    """The `tasks` view as data: `(payload, lines)`, or `(None, error)`.
+
+    The renderer reads the same rows `theteam tasks` prints. It is the same
+    data, not a second source: §2 makes these commands the machine surface.
+    """
     from theteam.tasks.repository import TaskRepository
 
-    payload = TaskRepository(_project_root(args)).list_tasks()
+    payload = TaskRepository(project_root).list_tasks()
     lines = [
         f"{'order':>5}  {'id':<24} {'type':<12} {'pri':>3}  "
         f"{'next run':<30} breaker",
@@ -177,6 +196,12 @@ def cmd_tasks(args: argparse.Namespace) -> int:
             f"{(task['next_run'] or 'not scheduled'):<30} {breaker}"
         )
     lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
+    return payload, lines
+
+
+def cmd_tasks(args: argparse.Namespace) -> int:
+    """Every task and its state. An empty list reports why it is empty."""
+    payload, lines = tasks_payload(_project_root(args))
     return _emit(args, payload, "\n".join(lines))
 
 
@@ -238,25 +263,24 @@ def cmd_run(args: argparse.Namespace) -> int:
                  f"{payload['failures']} failed")
     return _emit(args, payload, "\n".join(lines))
 
-def cmd_history(args: argparse.Namespace) -> int:
-    """Per-task success rate, last run, last failure, consecutive failures (§7.1.7).
 
-    Reads the two states S1 and S3 wrote: the schedule's `last_run` entry for
-    breaker state, and the execution log for the run record. A task with no
-    runs reports that, not a 0% success rate that reads like a measurement.
+def history_payload(project_root: str, task_id: Optional[str] = None):
+    """The `history` view as data: `(payload, lines)`, or `(None, error)`.
+
+    Same reads, same rows, one implementation - the renderer and the command
+    cannot drift because there is only one place that computes a success rate.
     """
     from theteam.tasks.repository import TaskRepository
 
-    project_root = _project_root(args)
     repo = TaskRepository(project_root)
     schedule = repo.schedule()
     rows = []
-    for task_id in [t["id"] for t in repo.all_tasks()]:
-        last = schedule["last_run"].get(task_id, {})
-        runs = _task_runs(project_root, task_id)
+    for tid in [t["id"] for t in repo.all_tasks()]:
+        last = schedule["last_run"].get(tid, {})
+        runs = _task_runs(project_root, tid)
         failures = [r for r in runs if not r.get("overall_success")]
         rows.append({
-            "id": task_id,
+            "id": tid,
             "runs": len(runs),
             "successes": len(runs) - len(failures),
             "failures": len(failures),
@@ -270,14 +294,14 @@ def cmd_history(args: argparse.Namespace) -> int:
             "breaker": last.get("breaker"),
             "consecutive_failures": last.get("breaker_consecutive_failures"),
         })
-    if args.task:
-        rows = [r for r in rows if r["id"] == args.task]
+    if task_id:
+        rows = [r for r in rows if r["id"] == task_id]
         if not rows:
-            return _fail(args, "history", f"no task '{args.task}'")
+            return None, f"no task '{task_id}'"
 
     payload = {"tasks": rows, "count": len(rows)}
     if not rows:
-        return _emit(args, payload, "no tasks")
+        return payload, ["no tasks"]
     lines = [f"{'id':<24} {'runs':>4} {'rate':>6} {'consec':>6}  breaker"]
     for row in rows:
         rate = f"{row['success_rate']:.1f}%" if row["success_rate"] is not None else "-"
@@ -286,6 +310,19 @@ def cmd_history(args: argparse.Namespace) -> int:
             f"{str(row['consecutive_failures'] if row['consecutive_failures'] is not None else '-'):>6}  "
             f"{row['breaker'] or 'never run'}"
         )
+    return payload, lines
+
+
+def cmd_history(args: argparse.Namespace) -> int:
+    """Per-task success rate, last run, last failure, consecutive failures (§7.1.7).
+
+    Reads the two states S1 and S3 wrote: the schedule's `last_run` entry for
+    breaker state, and the execution log for the run record. A task with no
+    runs reports that, not a 0% success rate that reads like a measurement.
+    """
+    payload, lines = history_payload(_project_root(args), args.task)
+    if payload is None:
+        return _fail(args, "history", lines)
     return _emit(args, payload, "\n".join(lines))
 
 
@@ -535,7 +572,30 @@ def cmd_comment(args: argparse.Namespace) -> int:
     return _emit(args, payload, f"commentary {'on' if payload['on'] else 'off'}")
 
 
+def cmd_watch(args: argparse.Namespace) -> int:
+    """The trust surface, in the terminal. `watch status|tasks|history`.
+
+    Layer 0 dispatches and nothing else: the renderer owns the frame, and it
+    reads the same payloads `status`, `tasks`, and `history` print. Those
+    three commands are the machine surface (§2) and their output is
+    unchanged - a TUI that improves them by rewriting them has broken the
+    contract they exist to serve.
+    """
+    from theteam.ui.terminal import watch
+
+    if args.once:
+        return watch(_project_root(args), args.view, once=True)
+    try:
+        return watch(_project_root(args), args.view, interval=args.interval)
+    except KeyboardInterrupt:
+        # Ctrl-C is how a watch loop is meant to end. Returning the error
+        # code would report a normal exit as a failure.
+        return EXIT_OK
+
+
+
 # ======= parser =======
+
 
 MILESTONE_OF = {
 }
@@ -666,6 +726,17 @@ def build_parser() -> argparse.ArgumentParser:
     # the missing subcommand. Without this default argparse has no `func` and
     # the command dies on an AttributeError instead of a usage error.
     comment.set_defaults(func=cmd_comment)
+
+    watch = sub.add_parser("watch", help="Render status, tasks, or history in the terminal.")
+    watch.add_argument("view", choices=("status", "tasks", "history"),
+                       help="Which surface to render.")
+    watch.add_argument("--once", action="store_true",
+                       help="Render one frame and exit.")
+    # The renderer owns the cadence; the parser only names it for `--help`.
+    from theteam.ui.terminal import DEFAULT_INTERVAL
+    watch.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,
+                       help=f"Seconds between frames. Default {DEFAULT_INTERVAL:g}.")
+    watch.set_defaults(func=cmd_watch)
 
     # Declared so the rest of the surface in ARCHITECTURE.md §2 is discoverable
     # from `--help`; each refuses until its milestone lands.

@@ -3,23 +3,30 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Active Usage Architecture",
-    "subtitle": "Unified task surface, loop controller, and safety — grounded in theteam/core and theteam/subskills/task_stack",
+    "subtitle": "Re-derived from the theteam/ import graph at M7: every arrow is a real import, every component is a module in the tree",
     "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/bparlan/team",
+      "provider": "github",
+      "link_mode": "local-only",
+      "revision": "bba1c08e5363cbb34494b8b98e65b72d30374895"
+    },
+    "viewBox": [1440, 860],
     "views": [
       {
         "id": "entry",
-        "label": "Entry & CLI",
-        "focus": ["theteam_cli", "task_store", "task_manager", "task_executor"]
+        "label": "Entry and tasks",
+        "focus": ["theteam_cli", "task_repository", "task_executor", "state_store"]
       },
       {
         "id": "loop",
-        "label": "Loop Execution",
-        "focus": ["theteam_cli", "unified_loop", "task_executor", "event_bus"]
+        "label": "Loop and telemetry",
+        "focus": ["theteam_cli", "unified_loop", "metrics_collector", "health_monitor"]
       },
       {
         "id": "safety",
-        "label": "Safety & Telemetry",
-        "focus": ["circuit_breaker", "resource_limiter", "audit_logger", "agent_isolation", "health_monitor"]
+        "label": "Safety",
+        "focus": ["task_executor", "circuit_breaker", "agent_isolation", "audit_chain"]
       }
     ]
   },
@@ -28,152 +35,127 @@
       "id": "theteam_cli",
       "type": "backend",
       "label": "theteam CLI",
-      "pos": [600, 40],
-      "size": [200, 60]
+      "sublabel": "cli.py, the only entry point",
+      "pos": [560, 40],
+      "size": [280, 60],
+      "sources": [{"path": "theteam/cli.py", "line": 604, "label": "build_parser"}]
     },
     {
-      "id": "unified_loop",
-      "type": "backend",
-      "label": "UnifiedLoop",
-      "pos": [610, 200],
-      "size": [180, 60]
-    },
-    {
-      "id": "task_store",
+      "id": "task_repository",
       "type": "database",
-      "label": "TaskStore",
-      "pos": [60, 370],
-      "size": [160, 60]
-    },
-    {
-      "id": "task_manager",
-      "type": "backend",
-      "label": "TaskManager",
-      "pos": [310, 370],
-      "size": [160, 60]
+      "label": "TaskRepository",
+      "sublabel": "tasks/repository.py",
+      "pos": [40, 200],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/tasks/repository.py", "line": 123}]
     },
     {
       "id": "task_executor",
       "type": "backend",
       "label": "TaskExecutor",
-      "pos": [580, 370],
-      "size": [200, 60]
+      "sublabel": "tasks/executor.py",
+      "pos": [310, 200],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/tasks/executor.py", "line": 57}]
+    },
+    {
+      "id": "unified_loop",
+      "type": "backend",
+      "label": "UnifiedLoop",
+      "sublabel": "core/unified_loop.py",
+      "pos": [580, 200],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/unified_loop.py", "line": 142}]
+    },
+    {
+      "id": "metrics_collector",
+      "type": "messagebus",
+      "label": "MetricsCollector",
+      "sublabel": "core/metrics.py",
+      "pos": [850, 200],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/metrics.py"}]
+    },
+    {
+      "id": "commentary_controller",
+      "type": "backend",
+      "label": "Commentary",
+      "sublabel": "advisory/commentary.py",
+      "pos": [1120, 200],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/advisory/commentary.py", "line": 111}]
     },
     {
       "id": "circuit_breaker",
       "type": "security",
       "label": "CircuitBreaker",
-      "pos": [60, 570],
-      "size": [170, 60]
-    },
-    {
-      "id": "resource_limiter",
-      "type": "security",
-      "label": "ResourceLimiter",
-      "pos": [280, 570],
-      "size": [170, 60]
-    },
-    {
-      "id": "audit_logger",
-      "type": "database",
-      "label": "AuditLogger",
-      "pos": [500, 570],
-      "size": [170, 60]
+      "sublabel": "core/circuit_breaker.py",
+      "pos": [40, 600],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/circuit_breaker.py", "line": 57}]
     },
     {
       "id": "agent_isolation",
       "type": "security",
       "label": "AgentIsolation",
-      "pos": [720, 570],
-      "size": [170, 60]
+      "sublabel": "core/agent_isolation.py",
+      "pos": [310, 600],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/agent_isolation.py", "line": 144}]
+    },
+    {
+      "id": "resource_limiter",
+      "type": "security",
+      "label": "ResourceLimiter",
+      "sublabel": "core/resource_limiter.py",
+      "pos": [580, 600],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/resource_limiter.py", "line": 137}]
+    },
+    {
+      "id": "audit_chain",
+      "type": "database",
+      "label": "Audit chain",
+      "sublabel": "core/audit_chain.py",
+      "pos": [850, 600],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/audit_chain.py", "line": 31}]
     },
     {
       "id": "health_monitor",
       "type": "backend",
       "label": "HealthMonitor",
-      "pos": [350, 780],
-      "size": [180, 60]
+      "sublabel": "core/health_monitor.py",
+      "pos": [1120, 600],
+      "size": [220, 64],
+      "sources": [{"path": "theteam/core/health_monitor.py", "line": 20}]
     },
     {
-      "id": "event_bus",
-      "type": "messagebus",
-      "label": "EventBus",
-      "pos": [700, 780],
-      "size": [180, 60]
+      "id": "state_store",
+      "type": "database",
+      "label": "StateStore",
+      "sublabel": "state.py, the one path resolver",
+      "pos": [450, 780],
+      "size": [280, 60],
+      "sources": [{"path": "theteam/state.py", "line": 35}]
     }
   ],
   "connections": [
-    {
-      "from": "theteam_cli",
-      "to": "unified_loop",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "theteam_cli",
-      "to": "task_manager",
-      "fromSide": "left",
-      "toSide": "top"
-    },
-    {
-      "from": "unified_loop",
-      "to": "task_executor",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "task_store",
-      "to": "task_manager",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "task_manager",
-      "to": "task_executor",
-      "fromSide": "right",
-      "toSide": "left"
-    },
-    {
-      "from": "task_executor",
-      "to": "circuit_breaker",
-      "fromSide": "left",
-      "toSide": "top"
-    },
-    {
-      "from": "task_executor",
-      "to": "resource_limiter",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "task_executor",
-      "to": "audit_logger",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "task_executor",
-      "to": "agent_isolation",
-      "fromSide": "right",
-      "toSide": "top"
-    },
-    {
-      "from": "resource_limiter",
-      "to": "health_monitor",
-      "fromSide": "bottom",
-      "toSide": "top"
-    },
-    {
-      "from": "agent_isolation",
-      "to": "health_monitor",
-      "fromSide": "bottom",
-      "toSide": "left"
-    },
-    {
-      "from": "health_monitor",
-      "to": "event_bus",
-      "fromSide": "right",
-      "toSide": "left"
-    }
+    {"id": "cli-repository", "from": "theteam_cli", "to": "task_repository", "label": "every task command", "route": "orthogonal-h", "via": [[620, 150], [150, 150]]},
+    {"id": "cli-executor", "from": "theteam_cli", "to": "task_executor", "label": "run", "route": "orthogonal-h", "via": [[660, 150], [420, 150]]},
+    {"id": "cli-loop", "from": "theteam_cli", "to": "unified_loop", "label": "serve"},
+    {"id": "cli-metrics", "from": "theteam_cli", "to": "metrics_collector", "route": "orthogonal-h", "via": [[740, 150], [960, 150]]},
+    {"id": "cli-commentary", "from": "theteam_cli", "to": "commentary_controller", "label": "on, off, status", "variant": "dashed", "route": "orthogonal-h", "via": [[820, 150], [1230, 150]]},
+    {"id": "executor-breaker", "from": "task_executor", "to": "circuit_breaker", "label": "trip check", "variant": "security", "route": "orthogonal-h", "via": [[420, 380], [150, 380]]},
+    {"id": "executor-isolation", "from": "task_executor", "to": "agent_isolation", "label": "subprocess under a Layer 4 guard", "variant": "security", "route": "orthogonal-h", "via": [[420, 430], [420, 600]]},
+    {"id": "executor-audit", "from": "task_executor", "to": "audit_chain", "label": "record_task_event", "variant": "security", "route": "orthogonal-h", "via": [[460, 480], [960, 480]]},
+    {"id": "repository-audit", "from": "task_repository", "to": "audit_chain", "label": "record_event", "variant": "security", "route": "orthogonal-h", "via": [[150, 530], [960, 530]]},
+    {"id": "loop-breaker", "from": "unified_loop", "to": "circuit_breaker", "variant": "security", "route": "orthogonal-h", "via": [[600, 330], [150, 330]]},
+    {"id": "loop-limiter", "from": "unified_loop", "to": "resource_limiter", "variant": "security", "route": "orthogonal-h", "via": [[690, 380], [690, 600]]},
+    {"id": "loop-audit", "from": "unified_loop", "to": "audit_chain", "variant": "security", "route": "orthogonal-h", "via": [[770, 430], [770, 520], [960, 520]]},
+    {"id": "loop-health", "from": "unified_loop", "to": "health_monitor", "route": "orthogonal-h", "via": [[800, 380], [1230, 380]]},
+    {"id": "metrics-breaker", "from": "metrics_collector", "to": "circuit_breaker", "variant": "dashed", "route": "orthogonal-h", "via": [[960, 560], [150, 560]]},
+    {"id": "commentary-state", "from": "commentary_controller", "to": "state_store", "label": "markers and state", "route": "orthogonal-h", "via": [[1230, 730], [730, 730]]},
+    {"id": "audit-state", "from": "audit_chain", "to": "state_store", "variant": "dashed", "route": "orthogonal-h", "via": [[960, 700], [960, 730]]}
   ]
 }

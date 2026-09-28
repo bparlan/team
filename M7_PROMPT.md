@@ -81,14 +81,24 @@ The full surface, from the parser:
 | `theteam comment on` | `--max-members N` (default 3, hard cap 4), `--json` |
 | `theteam comment off` | `--json` |
 | `theteam comment status` | `--json` |
-| `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default `DEFAULT_INTERVAL`), `--json` |
+| `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default `DEFAULT_INTERVAL`) — **no local `--json`** |
 | global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT` or `$PWD`), `--json` |
 
-**R2.2 — Verify the table above against the parser before writing it down.** It is transcribed from
-`cli.py:600-745` at M6. If M6's `watch` lacks `--json` — and it does, unlike every other command —
-then that is a defect to report, not a row to document. §2:87 promises "Every command supports
-`--json`." Decide and say so in the report: fix the parser, or amend the contract. Do not silently
-document the exception. Do not silently leave the gap.
+**R2.2 — `watch` is the one command whose `--json` is not where §2:87 says it is.** Measured at M6:
+
+```
+$ theteam watch status --json        # exit 2 — argparse rejects it
+$ theteam --json watch status        # accepted, renders
+```
+
+Every other command declares `--json` on its own subparser, so it works on either side of the
+subcommand. `watch` declares it only on the parent, so it works *before* the subcommand only. That is
+an inconsistency, not a documented exception, and §2:87 promises every command supports `--json`.
+
+Decide and say so in the report: add `--json` to the `watch` subparser (two lines, matches every other
+command), or amend §2:87 to name the exception. Do not silently document the gap, and do not silently
+leave it. If you fix the parser, the renderer needs a text/JSON branch — that is no longer a
+one-liner, so say whether you did it or deferred it, and why.
 
 **R2.3 — Document exit codes and failure shapes.** All commands return `0` on success, `1` on error.
 `main()` catches `KeyError`/`ValueError` and bare `Exception`, emitting `{"ok": false, "error": ...}` in
@@ -218,10 +228,11 @@ from theteam.cli import build_parser
 p=build_parser()
 print(sorted(p._subparsers._group_actions[0].choices))"   # must equal the 11
 
-# R3: every documented command runs
-for c in bootstrap status tasks run history watch; do
+# R3: every documented command runs. `--once` is mandatory for watch or it loops forever.
+for c in bootstrap status tasks run history; do
   theteam --project-root "$PWD" "$c" --json >/dev/null 2>&1; echo "$c -> $?";
 done                                          # each must be 0 or an honest 1
+theteam --project-root "$PWD" watch status --once >/dev/null 2>&1; echo "watch -> $?"   # must be 0
 
 # R4: no stale claims survive
 grep -rn "python -m src.main\|archify\|PostgreSQL or other relational" README.md theteam/*.md   # 0

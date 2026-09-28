@@ -3,14 +3,14 @@
   "diagram_type": "workflow",
   "meta": {
     "title": "Active Usage Delivery Order",
-    "subtitle": "Six milestones ordered by user-visible outcome, each a runnable command with a falsification test",
+    "subtitle": "Seven milestones ordered by user-visible outcome, each a runnable command with a falsification test",
     "quality_profile": "showcase",
     "views": [
       {
         "id": "full",
         "label": "Full pipeline",
-        "focus": ["m0", "m1", "m2", "m3", "m4", "m5"],
-        "note": "M5 is a gate, not a promise"
+        "focus": ["m0", "m1", "m2", "m3", "m4", "m5", "m6"],
+        "note": "M6 is a renderer, not a gate"
       }
     ]
   },
@@ -38,6 +38,10 @@
     {
       "id": "advisory",
       "label": "Advisory"
+    },
+    {
+      "id": "terminal",
+      "label": "Terminal"
     }
   ],
   "phases": [
@@ -114,6 +118,15 @@
       "col": 5,
       "type": "messagebus",
       "width": 200
+    },
+    {
+      "id": "m6",
+      "label": "M6: The terminal shows the truth",
+      "sublabel": "Terminal renderer, stdlib only",
+      "lane": "terminal",
+      "col": 5,
+      "type": "backend",
+      "width": 230
     }
   ],
   "edges": [
@@ -141,6 +154,11 @@
       "from": "m4",
       "to": "m5",
       "label": "loop bounded"
+    },
+    {
+      "from": "m5",
+      "to": "m6",
+      "label": "team can comment"
     }
   ]
 }

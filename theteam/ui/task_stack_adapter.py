@@ -148,7 +148,10 @@ class TaskStackAdapter:
                 task = self.repo.get(task_id)
                 if not task:
                     return {"success": False, "error": f"Task not found: {task_id}"}
-                result = TaskExecutor(str(self.project_root)).execute_task(task)
+                result = TaskExecutor(
+                    str(self.project_root),
+                    breaker_states=self.repo.schedule()["last_run"],
+                ).execute_task(task)
                 self.refresh_immediately()
                 return result
             elif action == "loop":
@@ -158,7 +161,10 @@ class TaskStackAdapter:
                 return {"success": True, "task_id": task_id, "interval_minutes": interval, "next_run": next_run}
             elif action == "run-due":
                 from theteam.tasks.executor import TaskExecutor
-                executor = TaskExecutor(str(self.project_root))
+                executor = TaskExecutor(
+                    str(self.project_root),
+                    breaker_states=self.repo.schedule()["last_run"],
+                )
                 due = self.repo.due()
                 results = [executor.execute_task(t) for t in due]
                 self.refresh_immediately()

@@ -85,6 +85,7 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     """The trust surface: roster, state directory, task counts."""
+    from theteam.core.audit_chain import chain_line, read_chain_state
     from theteam.core.member import load_config
 
     project_root = _project_root(args)
@@ -96,24 +97,21 @@ def cmd_status(args: argparse.Namespace) -> int:
     roster = [m.get("id") for m in config.get("team", []) if m.get("enabled", True)]
     tasks = store.read_json(store.task_registry).get("tasks", {})
     scheduled = store.read_json(store.task_schedule).get("scheduled_tasks", {})
+    chain = read_chain_state(project_root)
 
     payload = {
         "project_root": project_root,
         "state_dir": str(store.root),
         "roster": {"active": len(roster), "members": roster},
         "tasks": {"registered": len(tasks), "scheduled": len(scheduled)},
-        "audit_chain": {
-            "file": str(store.audit_dir / "chain.jsonl"),
-            "verified": False,
-            "reason": "chain verification lands with the M4 audit wiring",
-        },
+        "audit_chain": chain,
     }
     lines = [
         f"project        {project_root}",
         f"state          {store.root}",
         f"roster         {len(roster)} members active ({', '.join(roster) or 'none'})",
         f"tasks          {len(tasks)} registered, {len(scheduled)} scheduled",
-        f"audit chain    not verifiable yet ({payload['audit_chain']['reason']})",
+        chain_line(chain),
     ]
     return _emit(args, payload, "\n".join(lines))
 
@@ -149,13 +147,18 @@ def cmd_tasks(args: argparse.Namespace) -> int:
 
     payload = TaskRepository(_project_root(args)).list_tasks()
     lines = [
-        f"{'order':>5}  {'id':<24} {'type':<12} {'pri':>3}  next run",
+        f"{'order':>5}  {'id':<24} {'type':<12} {'pri':>3}  "
+        f"{'next run':<30} breaker",
     ]
     for task in payload["tasks"]:
+        # `never run` is not `closed`. The column prints what was measured,
+        # and prints nothing measured as its own word (§3.3).
+        breaker = task["breaker"] or "never run"
         lines.append(
             f"{task['order'] if task['order'] is not None else '-':>5}  "
             f"{task['id']:<24} {str(task['type'] or '-'):<12} "
-            f"{task['priority']:>3}  {task['next_run'] or 'not scheduled'}"
+            f"{task['priority']:>3}  "
+            f"{(task['next_run'] or 'not scheduled'):<30} {breaker}"
         )
     lines.append(f"{payload['count']} tasks, {payload['yaml_count']} in YAML")
     return _emit(args, payload, "\n".join(lines))
@@ -169,7 +172,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     project_root = _project_root(args)
     repo = TaskRepository(project_root)
     due = repo.due(only=args.only)
-    executor = TaskExecutor(project_root)
+    # Breakers outlive the process: a task whose breaker tripped an hour ago
+    # must still be tripped now, or the trip only survives as long as the run
+    # that observed it. The repository owns the schedule (Layer 2), so it hands
+    # the measured state to the executor (Layer 3) rather than the reverse.
+    executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
 
     results = []
     for task in due:
@@ -182,9 +189,21 @@ def cmd_run(args: argparse.Namespace) -> int:
             results.append({"id": task["id"], "result": "skipped", "detail": detail})
             continue
         outcome = executor.execute_task(task)
+        breaker = outcome["breaker"]
+        consecutive = outcome["breaker_consecutive_failures"]
+        if outcome.get("skipped"):
+            # §3.2: the reason is the literal `breaker_open`, and it is
+            # persisted so `theteam tasks` and `theteam history` still show it
+            # in a later process.
+            reason = outcome["skip_reason"]
+            repo.record_run(task["id"], "skipped", reason, breaker=breaker,
+                            consecutive_failures=consecutive)
+            results.append({"id": task["id"], "result": "skipped", "detail": reason})
+            continue
         ok = outcome["overall_success"]
         repo.record_run(task["id"], "ok" if ok else "failed",
-                        "" if ok else f"returncode {outcome['phases'][-1].get('returncode')}")
+                        "" if ok else f"returncode {outcome['phases'][-1].get('returncode')}",
+                        breaker=breaker, consecutive_failures=consecutive)
         results.append({"id": task["id"], "result": "ok" if ok else "failed"})
 
     payload = {

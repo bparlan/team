@@ -216,19 +216,35 @@ def test_run_with_nothing_due_says_nothing_due_in_human_output(tmp_path, capsys)
 # ======= 5. a due task runs =======
 
 
+@pytest.mark.skipif(
+    not AgentIsolation.available(), reason="no Docker daemon"
+)
 def test_run_executes_a_due_task_and_advances_its_schedule(tmp_path, capsys):
     """
     A due task whose phase script is a real Python file that exits 0 is
     executed and reported `ok`, and its `next_run` moves forward by its
-    interval. Three observable effects: the script really ran (side-effect file
-    in the project root), `ran=1`, and the task is no longer due.
+    interval. Three observable effects: the script really ran (side-effect
+    file in the project root), `ran=1`, and the task is no longer due.
+
+    The phase declares `memory_limit_mb` because §5.4 makes the bound
+    mandatory and §5.1 requires the run to be Layer 4 guarded, so execution
+    happens in a container. This test previously declared an unbounded phase
+    and asserted a host-side side-effect file; that was the last artifact in
+    the tree assuming a phase could run with no bound, and the refusal is
+    covered on its own terms by the isolation tests. The intent is unchanged:
+    the script really executed.
     """
     root = _project(
         tmp_path,
         order=["probe"],
         tasks={
             "probe": {
-                "phases": [{"name": "probe", "script": "phases/probe.py"}]
+                "phases": [{
+                    "name": "probe",
+                    "script": "phases/probe.py",
+                    "memory_limit_mb": 64,
+                    "writable_project": True,
+                }]
             }
         },
         schedule={
@@ -241,7 +257,8 @@ def test_run_executes_a_due_task_and_advances_its_schedule(tmp_path, capsys):
     script = root / "phases" / "probe.py"
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text(
-        "import pathlib\npathlib.Path('probe-ran.txt').write_text('ran')\n",
+        "import pathlib\n"
+        "pathlib.Path('/workspace/probe-ran.txt').write_text('ran')\n",
         encoding="utf-8",
     )
     before = datetime.now(timezone.utc)
@@ -252,7 +269,8 @@ def test_run_executes_a_due_task_and_advances_its_schedule(tmp_path, capsys):
     assert payload["ran"] == 1
     assert payload["failures"] == 0
     assert payload["results"] == [{"id": "probe", "result": "ok"}]
-    # The script really executed, as a subprocess, in the project root.
+    # The script really executed, in the container, and its write landed on
+    # the host through the writable mount.
     assert (root / "probe-ran.txt").read_text(encoding="utf-8") == "ran"
 
     schedule = json.loads(

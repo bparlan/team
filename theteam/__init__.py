@@ -852,7 +852,7 @@ def run_task_stack(project_root, task_id, action="execute"):
     from theteam.tasks.executor import TaskExecutor
 
     repo = TaskRepository(project_root)
-    executor = TaskExecutor(project_root)
+    executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
 
     if action == "list":
         tasks = repo.all_tasks()

@@ -105,6 +105,21 @@ def _parse_next_run(value: Any) -> Optional[datetime]:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _audit(project_root: str, event: str, **fields: Any) -> None:
+    """
+    Append one mutation event to the project's hash-chained audit log (§1.2).
+
+    `AuditLogger` has no create/edit/delete event method, so the entry goes
+    through the shared `record_event`, which is the component's own append
+    path. The write is best-effort: an audit sink that cannot be written is
+    already broken, and a broken sink must not turn a successful task write
+    into a failed command.
+    """
+    from theteam.core.audit_chain import record_event
+
+    record_event(project_root, event, **fields)
+
+
 class TaskRepository:
     """The task store. YAML under `tasks/` is the only source."""
 
@@ -187,9 +202,14 @@ class TaskRepository:
             "priority": _priority(task),
             "order": rank.get(task["id"]),
             "next_run": entry.get("next_run"),
-            "interval_minutes": entry.get("interval_minutes"),
             "last_result": last.get("result"),
-            "breaker": last.get("breaker", "closed"),
+            # `None` means no breaker state has been measured for this task -
+            # it has never run. §3.3: the old `"closed"` default printed a
+            # measurement that was never taken, indistinguishable from a real
+            # closed breaker. A caller distinguishes "never run" from "closed"
+            # by the value being absent rather than reading it as a reading.
+            "breaker": last.get("breaker"),
+            "breaker_consecutive_failures": last.get("breaker_consecutive_failures"),
         }
 
     def list_tasks(self) -> Dict[str, Any]:
@@ -240,8 +260,18 @@ class TaskRepository:
             if self.get(task_id) is None
         )
 
-    def record_run(self, task_id: str, result: str, detail: str) -> None:
-        """Advance the schedule and note the outcome. The only writer here."""
+    def record_run(self, task_id: str, result: str, detail: str,
+                   breaker: Optional[str] = None,
+                   consecutive_failures: Optional[int] = None) -> None:
+        """Advance the schedule and note the outcome. The only writer here.
+
+        `breaker` is the state a real `CircuitBreaker` reported for this run,
+        as `CircuitState.value`. Both breaker arguments default to `None`,
+        which means "not measured", and are written as such: §3.3 forbids a
+        value here that reads like a measurement when nothing measured one.
+        A task's breaker survives process exit because it lives here, in the
+        same `last_run` entry `theteam tasks` and `theteam history` read.
+        """
         path = self._state_path(SCHEDULE_FILENAME)
         schedule = self.schedule()
         entry = schedule["scheduled_tasks"].get(task_id, {})
@@ -253,6 +283,8 @@ class TaskRepository:
             "result": result,
             "detail": detail,
             "at": _now().isoformat(),
+            "breaker": breaker,
+            "breaker_consecutive_failures": consecutive_failures,
         }
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
@@ -347,6 +379,9 @@ class TaskRepository:
         if renamed:
             self._move_schedule(task_id, new_id)
 
+        _audit(self.project_root, "task_edited", task_id=task_id, new_id=new_id,
+               fields=sorted(patch))
+
     def _move_schedule(self, old_id: str, new_id: str) -> None:
         """Carry the schedule entry and the run history to a renamed task."""
         schedule = self.schedule()
@@ -386,6 +421,8 @@ class TaskRepository:
             schedule[section].pop(task_id, None)
         self._save_schedule(schedule)
 
+        _audit(self.project_root, "task_deleted", task_id=task_id)
+
     def create(self, task_data: Dict[str, Any]) -> str:
         """
         Create a task from a definition and return its id.
@@ -419,6 +456,8 @@ class TaskRepository:
         self._yaml[task_id] = {**task_data, "order": next_order, "source_file": name}
         self._rank[task_id] = next_order
         self._order.append(task_id)
+
+        _audit(self.project_root, "task_created", task_id=task_id, source_file=name)
         return task_id
 
 

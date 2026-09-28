@@ -85,21 +85,6 @@ def test_serve_is_wired_to_its_handler():
     assert action.choices["serve"].get_default("func") is cmd_serve
 
 
-@pytest.mark.parametrize("command", [])
-def test_unimplemented_command_names_its_milestone(command, tmp_path, capsys):
-    """A command that does not exist says so. It never returns a fake result.
-
-    `comment` is implemented in M5 and is no longer in this sweep: it has its
-    own usage error path (a bare `theteam comment` returns 1 naming the
-    missing subcommand). The sweep is left parametrised over an empty list so
-    the helper stays honest about what it covers.
-    """
-    assert main(["--project-root", str(tmp_path), command]) == 1
-    out = capsys.readouterr().out
-    assert "not implemented yet" in out
-    assert "M" in out, "the refusal must name the milestone it lands in"
-
-
 def test_discuss_outside_omp_fails_with_the_command_to_run(tmp_path, capsys):
     """The §1.2 promise: it fails naming OMP and returns no opinion."""
     assert main(["--project-root", str(tmp_path), "discuss", "should we ship"]) == 1

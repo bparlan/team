@@ -2,8 +2,10 @@
 """
 Integrated Orchestrator for theteam skill enhancement.
 
-Coordinates EventBus with all major components (TerminalUI, TaskStack, SystemIntegration)
-for real-time, event-driven architecture.
+Coordinates EventBus with all major components (TaskStack, SystemIntegration)
+for real-time, event-driven architecture. TerminalUI was deleted in M4 as
+unparseable and unreachable; the 17 `if self.terminal_ui:` call sites it
+gated were dead branches, not optional behaviour, and went with it.
 """
 
 import os
@@ -53,9 +55,8 @@ class IntegratedOrchestrator:
         )
         self.metrics = MetricsCollector(port=_metrics_port())
         self.metrics.bind(loop=self.loop, limiter=self.loop.resource_limiter)
-        
+        # terminal_ui removed in M4 along with the TerminalUI class.
         # Component instances
-        self.terminal_ui = None
         self.task_stack_orchestrator = None
         self.system_integration = None
         self.state_manager = None
@@ -75,10 +76,10 @@ class IntegratedOrchestrator:
             'system_analyses': 0
         }
     
-    def initialize_components(self, terminal_ui=None, task_stack_orchestrator=None, 
-                            system_integration=None, state_manager=None, discussion_manager=None):
+    def initialize_components(self, task_stack_orchestrator=None,
+                              system_integration=None, state_manager=None,
+                              discussion_manager=None):
         """Initialize all components and establish event connections."""
-        self.terminal_ui = terminal_ui
         self.task_stack_orchestrator = task_stack_orchestrator
         self.system_integration = system_integration
         self.state_manager = state_manager
@@ -135,8 +136,6 @@ class IntegratedOrchestrator:
         self.event_bus.subscribe(EventType.STATE_CHANGED, self._handle_state_changed)
         
         # Component Events -> Event Bus
-        if self.terminal_ui:
-            self.terminal_ui.setup_event_handler(self._handle_ui_event)
         
         if self.task_stack_orchestrator:
             self.task_stack_orchestrator.setup_event_handler(self._handle_task_stack_event)
@@ -150,8 +149,6 @@ class IntegratedOrchestrator:
         logger.info(f"Task registered: {task_info.get('task_id', 'unknown')}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_task_list()
         
         # Check if task should be automatically scheduled
         if task_info.get('auto_schedule', False):
@@ -165,8 +162,6 @@ class IntegratedOrchestrator:
         logger.info(f"Task executed: {execution_result.get('task_id', 'unknown')} - Success: {execution_result.get('success', False)}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_task_status(execution_result)
         
         # Auto-schedule next run if task is recurring
         if execution_result.get('recurring', False):
@@ -182,8 +177,6 @@ class IntegratedOrchestrator:
         logger.info(f"Task scheduled: {schedule_info.get('task_id', 'unknown')} - Next run: {schedule_info.get('next_run', 'unknown')}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_task_schedule(schedule_info)
     
     def _handle_task_failed(self, event):
         """Handle task failure event."""
@@ -191,8 +184,6 @@ class IntegratedOrchestrator:
         logger.warning(f"Task failed: {failure_info.get('task_id', 'unknown')} - {failure_info.get('error', 'Unknown error')}")
         
         # Update UI with error
-        if self.terminal_ui:
-            self.terminal_ui.show_error(f"Task {failure_info.get('task_id', 'unknown')} failed: {failure_info.get('error', 'Unknown error')}")
         
         # Auto-retry if configured
         if failure_info.get('auto_retry', False):
@@ -208,8 +199,6 @@ class IntegratedOrchestrator:
         logger.info(f"System analysis started: {analysis_info.get('analysis_id', 'unknown')}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_system_analysis_status(analysis_info)
     
     def _handle_analysis_completed(self, event):
         """Handle system analysis completion event."""
@@ -219,8 +208,6 @@ class IntegratedOrchestrator:
         logger.info(f"System analysis completed: {analysis_result.get('analysis_id', 'unknown')}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_system_analysis_results(analysis_result)
         
         # Auto-generate tasks based on analysis results
         generated_tasks = self._generate_tasks_from_analysis(analysis_result)
@@ -236,8 +223,6 @@ class IntegratedOrchestrator:
         health_info = event.data
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_system_health(health_info)
         
         # Check thresholds and trigger alerts
         self._check_health_thresholds(health_info)
@@ -248,8 +233,6 @@ class IntegratedOrchestrator:
         logger.warning(f"System issue detected: {issue_info.get('issue', 'Unknown')}")
         
         # Update UI with warning
-        if self.terminal_ui:
-            self.terminal_ui.show_warning(issue_info.get('issue', 'System issue detected'))
         
         # Trigger immediate analysis if critical
         if issue_info.get('severity', 'low') == 'critical':
@@ -271,8 +254,6 @@ class IntegratedOrchestrator:
         logger.info(f"Task assigned: {assignment_info.get('task_id', 'unknown')} to {assignment_info.get('assignee', 'unknown')}")
         
         # Update UI
-        if self.terminal_ui:
-            self.terminal_ui.update_task_assignment(assignment_info)
     
     def _handle_state_changed(self, event):
         """Handle state change event."""
@@ -280,8 +261,6 @@ class IntegratedOrchestrator:
         logger.debug(f"State changed: {state_info.get('key', 'unknown')} = {state_info.get('value', 'unknown')}")
         
         # Update all components
-        if self.terminal_ui:
-            self.terminal_ui.update_state(state_info)
         
         if self.task_stack_orchestrator:
             self.task_stack_orchestrator.update_state(state_info)
@@ -307,15 +286,11 @@ class IntegratedOrchestrator:
         """Handle task stack event."""
         task_event = event.data
         # Forward to UI
-        if self.terminal_ui:
-            self.terminal_ui.receive_task_stack_event(task_event)
     
     def _handle_system_integration_event(self, event):
         """Handle system integration event."""
         system_event = event.data
         # Forward to UI
-        if self.terminal_ui:
-            self.terminal_ui.receive_system_integration_event(system_event)
     
     def _execute_ui_command(self, command: str, parameters: Dict[str, Any]):
         """Execute UI command."""
@@ -340,8 +315,6 @@ class IntegratedOrchestrator:
     def _handle_ui_refresh(self, event):
         """Handle UI refresh event."""
         logger.debug("UI refresh requested")
-        if self.terminal_ui:
-            self.terminal_ui.refresh_data()
     
     def _handle_ui_navigation(self, event):
         """Handle UI navigation event."""
@@ -349,8 +322,6 @@ class IntegratedOrchestrator:
         view = navigation.get('view')
         tab_index = navigation.get('tab_index')
         
-        if self.terminal_ui and view:
-            self.terminal_ui.navigate_to_view(view, tab_index)
     
     def _auto_schedule_task(self, task_info: Dict[str, Any]):
         """Automatically schedule a registered task."""
@@ -719,9 +690,6 @@ class IntegratedOrchestrator:
         # Verify all components are properly connected
         components_ok = True
         
-        if not self.terminal_ui:
-            logger.warning("Terminal UI not initialized")
-            components_ok = False
         
         if not self.task_stack_orchestrator:
             logger.warning("Task stack orchestrator not initialized")
@@ -744,18 +712,6 @@ class IntegratedOrchestrator:
     def _check_component_health(self):
         """Check health of all components."""
         # Check terminal UI
-        if self.terminal_ui:
-            ui_health = self.terminal_ui.get_health()
-            if not ui_health['healthy']:
-                self.event_bus.emit_event(
-                    EventType.SYSTEM_ISSUE_DETECTED,
-                    {
-                        'issue': f"Terminal UI unhealthy: {ui_health['issues']}",
-                        'component': 'terminal_ui',
-                        'severity': 'medium'
-                    },
-                    'integrated_orchestrator'
-                )
         
         # Check task stack orchestrator
         if self.task_stack_orchestrator:
@@ -822,7 +778,6 @@ class IntegratedOrchestrator:
             'event_bus': stats,
             'performance_metrics': self.performance_metrics,
             'components_initialized': {
-                'terminal_ui': self.terminal_ui is not None,
                 'task_stack_orchestrator': self.task_stack_orchestrator is not None,
                 'system_integration': self.system_integration is not None,
                 'state_manager': self.state_manager is not None,
@@ -853,41 +808,7 @@ class IntegratedOrchestrator:
 
         logger.info("Integrated orchestrator stopped")
 
-if __name__ == "__main__":
-    # Example usage
-    from theteam.ui.terminal_ui import TerminalUI
-    from theteam.core.system_integration import SystemIntegration
-    from theteam.core.state_manager import get_state_manager
-    from theteam.workflow.discussion_manager_refactored import create_discussion_manager
-
-    project_root = os.environ.get("THETEAM_PROJECT_ROOT") or os.getcwd()
-    state_manager = get_state_manager()
-    discussion_manager = create_discussion_manager(project_root, state_manager, use_legacy=True)
-
-    # Initialize integrated orchestrator
-    orchestrator = IntegratedOrchestrator(project_root)
-    terminal_ui = TerminalUI(project_root, state_manager, discussion_manager)
-    system_integration = SystemIntegration(project_root, state_manager, discussion_manager)
-
-    orchestrator.initialize_components(
-        terminal_ui=terminal_ui,
-        system_integration=system_integration,
-        state_manager=state_manager,
-        discussion_manager=discussion_manager
-    )
-    
-    # Start components
-    system_integration.start_system_monitoring()
-    terminal_ui.start()
-    
-    print("Integrated orchestrator started. Press Ctrl+C to stop.")
-    
-    try:
-        # Keep the main thread alive
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-        terminal_ui.stop()
-        system_integration.stop_system_monitoring()
-        orchestrator.stop()
+# The `__main__` block that used to live here started a TerminalUI, which M4
+# deleted as unparseable and unreachable. `python -m
+# theteam.core.integrated_orchestrator` is not a product entry point;
+# ARCHITECTURE.md §5.2 names exactly three, and this is not one of them.

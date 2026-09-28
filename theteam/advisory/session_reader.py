@@ -87,13 +87,18 @@ def session_slug(project_root: str) -> str:
     Home-relative when the project is under home, absolute otherwise, with
     every separator turned into a dash. Verified against session directories
     on multiple machines.
+    """
     root = Path(project_root).expanduser().resolve()
     home = Path.home().resolve()
     try:
         relative = root.relative_to(home).as_posix()
     except ValueError:
         relative = root.as_posix()
-    return relative.replace("/", "-")
+    # OMP prefixes the relative path with a leading dash. Measured: the
+    # directory for /Users/bparlan/devcode/team is `-devcode-team`, not
+    # `devcode-team`. Without the dash the reader looks in a directory that
+    # does not exist and reports no_session against a live session.
+    return "-" + relative.replace("/", "-")
 
 
 def _is_subagent(path: Path) -> bool:

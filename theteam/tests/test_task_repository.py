@@ -26,7 +26,6 @@ from theteam.cli import main
 from theteam.tasks.repository import (
     TaskDefinitionError,
     TaskRepository,
-    read_task_order,
 )
 
 
@@ -38,17 +37,10 @@ def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=())
     Build an isolated project: `tasks/TASK_ORDER`, `tasks/task-*.yaml`, and the
     state files under `<root>/.omp/theteam/`. Nothing is read from the real repo.
     """
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
-    if order:
-        body = "# execution order\n" + "".join(
-            f"{i}. {task_id}\n" for i, task_id in enumerate(order, start=1)
-        )
-        (tasks_dir / "TASK_ORDER").write_text(body, encoding="utf-8")
-    for task_id, fields in tasks.items():
-        payload = {"id": task_id}
-        payload.update(fields)
+    for i, task_id in enumerate(order):
+        payload = {"id": task_id, "order": i}
+        payload.update(tasks.get(task_id, {}))
         (tasks_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )

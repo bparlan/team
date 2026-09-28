@@ -449,11 +449,14 @@ def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path
         tmp_path,
         order=["check", "health-check"],
         tasks={"check": {"name": "C"}, "health-check": {"name": "H"}},
-    )
-
-    TaskRepository(str(root)).delete("check")
-
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["health-check"]
+def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path):
+    """
+    Deleting `check` must not delete the `health-check` task. The old
+    `TASK_ORDER` reader matched ids by substring, so every line mentioning
+    the id went out and the surviving task lost its position while its file
+    was untouched. Order is now a per-task key, so removing the file removes
+    the entry and nothing else.
+    """
     # The unrelated task is intact: still on disk, still listed, still first.
     assert (root / "tasks" / "task-health-check.yaml").exists()
     payload = TaskRepository(str(root)).list_tasks()
@@ -512,12 +515,15 @@ def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
     assert [t["id"] for t in fresh.due()] == ["new"]
 
 
-def test_create_appends_a_parseable_numbered_line(tmp_path):
+
+
+def test_create_appends_to_the_end_of_the_declared_order(tmp_path):
     """
-    `create` appends to a numbered list. Numbering from the line count rather
-    than the task count, and joining a trailing newline, produced a blank line
-    and a number that skipped ahead - the file is the order, and an order that
-    no longer parses stops ordering anything.
+    `create` appends to the end of the declared order, writing `order:` into the
+    new task's YAML. Numbering from the line count rather than the task count,
+    and joining onto a trailing newline, produced a blank line and a number
+    that skipped ahead - the order is the file, and an order that no longer
+    parses stops ordering anything.
     """
     root = _project(tmp_path, order=["alpha", "beta"], tasks={"alpha": {}, "beta": {}})
 
@@ -526,7 +532,11 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
     TaskRepository(str(root)).create({"id": "probe2"})
 
     assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
-
+    # The order key is written with the file, so a fresh repository reads it
+    # back - and it is one past the current maximum, never a line count.
+    assert yaml.safe_load((root / "tasks" / "task-probe.yaml").read_text())["order"] == 2
+    assert yaml.safe_load((root / "tasks" / "task-probe2.yaml").read_text())["order"] == 3
+    assert [t["order"] for t in TaskRepository(str(root)).all_tasks()] == [0, 1, 2, 3]
 
 def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path, capsys):
     """

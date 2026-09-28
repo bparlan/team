@@ -26,6 +26,7 @@ from theteam.cli import main
 from theteam.tasks.repository import (
     TaskDefinitionError,
     TaskRepository,
+    read_task_order,
 )
 
 
@@ -466,7 +467,7 @@ def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path
 
     TaskRepository(str(root)).delete("check")
 
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["health-check"]
+    assert read_task_order(str(root)) == ["health-check"]
     # The unrelated task is intact: still on disk, still listed, still first.
     assert (root / "tasks" / "task-health-check.yaml").exists()
     payload = TaskRepository(str(root)).list_tasks()
@@ -517,7 +518,7 @@ def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
     assert not (root / "tasks" / "task-old.yaml").exists()
     assert (root / "tasks" / "task-new.yaml").exists()
     # The order follows, by parsed id, and the unrelated task is untouched.
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["new", "keeper"]
+    assert read_task_order(str(root)) == ["new", "keeper"]
     # A rename must not orphan a schedule.
     fresh = TaskRepository(str(root))
     assert list(fresh.schedule()["scheduled_tasks"]) == ["new"]
@@ -538,7 +539,7 @@ def test_create_appends_a_parseable_numbered_line(tmp_path):
     repo.create({"id": "probe"})
     TaskRepository(str(root)).create({"id": "probe2"})
 
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
+    assert read_task_order(str(root)) == ["alpha", "beta", "probe", "probe2"]
     body = (root / "tasks" / "TASK_ORDER").read_text()
     assert "\n\n" not in body, "a blank line splits the order file"
     assert [line for line in body.splitlines() if not line.strip()] == []
@@ -582,7 +583,7 @@ def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path,
 
     fresh = TaskRepository(str(root))
     assert not (root / "tasks" / "task-probe.yaml").exists()
-    assert "probe" not in [t["id"] for t in TaskRepository(str(root)).all_tasks()]
+    assert "probe" not in read_task_order(str(root))
     assert fresh.get("probe") is None
     assert "probe" not in fresh.schedule()["scheduled_tasks"]
     assert fresh.orphaned_schedules() == []
@@ -608,7 +609,7 @@ def test_a_task_is_created_only_if_every_phase_has_a_memory_bound(tmp_path, caps
 
     assert "memory_limit_mb" in str(caught.value)
     assert not (root / "tasks" / "task-unbounded.yaml").exists()
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["keep"]
+    assert read_task_order(str(root)) == ["keep"]
 
 
 def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):

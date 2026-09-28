@@ -2,36 +2,52 @@ id: maintenance
 name: Maintenance
 type: maintenance
 priority: 5
-description: Perform routine maintenance including cache cleaning, log rotation, and temporary file cleanup
+description: Perform routine maintenance including cache cleaning, log rotation, and
+  temporary file cleanup
 failure_handling: retry
 context:
-  - Temporary files
-  - Log directories
-  - Cache directories
-expected_output: "Routine maintenance complete: cache cleaned, logs rotated"
+- Temporary files
+- Log directories
+- Cache directories
+expected_output: 'Routine maintenance complete: cache cleaned, logs rotated'
 phases:
-  - name: execute
-    script: scripts/loop_maintenance.py
-    args: []
-    timeout_seconds: 300
-    memory_limit_mb: 64
-# The prompt is the whole task document, verbatim. An agent receives this
-# text; anything lost here is a task the user can no longer run.
-prompt: |-
-  # Task: maintenance
+- name: execute
+  script: scripts/loop_maintenance.py
+  args: []
+  timeout_seconds: 300
+  memory_limit_mb: 64
+prompt: '# Task: maintenance
+
   ## Type
+
   maintenance
+
   ## Priority
+
   5
+
   ## Description
-  Perform routine maintenance including cache cleaning, log rotation, and temporary file cleanup
+
+  Perform routine maintenance including cache cleaning, log rotation, and temporary
+  file cleanup
+
   ## Execution
+
   python3 scripts/loop_maintenance.py
+
   ## Context
+
   - Temporary files
+
   - Log directories
+
   - Cache directories
+
   ## Expected Output
+
   Routine maintenance complete: cache cleaned, logs rotated
+
   ## Failure Handling
-  retry
+
+  retry'
+order: 3

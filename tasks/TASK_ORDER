@@ -1,5 +1,0 @@
-# Task Execution Order (highest priority first)
-1. health-check
-2. infrastructure-check
-3. system-awareness
-4. maintenance

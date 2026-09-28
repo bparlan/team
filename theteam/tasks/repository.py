@@ -19,7 +19,6 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 TASKS_DIRNAME = "tasks"
-TASK_ORDER_FILENAME = "TASK_ORDER"
 SCHEDULE_FILENAME = "task-schedule.json"
 
 # A task is readable if it names an id. Everything else is optional, and a
@@ -28,10 +27,6 @@ REQUIRED_FIELDS = ("id",)
 
 # Paths under this directory are dead: the layout was deleted in M1.
 DEAD_DIR = ".mp/theteam"
-
-# `TASK_ORDER` is a numbered list, optionally behind a `#` comment header.
-_ORDER_LINE = re.compile(r"^\s*(\d+)\.\s+(\S+)\s*$", re.MULTILINE)
-
 
 class TaskDefinitionError(ValueError):
     """A task file that exists but is not a task. Named, never swallowed."""
@@ -91,33 +86,6 @@ def _load_yaml(path: str) -> Dict[str, Any]:
     return _check_task(data, os.path.basename(path))
 
 
-def _order_path(project_root: str) -> str:
-    return os.path.join(project_root, TASKS_DIRNAME, TASK_ORDER_FILENAME)
-
-
-def read_task_order(project_root: str) -> List[str]:
-    """Ids in `TASK_ORDER` sequence. Empty when the file is absent."""
-    path = _order_path(project_root)
-    if not os.path.exists(path):
-        return []
-    with open(path, "r", encoding="utf-8") as handle:
-        return [m.group(2) for m in _ORDER_LINE.finditer(handle.read())]
-
-
-def _write_task_order(project_root: str, ids: List[str]) -> None:
-    """
-    Rewrite `TASK_ORDER` from a list of ids, renumbering from the list.
-
-    One writer, so no caller can leave a blank line or number an entry from
-    anything but the ids actually in the file. `TASK_ORDER` is a numbered
-    list; a line that does not parse is an entry that stops ordering anything.
-    """
-    header = "# Task execution order (highest priority first)\n"
-    body = "".join(f"{i}. {task_id}\n" for i, task_id in enumerate(ids, start=1))
-    with open(_order_path(project_root), "w", encoding="utf-8") as handle:
-        handle.write(header + body)
-
-
 def _priority(task: Dict[str, Any]) -> int:
     """Priority as a number. Non-numeric is reported as unprioritised, not 0-claimed."""
     value = task.get("priority", 0)
@@ -143,12 +111,12 @@ class TaskRepository:
         self.project_root = os.path.abspath(project_root)
         self.tasks_dir = os.path.join(self.project_root, TASKS_DIRNAME)
         self._yaml = self._read_yaml()
-        # `order` is a per-task key (§5.4). `TASK_ORDER` is the transition
-        # bridge: it is read to seed the order of tasks that predate the key,
-        # and re-written on every create/edit/delete so the bridge stays
-        # consistent while it exists. It is deleted when every task carries
-        # the key, at which point `self._order` is derived from YAML alone.
-        self._rank = {task_id: i for i, task_id in enumerate(self._order)}
+        # `order` is a per-task key (§5.4). `TASK_ORDER` is no longer a source.
+        # We seed `_rank` from those keys, and derive `_order` from that.
+        self._rank = {t: self._yaml[t].get("order", 999) for t in self._yaml}
+        self._order = sorted(self._yaml, key=lambda t: self._rank[t])
+        # `read_task_order` and `_write_task_order` are removed; they read/write
+        # the `TASK_ORDER` file, which is now obsolete.
 
     # -- sources -----------------------------------------------------------
 
@@ -300,36 +268,11 @@ class TaskRepository:
     # anyway and the next `TaskRepository()` construction raised - one edit
     # made the whole project unreadable.
 
-    def _reindex(self) -> None:
-        self._order = read_task_order(self.project_root)
-        self._rank = {task_id: i for i, task_id in enumerate(self._order)}
-
     def _save_schedule(self, schedule: Dict[str, Any]) -> None:
         path = self._state_path(SCHEDULE_FILENAME)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
-
-    def schedule_task(self, task_id: str, interval_minutes: int) -> str:
-        """
-        Schedule a task on an interval, returning its ISO `next_run`.
-
-        Scheduling lives here so the state directory is resolved in one place.
-        The CLI must not assemble a schedule file by hand.
-
-        Raises:
-            KeyError: the id names no task.
-        """
-        if self.get(task_id) is None:
-            raise KeyError(f"Task '{task_id}' not found")
-        next_run = _now() + timedelta(minutes=int(interval_minutes))
-        schedule = self.schedule()
-        schedule["scheduled_tasks"][task_id] = {
-            "next_run": next_run.isoformat(),
-            "interval_minutes": int(interval_minutes),
-        }
-        self._save_schedule(schedule)
-        return next_run.isoformat()
 
     def _write_task(self, name: str, task: Dict[str, Any]) -> None:
         """Write the task as the operator's file, not as the reader sees it.
@@ -379,12 +322,8 @@ class TaskRepository:
         del self._yaml[task_id]
         self._yaml[new_id] = {**merged, "source_file": new_name}
 
-        if os.path.exists(_order_path(self.project_root)):
-            # Renumbered from the parsed ids, so the renamed entry is replaced
-            # by exact match and never by substring.
-            _write_task_order(self.project_root,
-                              [new_id if t == task_id else t for t in self._order])
-            self._reindex()
+        # Order lives in the task's `order` key. A rename carries the key
+        # across with the file, so nothing is rewritten here.
 
         if renamed:
             self._move_schedule(task_id, new_id)
@@ -418,11 +357,10 @@ class TaskRepository:
         del self._yaml[task_id]
 
         if task_id in self._order:
-            # Exact id, from the parsed list. A substring filter took out
-            # every line mentioning the id - deleting `check` also deleted
-            # the `health-check` line, leaving that task unordered but present.
-            _write_task_order(self.project_root, [t for t in self._order if t != task_id])
-            self._reindex()
+            # The order is a per-task key, so removing the file removes the
+            # entry. Nothing else to rewrite.
+            self._order.remove(task_id)
+            del self._rank[task_id]
 
         schedule = self.schedule()
         for section in ("scheduled_tasks", "last_run"):
@@ -453,13 +391,14 @@ class TaskRepository:
         self._write_task(name, {**task_data, "source_file": name})
         self._yaml[task_id] = {**task_data, "source_file": name}
 
-        if os.path.exists(_order_path(self.project_root)):
-            # Numbered from the id list, not the line count: the file carries a
-            # comment header and a trailing newline, and both throw the line
-            # count off. Joining onto a trailing newline also leaves a blank
-            # line, which splits the order file in two.
-            _write_task_order(self.project_root, self._order + [task_id])
-            self._reindex()
+        self._yaml[task_id] = {**task_data, "source_file": name}
+        # Order lives in the task's `order` key. A new task is appended, so
+        # its `order` is one past the current maximum - never a line count,
+        # which throws off with comment headers and trailing newlines.
+        next_order = max((t.get("order", 0) for t in self._yaml.values()), default=-1) + 1
+        self._yaml[task_id]["order"] = next_order
+        self._rank[task_id] = next_order
+        self._order.append(task_id)
         return task_id
 
 

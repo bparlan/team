@@ -2,38 +2,55 @@ id: system-awareness
 name: System Awareness
 type: analysis
 priority: 7
-description: "Run comprehensive system architecture analysis (4-phase: structure, documentation, architecture, infrastructure) with health scoring and team commentary"
+description: 'Run comprehensive system architecture analysis (4-phase: structure,
+  documentation, architecture, infrastructure) with health scoring and team commentary'
 failure_handling: skip
 context:
-  - Project structure and module organization
-  - Documentation quality and completeness
-  - Architecture patterns and technical debt
-  - Infrastructure build systems and configs
-expected_output: "System awareness analysis complete: grade A-F, score 0.00-1.00/1.00"
+- Project structure and module organization
+- Documentation quality and completeness
+- Architecture patterns and technical debt
+- Infrastructure build systems and configs
+expected_output: 'System awareness analysis complete: grade A-F, score 0.00-1.00/1.00'
 phases:
-  - name: execute
-    script: scripts/sa_runner.py
-    args: []
-    timeout_seconds: 300
-    memory_limit_mb: 64
-# The prompt is the whole task document, verbatim. An agent receives this
-# text; anything lost here is a task the user can no longer run.
-prompt: |-
-  # Task: system-awareness
+- name: execute
+  script: scripts/sa_runner.py
+  args: []
+  timeout_seconds: 300
+  memory_limit_mb: 64
+prompt: '# Task: system-awareness
+
   ## Type
+
   analysis
+
   ## Priority
+
   7
+
   ## Description
-  Run comprehensive system architecture analysis (4-phase: structure, documentation, architecture, infrastructure) with health scoring and team commentary
+
+  Run comprehensive system architecture analysis (4-phase: structure, documentation,
+  architecture, infrastructure) with health scoring and team commentary
+
   ## Execution
+
   python3 scripts/sa_runner.py
+
   ## Context
+
   - Project structure and module organization
+
   - Documentation quality and completeness
+
   - Architecture patterns and technical debt
+
   - Infrastructure build systems and configs
+
   ## Expected Output
+
   System awareness analysis complete: grade A-F, score 0.00-1.00/1.00
+
   ## Failure Handling
-  skip
+
+  skip'
+order: 2

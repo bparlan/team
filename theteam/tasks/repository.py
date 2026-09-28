@@ -28,6 +28,7 @@ REQUIRED_FIELDS = ("id",)
 # Paths under this directory are dead: the layout was deleted in M1.
 DEAD_DIR = ".mp/theteam"
 
+
 class TaskDefinitionError(ValueError):
     """A task file that exists but is not a task. Named, never swallowed."""
 
@@ -111,8 +112,8 @@ class TaskRepository:
         self.project_root = os.path.abspath(project_root)
         self.tasks_dir = os.path.join(self.project_root, TASKS_DIRNAME)
         self._yaml = self._read_yaml()
-        # `order` is a per-task key (§5.4). `TASK_ORDER` is no longer a source.
-        # We seed `_rank` from those keys, and derive `_order` from that.
+        # Order is now a per-task key (§5.4). We seed `_rank` from those
+        # keys. `TASK_ORDER` is no longer a source.
         self._rank = {t: self._yaml[t].get("order", 999) for t in self._yaml}
         self._order = sorted(self._yaml, key=lambda t: self._rank[t])
         # `read_task_order` and `_write_task_order` are removed; they read/write
@@ -396,7 +397,8 @@ class TaskRepository:
         # its `order` is one past the current maximum - never a line count,
         # which throws off with comment headers and trailing newlines.
         next_order = max((t.get("order", 0) for t in self._yaml.values()), default=-1) + 1
-        self._yaml[task_id]["order"] = next_order
+        self._write_task(name, {**task_data, "order": next_order, "source_file": name})
+        self._yaml[task_id] = {**task_data, "order": next_order, "source_file": name}
         self._rank[task_id] = next_order
         self._order.append(task_id)
         return task_id

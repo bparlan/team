@@ -583,10 +583,27 @@ def cmd_watch(args: argparse.Namespace) -> int:
     """
     from theteam.ui.terminal import watch
 
+    project_root = _project_root(args)
+
+    # `--json` is honoured here as every other command honours it, so a
+    # consumer can read the frame the renderer draws from a scripted run
+    # instead of scraping a TUI. The payload is the SAME one `status`,
+    # `tasks`, and `history` emit - read through the same `*_payload`
+    # functions - so this branch cannot drift from the machine surface.
+    # Without `--json` nothing below changes: the renderer still owns the
+    # frame, and the three machine commands still print byte-identically.
+    if getattr(args, "json", False):
+        readers = {"status": status_payload, "tasks": tasks_payload,
+                   "history": history_payload}
+        payload, lines = readers[args.view](project_root)
+        if payload is None:
+            return _fail(args, "watch", lines if isinstance(lines, str) else lines[0])
+        return _emit(args, payload, "\n".join(lines))
+
     if args.once:
-        return watch(_project_root(args), args.view, once=True)
+        return watch(project_root, args.view, once=True)
     try:
-        return watch(_project_root(args), args.view, interval=args.interval)
+        return watch(project_root, args.view, interval=args.interval)
     except KeyboardInterrupt:
         # Ctrl-C is how a watch loop is meant to end. Returning the error
         # code would report a normal exit as a failure.
@@ -732,6 +749,14 @@ def build_parser() -> argparse.ArgumentParser:
                        help="Which surface to render.")
     watch.add_argument("--once", action="store_true",
                        help="Render one frame and exit.")
+    # Declared on the subparser as well as the parent, exactly like every other
+    # command, so `theteam watch status --json` works. Before M7 this flag
+    # existed only on the parent, which meant `watch` was the one command
+    # whose `--json` had to precede the subcommand - an inconsistency, not a
+    # documented exception. `SUPPRESS` keeps the subparser copy from clobbering
+    # a value already parsed from the parent.
+    watch.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                       help="Machine-readable output.")
     # The renderer owns the cadence; the parser only names it for `--help`.
     from theteam.ui.terminal import DEFAULT_INTERVAL
     watch.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,

@@ -1,173 +1,55 @@
-# theteam Command Reference
+# theteam CLI reference
 
-Complete command inventory for the theteam skill and project.
+**This file is a pointer, not a second reference.** The complete, verified command surface —
+every command, flag, default, cap, exit code, and JSON shape — lives in the root
+[`README.md`](../README.md) and in [`ARCHITECTURE.md`](../ARCHITECTURE.md) Part 2. Read those.
 
-## Core Skill Commands
+The previous version of this file documented `python3 theteam/__init__.py --bootstrap`,
+`subskills/task-stack/orchestrator.py`, `scripts/loop_controller.py`, and
+`theteam/ui/terminal_ui.py`. None of those exist any more: `__main__.py` and
+`subskills/task_stack/` were deleted in M1–M2, `scripts/loop_controller.py` was never in the
+tree, and `terminal_ui.py` was replaced by `theteam/ui/terminal.py`. A second CLI document is
+exactly the kind of thing that drifts, so it does not live here.
 
-### `theteam/__init__.py` — Main Orchestrator
+## The surface, in one place
+
 ```bash
-# Bootstrap (first run only)
-python3 theteam/__init__.py --bootstrap
-
-# Run team discussion on a topic
-python3 theteam/__init__.py --topic "Database optimization"
-
-# Execute a task
-python3 theteam/__init__.py --task folder-monitoring --task-action execute
-
-# List tasks
-python3 theteam/__init__.py --task folder-monitoring --task-action list
-
-# Check task status
-python3 theteam/__init__.py --task folder-monitoring --task-action status
+theteam --help          # eleven subcommands
+theteam <command> --help
 ```
 
-### `theteam/bin/theteam_config.py` — Configuration
+| Command | Summary |
+|---|---|
+| `bootstrap` | Generate a team for this project. |
+| `status` | Roster, state directory, task counts, audit chain. |
+| `discuss <topic>` | One-shot team discussion, this turn only. |
+| `serve` | Prometheus metrics endpoint. The only server. |
+| `loop <task_id>` | Schedule one registered task on an interval. |
+| `tasks` | List every task and its state. |
+| `run` | Execute everything currently due. |
+| `history` | Per-task success rate, last run, last failure. |
+| `task create\|edit\|delete\|show` | Single-task operations. |
+| `comment on\|off\|status` | Continuous in-context commentary. |
+| `watch status\|tasks\|history` | The trust surface, rendered in the terminal. |
+
+Global flags: `--project-root PATH` and `--json`, both accepted on either side of the subcommand.
+
+## The helper scripts in `theteam/bin/`
+
+Two scripts remain. They are helpers for the skill's config and report generation, not part of
+the user-facing CLI. Note the invocation form: they import `bin.utilities` as a top-level
+package, so they need `theteam/` on the path.
+
 ```bash
-# Validate config
-python3 theteam/bin/theteam_config.py validate theteam.config --json
+# Validate a project config
+PYTHONPATH=theteam python3 theteam/bin/theteam_config.py validate theteam.config --json
 
-# List team members
-python3 theteam/bin/theteam_config.py roster theteam.config --json
-
-# Initialize from template
-python3 theteam/bin/theteam_config.py init theteam/theteam-template.config /tmp/answers.json theteam.config
+# Build a report from member notes and a synthesis file
+PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
+  --topic "..." --notes-dir /tmp/notes --synthesis /tmp/synthesis.json \
+  --out /tmp/report.md --project "<name>" --expected-ids architect,pragmatist
 ```
 
-### `theteam/bin/theteam_report.py` — Report Generation
-```bash
-python3 theteam/bin/theteam_report.py build \
-  --topic "System Analysis" \
-  --notes-dir /tmp/theteam-notes-20260921 \
-  --synthesis /tmp/theteam-synthesis-20260921.json \
-  --out .omp/theteam/reports/20260921-system-analysis.md \
-  --project "team" \
-  --expected-ids architect,pragmatist,skeptic,designer,devops
-```
-
-## Task Stack Commands
-
-### `theteam/subskills/task-stack/orchestrator.py`
-```bash
-# Register a task
-python3 theteam/subskills/task-stack/orchestrator.py register tasks/system-awareness/folder-monitoring.yaml
-
-# Execute a task
-python3 theteam/subskills/task-stack/orchestrator.py execute folder-monitoring
-
-# Loop a task (recurring)
-python3 theteam/subskills/task-stack/orchestrator.py loop folder-monitoring 30
-
-# Run all due tasks
-python3 theteam/subskills/task-stack/orchestrator.py run-due
-
-# Convert conversation to task
-python3 theteam/subskills/task-stack/orchestrator.py convert-conversation 50
-
-# Convert user request to task
-python3 theteam/subskills/task-stack/orchestrator.py convert-request "Analyze system performance"
-
-# List all tasks
-python3 theteam/subskills/task-stack/orchestrator.py list
-
-# Show status
-python3 theteam/subskills/task-stack/orchestrator.py status
-```
-
-### `theteam/subskills/task-stack/daemon.py`
-```bash
-# Start daemon
-python3 theteam/subskills/task-stack/daemon.py start
-
-# Stop daemon
-python3 theteam/subskills/task-stack/daemon.py stop
-
-# Check daemon status
-python3 theteam/subskills/task-stack/daemon.py status
-```
-
-## System Awareness Commands
-
-### `scripts/sa_runner.py` — Consolidated System Awareness Runner
-```bash
-python3 scripts/sa_runner.py  # Run analysis with terminal visibility
-python3 scripts/sa_runner.py --project-root /path/to/project
-
-# Terminal monitoring commands
-python3 scripts/sa_runner.py status       # View loop and health status
-python3 scripts/sa_runner.py health-check  # Quick health with explicit exit codes
-python3 scripts/sa_runner.py json         # Machine-readable status
-```
-### `theteam/core/folder_monitor.py`
-```bash
-# Monitor folder structure
-python3 theteam/core/folder_monitor.py --compact
-```
-
-## UI Commands
-
-### `theteam/ui/terminal_ui.py` — Curses TUI
-```bash
-# Launch terminal UI
-python3 theteam/ui/terminal_ui.py
-
-# Launch with specific project root
-python3 theteam/ui/terminal_ui.py /path/to/project
-```
-
-### `theteam/core/integrated_orchestrator.py`
-```bash
-# Launch integrated orchestrator with all components
-python3 theteam/core/integrated_orchestrator.py
-```
-
-## Loop Control Commands
-
-### `scripts/loop_controller.py`
-```bash
-# Start loop
-python3 scripts/loop_controller.py start
-
-# Stop loop
-python3 scripts/loop_controller.py stop
-
-# Check status
-python3 scripts/loop_controller.py status
-
-# Reset loop
-python3 scripts/loop_controller.py reset
-
-# Run next task
-python3 scripts/loop_controller.py run-next-task
-```
-
-## Workflow Commands
-
-### `theteam/workflow/context_aggregator.py`
-```bash
-# Aggregate project context
-python3 theteam/workflow/context_aggregator.py /path/to/project
-```
-
-## Testing Commands
-
-### Run all tests
-```bash
-python3 -m pytest theteam/tests/ -v
-```
-
-### Run specific test
-```bash
-python3 -m pytest theteam/tests/test_theteam.py -v
-```
-
-## Quick Status Check
-```bash
-# Check daemon
-python3 theteam/subskills/task-stack/daemon.py status
-
-# Check orchestrator
-python3 theteam/subskills/task-stack/orchestrator.py status
-
-# Check loop
-python3 scripts/loop_controller.py status
+Running them as `python3 theteam/bin/theteam_config.py` without `PYTHONPATH=theteam` fails with
+`ModuleNotFoundError: No module named 'bin'`. That is how the skill imports them internally
+(`from .bin.theteam_config import ...`), not how a user runs them.

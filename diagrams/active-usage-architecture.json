@@ -3,15 +3,15 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Active Usage Architecture",
-    "subtitle": "Re-derived from the theteam/ import graph at M7: every arrow is a real import, every component is a module in the tree",
-    "quality_profile": "showcase",
+    "subtitle": "Re-derived from the theteam/ source at M7: every component is a module in the tree, solid arrows are real imports, dashed ones are real file contracts",
+    "quality_profile": "standard",
     "repository": {
       "url": "https://github.com/bparlan/team",
       "provider": "github",
       "link_mode": "local-only",
       "revision": "bba1c08e5363cbb34494b8b98e65b72d30374895"
     },
-    "viewBox": [1440, 860],
+    "viewBox": [1560, 960],
     "views": [
       {
         "id": "entry",
@@ -36,8 +36,8 @@
       "type": "backend",
       "label": "theteam CLI",
       "sublabel": "cli.py, the only entry point",
-      "pos": [560, 40],
-      "size": [280, 60],
+      "pos": [610, 40],
+      "size": [300, 60],
       "sources": [{"path": "theteam/cli.py", "line": 604, "label": "build_parser"}]
     },
     {
@@ -45,8 +45,8 @@
       "type": "database",
       "label": "TaskRepository",
       "sublabel": "tasks/repository.py",
-      "pos": [40, 200],
-      "size": [220, 64],
+      "pos": [40, 260],
+      "size": [230, 60],
       "sources": [{"path": "theteam/tasks/repository.py", "line": 123}]
     },
     {
@@ -54,8 +54,8 @@
       "type": "backend",
       "label": "TaskExecutor",
       "sublabel": "tasks/executor.py",
-      "pos": [310, 200],
-      "size": [220, 64],
+      "pos": [320, 260],
+      "size": [230, 60],
       "sources": [{"path": "theteam/tasks/executor.py", "line": 57}]
     },
     {
@@ -63,8 +63,8 @@
       "type": "backend",
       "label": "UnifiedLoop",
       "sublabel": "core/unified_loop.py",
-      "pos": [580, 200],
-      "size": [220, 64],
+      "pos": [600, 260],
+      "size": [230, 60],
       "sources": [{"path": "theteam/core/unified_loop.py", "line": 142}]
     },
     {
@@ -72,8 +72,8 @@
       "type": "messagebus",
       "label": "MetricsCollector",
       "sublabel": "core/metrics.py",
-      "pos": [850, 200],
-      "size": [220, 64],
+      "pos": [880, 260],
+      "size": [230, 60],
       "sources": [{"path": "theteam/core/metrics.py"}]
     },
     {
@@ -81,53 +81,53 @@
       "type": "backend",
       "label": "Commentary",
       "sublabel": "advisory/commentary.py",
-      "pos": [1120, 200],
-      "size": [220, 64],
+      "pos": [1160, 260],
+      "size": [230, 60],
       "sources": [{"path": "theteam/advisory/commentary.py", "line": 111}]
-    },
-    {
-      "id": "circuit_breaker",
-      "type": "security",
-      "label": "CircuitBreaker",
-      "sublabel": "core/circuit_breaker.py",
-      "pos": [40, 600],
-      "size": [220, 64],
-      "sources": [{"path": "theteam/core/circuit_breaker.py", "line": 57}]
     },
     {
       "id": "agent_isolation",
       "type": "security",
       "label": "AgentIsolation",
       "sublabel": "core/agent_isolation.py",
-      "pos": [310, 600],
-      "size": [220, 64],
+      "pos": [40, 620],
+      "size": [230, 60],
       "sources": [{"path": "theteam/core/agent_isolation.py", "line": 144}]
-    },
-    {
-      "id": "resource_limiter",
-      "type": "security",
-      "label": "ResourceLimiter",
-      "sublabel": "core/resource_limiter.py",
-      "pos": [580, 600],
-      "size": [220, 64],
-      "sources": [{"path": "theteam/core/resource_limiter.py", "line": 137}]
     },
     {
       "id": "audit_chain",
       "type": "database",
       "label": "Audit chain",
       "sublabel": "core/audit_chain.py",
-      "pos": [850, 600],
-      "size": [220, 64],
+      "pos": [320, 620],
+      "size": [230, 60],
       "sources": [{"path": "theteam/core/audit_chain.py", "line": 31}]
+    },
+    {
+      "id": "circuit_breaker",
+      "type": "security",
+      "label": "CircuitBreaker",
+      "sublabel": "core/circuit_breaker.py",
+      "pos": [600, 620],
+      "size": [230, 60],
+      "sources": [{"path": "theteam/core/circuit_breaker.py", "line": 57}]
+    },
+    {
+      "id": "resource_limiter",
+      "type": "security",
+      "label": "ResourceLimiter",
+      "sublabel": "core/resource_limiter.py",
+      "pos": [880, 620],
+      "size": [230, 60],
+      "sources": [{"path": "theteam/core/resource_limiter.py", "line": 137}]
     },
     {
       "id": "health_monitor",
       "type": "backend",
       "label": "HealthMonitor",
       "sublabel": "core/health_monitor.py",
-      "pos": [1120, 600],
-      "size": [220, 64],
+      "pos": [1160, 620],
+      "size": [230, 60],
       "sources": [{"path": "theteam/core/health_monitor.py", "line": 20}]
     },
     {
@@ -135,27 +135,25 @@
       "type": "database",
       "label": "StateStore",
       "sublabel": "state.py, the one path resolver",
-      "pos": [450, 780],
-      "size": [280, 60],
+      "pos": [610, 860],
+      "size": [300, 60],
       "sources": [{"path": "theteam/state.py", "line": 35}]
     }
   ],
   "connections": [
-    {"id": "cli-repository", "from": "theteam_cli", "to": "task_repository", "label": "every task command", "route": "orthogonal-h", "via": [[620, 150], [150, 150]]},
-    {"id": "cli-executor", "from": "theteam_cli", "to": "task_executor", "label": "run", "route": "orthogonal-h", "via": [[660, 150], [420, 150]]},
-    {"id": "cli-loop", "from": "theteam_cli", "to": "unified_loop", "label": "serve"},
-    {"id": "cli-metrics", "from": "theteam_cli", "to": "metrics_collector", "route": "orthogonal-h", "via": [[740, 150], [960, 150]]},
-    {"id": "cli-commentary", "from": "theteam_cli", "to": "commentary_controller", "label": "on, off, status", "variant": "dashed", "route": "orthogonal-h", "via": [[820, 150], [1230, 150]]},
-    {"id": "executor-breaker", "from": "task_executor", "to": "circuit_breaker", "label": "trip check", "variant": "security", "route": "orthogonal-h", "via": [[420, 380], [150, 380]]},
-    {"id": "executor-isolation", "from": "task_executor", "to": "agent_isolation", "label": "subprocess under a Layer 4 guard", "variant": "security", "route": "orthogonal-h", "via": [[420, 430], [420, 600]]},
-    {"id": "executor-audit", "from": "task_executor", "to": "audit_chain", "label": "record_task_event", "variant": "security", "route": "orthogonal-h", "via": [[460, 480], [960, 480]]},
-    {"id": "repository-audit", "from": "task_repository", "to": "audit_chain", "label": "record_event", "variant": "security", "route": "orthogonal-h", "via": [[150, 530], [960, 530]]},
-    {"id": "loop-breaker", "from": "unified_loop", "to": "circuit_breaker", "variant": "security", "route": "orthogonal-h", "via": [[600, 330], [150, 330]]},
-    {"id": "loop-limiter", "from": "unified_loop", "to": "resource_limiter", "variant": "security", "route": "orthogonal-h", "via": [[690, 380], [690, 600]]},
-    {"id": "loop-audit", "from": "unified_loop", "to": "audit_chain", "variant": "security", "route": "orthogonal-h", "via": [[770, 430], [770, 520], [960, 520]]},
-    {"id": "loop-health", "from": "unified_loop", "to": "health_monitor", "route": "orthogonal-h", "via": [[800, 380], [1230, 380]]},
-    {"id": "metrics-breaker", "from": "metrics_collector", "to": "circuit_breaker", "variant": "dashed", "route": "orthogonal-h", "via": [[960, 560], [150, 560]]},
-    {"id": "commentary-state", "from": "commentary_controller", "to": "state_store", "label": "markers and state", "route": "orthogonal-h", "via": [[1230, 730], [730, 730]]},
-    {"id": "audit-state", "from": "audit_chain", "to": "state_store", "variant": "dashed", "route": "orthogonal-h", "via": [[960, 700], [960, 730]]}
+    {"id": "cli-repository", "from": "theteam_cli", "to": "task_repository", "label": "every task command", "fromSide": "bottom", "toSide": "top"},
+    {"id": "cli-executor", "from": "theteam_cli", "to": "task_executor", "label": "run", "fromSide": "bottom", "toSide": "top"},
+    {"id": "cli-loop", "from": "theteam_cli", "to": "unified_loop", "label": "serve", "fromSide": "bottom", "toSide": "top"},
+    {"id": "cli-metrics", "from": "theteam_cli", "to": "metrics_collector", "fromSide": "bottom", "toSide": "top"},
+    {"id": "cli-commentary", "from": "theteam_cli", "to": "commentary_controller", "label": "writes the on-marker", "variant": "dashed", "fromSide": "bottom", "toSide": "top"},
+    {"id": "executor-breaker", "from": "task_executor", "to": "circuit_breaker", "label": "trip check", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "executor-isolation", "from": "task_executor", "to": "agent_isolation", "label": "subprocess under a Layer 4 guard", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "executor-audit", "from": "task_executor", "to": "audit_chain", "label": "record_task_event", "variant": "security", "fromSide": "bottom", "toSide": "top", "labelDy": 40},
+    {"id": "repository-audit", "from": "task_repository", "to": "audit_chain", "label": "record_event", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "loop-breaker", "from": "unified_loop", "to": "circuit_breaker", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "loop-limiter", "from": "unified_loop", "to": "resource_limiter", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "loop-audit", "from": "unified_loop", "to": "audit_chain", "variant": "security", "fromSide": "bottom", "toSide": "top"},
+    {"id": "loop-health", "from": "unified_loop", "to": "health_monitor", "fromSide": "bottom", "toSide": "top"},
+    {"id": "commentary-state", "from": "commentary_controller", "to": "state_store", "label": "reads markers, writes state", "fromSide": "left", "toSide": "right"}
   ]
 }

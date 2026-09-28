@@ -1,155 +1,112 @@
-# theteam Onboarding Guide
+# theteam onboarding
 
-How agents and users adopt the theteam skill.
+How to adopt theteam. The full command reference is the root [`README.md`](../README.md); the
+design is [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
-## Quick Start
+> The previous version of this file documented a `subskills/task-stack/` daemon, a curses
+> `ui/terminal_ui.py`, `scripts/loop_controller.py`, and a `ui/task_stack_adapter.py`. All four
+> were deleted — the task stack became `theteam/tasks/` (YAML only), the TUI became
+> `theteam/ui/terminal.py` driven by `theteam watch`, and the adapter was removed in M2 as a
+> second source of truth. Nothing below refers to them.
 
-### For Agents
+## For users
 
-1. **Read the config**:
-   ```bash
-   python3 theteam/bin/theteam_config.py validate theteam.config --json
-   ```
+```bash
+pip install -e .                  # installs the `theteam` console script
+cd /your/project
+theteam bootstrap                 # once per project: writes theteam.config
+theteam status                    # roster, task counts, audit chain
+theteam watch status --once       # the same, rendered as one frame
+theteam run                       # execute everything due
+```
 
-2. **Check team members**:
-   ```bash
-   python3 theteam/bin/theteam_config.py roster theteam.config --json
-   ```
+There is no daemon to start and no separate server to launch. `theteam run` is the runner, and
+`theteam serve` is the only command that opens a port.
 
-3. **Run a discussion**:
-   ```bash
-   python3 theteam/__init__.py --topic "Your topic here"
-   ```
+## For agents
 
-4. **Execute a task**:
-   ```bash
-   python3 theteam/__init__.py --task folder-monitoring --task-action execute
-   ```
+```bash
+# Validate the project config (needs theteam/ on the path — the script
+# imports `bin.utilities` as a top-level package)
+PYTHONPATH=theteam python3 theteam/bin/theteam_config.py validate "$(pwd)/theteam.config" --json
 
-### For Users
+# Read the project context
+python3 theteam/workflow/context_aggregator.py "$(pwd)"
+```
 
-1. **Bootstrap** (first run only):
-   ```bash
-   python3 theteam/__init__.py --bootstrap
-   ```
+The full discussion protocol — member spawning, the synthesis pass, report rendering, and the
+permitted-skills boundary — is in [`SKILL.md`](SKILL.md). Do not follow a paraphrase of it; a
+drifting second copy of the protocol is what this file used to be.
 
-2. **Start the daemon**:
-   ```bash
-   python3 theteam/subskills/task-stack/daemon.py start
-   ```
-
-3. **Launch the TUI**:
-   ```bash
-   python3 theteam/ui/terminal_ui.py
-   ```
-
-   ```bash
-   python3 scripts/sa_runner.py
-   ```
-   
-   # Terminal monitoring commands
-   ```bash
-   python3 scripts/sa_runner.py status       # View loop and health status
-   python3 scripts/sa_runner.py health-check  # Quick health with explicit exit codes
-   python3 scripts/sa_runner.py json         # Machine-readable status
-   ```
-## Project Structure
+## Package layout, as it is now
 
 ```
 theteam/
-├── __init__.py              # Main orchestrator
-├── bin/
-│   ├── theteam_config.py    # Configuration management
-│   └── theteam_report.py    # Report generation
-├── core/
-│   ├── state_manager.py     # Unified state management
-│   ├── system_integration.py # System awareness integration
-│   ├── integrated_orchestrator.py # Event-driven orchestrator
-│   ├── event_bus.py         # Event system
-│   └── folder_monitor.py    # Folder structure monitoring
-├── workflow/
-│   ├── discussion_manager.py # Discussion lifecycle
-│   └── context_aggregator.py # Project context
+├── cli.py                    # the only entry point; `theteam` console script
+├── state.py                  # the single state-directory resolver
+├── __init__.py               # skill entry: bootstrap, discussion, context analysis
+├── tasks/                    # the task surface
+│   ├── repository.py         # YAML store — the ONE store
+│   └── executor.py           # runs one phase, under the safety layer
+├── core/                     # loop, safety, telemetry
+│   ├── unified_loop.py
+│   ├── circuit_breaker.py    # safety
+│   ├── resource_limiter.py   # safety
+│   ├── agent_isolation.py    # safety
+│   ├── audit.py              # safety
+│   ├── audit_chain.py        # hash-chained audit, read by `status`
+│   ├── health_monitor.py
+│   ├── event_bus.py
+│   ├── metrics.py
+│   └── state_manager.py, system_integration.py, integrated_orchestrator.py,
+│       event_bus.py, folder_monitor.py
+├── advisory/                 # commentary layer
+│   ├── session_reader.py, selector.py, commentary.py, roster.py
+├── workflow/                 # discussion and member management
+│   ├── discussion_manager_refactored.py
+│   ├── discussion_interface.py
+│   ├── team_member_manager.py
+│   └── context_aggregator.py
 ├── ui/
-│   ├── terminal_ui.py       # Curses TUI
-│   └── task_stack_adapter.py # TUI-TaskStack bridge
-├── subskills/
-│   └── task-stack/
-│       ├── orchestrator.py  # Task stack CLI
-│       ├── daemon.py        # Background daemon
-│       ├── scheduler.py     # Task scheduling
-│       ├── registry.py      # Task registry
-│       ├── executor.py      # Task execution
-│       └── converter.py     # Conversation converter
-├── tests/
-│   └── test_theteam.py      # Test suite
-└── CLI.md                   # Command reference
+│   ├── terminal.py           # the trust surface, rendered; `theteam watch`
+│   └── components/           # design tokens and panel widgets
+├── security/                 # path validation, audit, secrets
+├── bin/                      # config and report helpers (see CLI.md)
+└── tests/                    # 744 tests
 ```
 
-## Permitted Skills
-
-The theteam skill can invoke these skills via `task` or `hub`:
-- `ponytail` — Code audit and refactoring
-- `evolve-skills` — Skill evolution and improvement
-- `code-search` — Repository search and analysis
+`theteam/subskills/` still exists as an empty package directory; the task stack that lived in
+it moved to `theteam/tasks/`.
 
 ## Configuration
 
-The `theteam.config` file controls behavior:
-- `behavior.*` — Skill behavior settings
-- `team.*` — Team member definitions
-- `permitted_skills` — Allowed subagent skills
-- `output.*` — Output directory settings
+`theteam.config` lives in the project root and is committed to the project's own repo:
 
-## Monitoring
+| Key | Meaning |
+|---|---|
+| `behavior.*` | Skill behavior: `block_edits_without_plan`, `pre_analysis_search`, `option_selection_required` |
+| `team.*` | Member roster: id, role, expertise, voice |
+| `permitted_skills` | Hard boundary on what members may invoke (default `ponytail`, `evolve-skills`, `code-search`) |
+| `output.*` | `report_dir` (default `.omp/theteam/reports`), `keep_last` |
 
-### Check daemon status
-```bash
-python3 theteam/subskills/task-stack/daemon.py status
-```
+Regenerate it with `PYTHONPATH=theteam python3 theteam/bin/theteam_config.py init ...`, never by
+hand-editing, so validation runs before anything reaches disk.
 
-### Check orchestrator status
-```bash
-python3 theteam/subskills/task-stack/orchestrator.py status
-```
+## State
 
-### Check loop status
-```bash
-python3 scripts/loop_controller.py status
-```
-
-### View system awareness results
-```bash
-cat .omp/theteam/health-score.json
-cat .omp/theteam/system-awareness-summary.json
-```
+Everything theteam writes goes under `<project_root>/.omp/theteam`, resolved in one place
+(`theteam/state.py`). Set `THETEAM_STATE_DIR` to point that whole tree elsewhere — the test
+suite does exactly this.
 
 ## Troubleshooting
 
-### Daemon not starting
-```bash
-# Check if already running
-python3 theteam/subskills/task-stack/daemon.py status
+**`theteam status` reports no roster.** The project is not bootstrapped. Run `theteam bootstrap`.
 
-# Stop and restart
-python3 theteam/subskills/task-stack/daemon.py stop
-python3 theteam/subskills/task-stack/daemon.py start
-```
+**`theteam discuss` fails with an OMP error.** Correct behavior. `discuss` refuses to run
+outside an OMP-hosted session rather than inventing an opinion. Run it from inside OMP.
 
-### TUI not launching
-```bash
-# Check terminal supports curses
-python3 -c "import curses; print('curses OK')"
+**`theteam watch` shows `absent` and `never run`.** Also correct: nothing has been measured yet.
+See the output-honesty table in the root README.
 
-# Try with explicit project root
-python3 theteam/ui/terminal_ui.py /path/to/project
-```
-
-### Tasks not executing
-```bash
-# Check scheduler
-python3 theteam/subskills/task-stack/orchestrator.py status
-
-# Run due tasks manually
-python3 theteam/subskills/task-stack/orchestrator.py run-due
-```
+**A helper script fails with `No module named 'bin'`.** It needs `PYTHONPATH=theteam` in front
+of the command. See [`CLI.md`](CLI.md).

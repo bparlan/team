@@ -30,7 +30,10 @@ ancestor-directory walk — this is deliberately scoped to "the project you're
 in," not AGENTS.md-style inheritance).
 
 ```bash
-python3 ~/.omp/agent/skills/theteam/bin/theteam_config.py validate "$(pwd)/theteam.config" --json
+# Needs theteam/ on the path: the script imports `bin.utilities` as a
+# top-level package. Running it without this fails with
+# `ModuleNotFoundError: No module named 'bin'`.
+PYTHONPATH=theteam python3 theteam/bin/theteam_config.py validate "$(pwd)/theteam.config" --json
 ```
 
 - **File doesn't exist** → go to **Bootstrap** below.
@@ -38,9 +41,10 @@ python3 ~/.omp/agent/skills/theteam/bin/theteam_config.py validate "$(pwd)/thete
   user exactly what's wrong (the stderr text) and offer to re-bootstrap. Do
   **not** try to hand-patch an invalid config yourself — regenerate it
   through the bootstrap flow so it goes through `init`'s validation gate.
-- **Exit 0** → config is good. Load the roster with
-  `theteam_config.py roster "$(pwd)/theteam.config" --json` and go to
-  **Discussion** below.
+- **Exit 0** → config is good. Load the roster and go to **Discussion** below:
+  ```bash
+  PYTHONPATH=theteam python3 theteam/bin/theteam_config.py roster "$(pwd)/theteam.config" --json
+  ```
 
 ## Bootstrap (no valid config found)
 
@@ -66,8 +70,8 @@ Run this once per project, the first time `theteam` is invoked in it.
    `theteam-template.config` is a fine starting point if the user has no
    opinion) into a JSON file and run:
    ```bash
-   python3 ~/.omp/agent/skills/theteam/bin/theteam_config.py init \
-     ~/.omp/agent/skills/theteam/theteam-template.config \
+   PYTHONPATH=theteam python3 theteam/bin/theteam_config.py init \
+     theteam/theteam-template.config \
      /tmp/theteam-answers.json \
      "$(pwd)/theteam.config"
    ```
@@ -121,27 +125,22 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) remain unchan
    is true and the topic warrants it, run it via the permitted skills only
    (see below) before spawning members, so all members see the same
    grounding material instead of each doing their own ad hoc research.
-4. **Context aggregation & tool inventory.** Before spawning anyone, ground
-   the discussion in actual project state. Run the deterministic context
-   aggregator and read the tool manifest:
+4. **Context aggregation.** Before spawning anyone, ground the discussion in actual
+   project state. Run the deterministic context aggregator and read the config:
    ```bash
-   python3 theteam/workflow/context_aggregator.py
-   cat .omp/theteam/tool-manifest.json
+   python3 theteam/workflow/context_aggregator.py "$(pwd)"
    ```
-   The aggregator output is a live snapshot of project goal, runtime config
-   (`fal_model`, `seed`, `control_lora_strength`, `image_size`, etc.),
-   token budget state, registered structure, last health scan, and
-   production invariants (Rules A–F from AGENTS.md). The tool manifest
-   catalogs every deterministic tool, its CLI, config, and output contract.
-   Include both verbatim in each member's system prompt under
-   `## Project Architecture Context` and `## Tool Inventory`. If the
-   aggregator or manifest is missing, say so and proceed — never invent
-   config values or tool contracts from memory.
+   The aggregator prints a live snapshot of the project goal, runtime config, and
+   the production invariants declared in `AGENTS.md`. There is **no
+   `.omp/theteam/tool-manifest.json`** in this tree — a pre-M0 document promised
+   one. Do not read it and do not report its absence as a problem; if a discussion
+   needs a tool contract, read the tool's own source. If the aggregator is
+   missing or fails, say so and proceed — never invent config values from memory.
 5. **Spawn each enabled member independently**, one `task` call per member
    (isolated — members must not see each other's output). Each member's
    system prompt should be built from its `role`, `expertise`, and `voice`
    fields, plus the topic, any shared research context from step 3, and the
-   project architecture context + tool inventory from step 4. Each member's
+   project context from step 4. Each member's
    `outputSchema` should require exactly:
    `{id, role, verdict, note}` — matching what `theteam_report.py` expects.
    Write each member's returned JSON to its own file under a scratch notes
@@ -153,7 +152,7 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) remain unchan
    legitimate recommendation. Do not average away a real split.
 7. **Render the report:**
    ```bash
-   python3 ~/.omp/agent/skills/theteam/bin/theteam_report.py build \
+   PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
      --topic "<topic>" \
      --notes-dir /tmp/theteam-notes-<timestamp> \
      --synthesis /tmp/theteam-synthesis-<timestamp>.json \
@@ -192,10 +191,10 @@ suggestion.
   failure (see step 7), not something to paper over with a plausible-sounding
   guess.
 - `theteam.config` files are project-local and committed to the project's
-  own repo (not this skill's directory) — the skill itself
-  (`~/.omp/agent/skills/theteam/`) stays project-agnostic; only
-  `theteam-template.config` and the `bin/` scripts live here.
+  own repo (not this skill's directory). The template and the `bin/` scripts
+  ship with the package; everything else lives in the project.
 
-## New: Chatroom-Style Output
+## Output format
 
-The skill has been enhanced with a new chatroom-style output format that displays member comments with names centered in the middle of the message flow, as requested. Each member's comment appears with their name and role highlighted in the center, creating a more engaging and collaborative discussion format.
+Present the report and summarize the recommendation and any open questions in
+your own reply. Do not dump raw markdown unremarked.

@@ -57,37 +57,68 @@ These are the product's promises. Each is a test.
 Commands are named for what the user wants, not for the internal mechanism. `theteam run` runs due tasks. It is not called `loop tick`, because "loop" is an implementation detail and "tick" is a unit of time the user does not control.
 
 ```
-theteam bootstrap [project_root]      generate a team for this project
-theteam comment on|off|status         continuous in-context commentary
+theteam bootstrap [path]               generate a team for this project
+theteam status                        trust surface — see §3
 theteam discuss <topic>               one-shot team discussion, this turn only
+theteam serve                         metrics endpoint
+theteam loop <task_id>                schedule one registered task on an interval
 theteam tasks                         list every task and its state
-theteam task create|edit|delete|show  single-task operations
 theteam run                           execute everything currently due
 theteam history                       per-task success rate, last run, last failure
-theteam status                        trust surface — see §3
-theteam watch [status|tasks|history]  the trust surface, rendered, in the terminal
-theteam serve                         metrics endpoint
+theteam task create|edit|delete|show  single-task operations
+theteam comment on|off|status         continuous in-context commentary
+theteam watch status|tasks|history    the trust surface, rendered, in the terminal
+```
 
-| Command | Arguments | Output you can predict |
+Eleven subcommands. The list is the whole surface; nothing else is declared.
+
+| Command | Arguments and flags | Output you can predict |
 |---|---|---|
-| `bootstrap` | `[project_root]`, `--interactive`, `--json` | Path to written config. Non-interactive by default. |
-| `comment on` | `--max-members N` (default 3, cap 4) | Starts commentary for the session. |
-| `comment off` | — | Writes the stop sentinel. Takes effect next tick. |
-| `comment status` | — | Whether commentary is on, last digest, last opinion, tick count. |
-| `discuss` | `<topic>`, `--json` | The synthesized verdict. Or an error, if outside OMP. |
-| `tasks` | `--json` | One row per task: id, order, next run, last result, breaker state. |
-| `task create` | `<path.yaml>` or flags, `--json` | The task id. Rejects invalid tasks at write time. |
-| `task edit` | `<id> --patch <file>` | The new task state. Refuses orphaning a schedule. |
-| `task delete` | `<id> --yes` | Lists everything it will clean up, then does. |
-| `run` | `--json`, `--only <id>` | `{ran: N, skipped: M, failures: K}` with per-task results. Idempotent. |
-| `history` | `--task <id>`, `--json` | Success rate, last run, last failure, consecutive failures. |
-| `status` | `--json` | Roster, session binding, audit chain integrity, breaker states. |
-| `watch` | `status\|tasks\|history`, `--once`, `--interval N` | The same data, rendered. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. |
-| `serve` | `--port` | Prometheus endpoint. Nothing else starts a server. |
+| `bootstrap [path]` | `--interactive`, `--json` | `{ok, config, state_dir}` in JSON; the config path and state directory as text. Non-interactive unless `--interactive`. |
+| `status` | `--json` | Roster, state directory, task counts, breaker trips, audit-chain state. |
+| `discuss <topic>` | `--json` | The synthesized verdict — or, outside OMP, `{ok: false, error: ...}` naming the command to run inside OMP. Never an invented opinion. |
+| `serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else 8000), `--json` | Prometheus endpoint on the port. The only thing in the product that starts a server. |
+| `loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. An unknown task id is a named failure, not a silent no-op. |
+| `tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`, `breaker_consecutive_failures`. |
+| `run` | `--only <id>`, `--json` | `{ran, skipped, failures, results}`. Idempotent: with nothing due it is `{ran: 0}` twice, identically. |
+| `history` | `--task <id>`, `--json` | Per task: `runs`, `successes`, `failures`, `success_rate`, `last_run`, `last_result`, `last_failure`, `breaker`, `consecutive_failures`. |
+| `task create` | `--path <file.yaml>` (**required**), `--json` | The created task as stored. Invalid definitions are rejected at write time. |
+| `task edit <task_id>` | `--patch <file>` (**required**), `--json` | The new task state. Refuses orphaning a schedule. |
+| `task delete <task_id>` | `--yes`, `--json` | Without `--yes`, the deletion plan. With it, what was removed. |
+| `task show <task_id>` | `--json` | The task exactly as stored. |
+| `comment on` | `--max-members N` (default 3, hard cap 4), `--json` | `{ok, on, max_members, marker}`. Above the cap is **refused with a named reason, not clamped** — silently clamping would hide a caller bug behind a success. |
+| `comment off` | `--json` | `{ok, on, sentinel}`. Writes the stop sentinel, so a controller mid-tick still sees it. |
+| `comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
+| `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. |
+| global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`), `--json` | Applies to every command. |
 
-`status`, `tasks`, and `history` are the **machine surface**: their output is a contract with agentic consumers (§3.3) and M6 did not change one byte of it. `watch` reads the same payloads through the same functions; it is a renderer, not a second source.
+`status`, `tasks`, and `history` are the **machine surface**: their output is a contract with agentic consumers (§3.3) and M6 did not change one byte of it. `watch` reads the same payloads through the same `*_payload` functions; it is a renderer, not a second source.
 
-Every command takes an explicit `project_root`. Every command returns a real exit code. Every command that produces data supports `--json` — `watch` is the exception and deliberately so: it is a renderer, and the machine-readable form of what it draws is the `--json` of the command it reads. Rendering is not a data surface.
+`--json` is accepted on **either side of the subcommand** for every command. Each subparser declares its own copy with `default=argparse.SUPPRESS`, so the subparser value never clobbers one already parsed from the parent. Until M7 `watch` declared it only on the parent, which made `theteam watch status --json` an argparse usage error; the parser now matches every other command and `cmd_watch` gained the branch that prints the payload the view reads.
+
+Every command takes an explicit `project_root`. Every command returns a real exit code.
+
+## 2.1 Exit codes and failure shapes
+
+| Code | Meaning |
+|---|---|
+| `0` | Success. |
+| `1` | The command exists and failed. In JSON mode: `{"ok": false, "error": ...}`. In text mode: `theteam <command>: <reason>` on stderr. Never a traceback. |
+| `2` | A usage error argparse rejects before the command runs. |
+
+`main()` catches `KeyError`/`ValueError` and bare `Exception`, and `KeyboardInterrupt` returns 1. A `KeyError`'s message is unwrapped from its `repr` so the user sees the cause, not `'x'`.
+
+**One deliberate exception to the 2-for-usage-error rule:** a bare `theteam comment` returns **1**, not 2. Its subparsers are declared `required=False` specifically so the call reaches `cmd_comment`, which prints its own usage error and returns the 1 that this table names for a usage mistake. The parser comment at `cli.py` says so, because the next agent to read it will otherwise "fix" it back to 2.
+
+## 2.2 Environment variables
+
+The parser reads these at build time, so a caller that does not know about them cannot predict a default.
+
+| Variable | Read by | Effect |
+|---|---|---|
+| `THETEAM_PROJECT_ROOT` | `build_parser()` | Default for `--project-root`. Falls back to `$PWD`. |
+| `THETEAM_METRICS_PORT` | `build_parser()` | Default for `serve --port`. Falls back to `8000`. |
+| `THETEAM_STATE_DIR` | `state.py` | Overrides the whole state directory. The tests and containers use it to point at a scratch tree. |
 
 ---
 
@@ -140,9 +171,17 @@ The layer with the least existing code and the most design risk.
 
 ## 4.1 One discussion path
 
-`advisory/engine.py` holds the existing one-shot discussion: task tool, `{id, role, verdict, note}` contract, validator, synthesizer. **It is not modified.**
+The one-shot discussion is `run_discussion()` in `theteam/__init__.py`: the OMP task tool, the
+`{id, role, verdict, note}` member contract, the validator, and the synthesis pass. `theteam
+discuss` (`cmd_discuss`) is its only caller. **It is not modified by this layer.**
 
-`advisory/commentary.py` is a controller whose tick body is a call to `engine`. It adds a relevance filter, a cadence, a budget, and a stop signal. It does not reimplement selection, prompting, validation, or synthesis. Two discussion systems cannot drift because there is one.
+`advisory/commentary.py` is a controller that adds a relevance filter, a cadence, a budget, and
+a stop signal on top. It does not reimplement selection, prompting, validation, or synthesis.
+Two discussion systems cannot drift because selection and synthesis have one implementation.
+
+> Corrected at M7. This section previously named `advisory/engine.py`, which is not in the tree
+> and never was. The guard below is stated against `run_discussion` instead, which is the real
+> one-shot path.
 
 ## 4.2 When the team speaks, and when it does not
 
@@ -511,7 +550,7 @@ If any gate fails, cut M5. `engine.py`, `selector.py`, and `roster.py` still shi
 
 **Falsification test:** run commentary for 10 turns. At most 2 fragments per turn. `stop` in the user message produces `{spoke: false, reason: "stopped"}`. `theteam status` shows the session path and event count.
 
-**Guard:** `advisory/engine.py` must be byte-identical before and after M5. If it changed, the controller forked the discussion path and the whole premise of the layer is broken.
+**Guard:** `run_discussion()` in `theteam/__init__.py` must be byte-identical before and after M5. If it changed, the controller forked the discussion path and the whole premise of the layer is broken.
 
 ## M6 — The terminal shows the truth
 
@@ -553,7 +592,7 @@ A user can check every one of these by running a command.
 4. `grep -rn "parents\[" theteam/` returns nothing.
 5. `grep -rn "\.mp/theteam" theteam/` returns nothing.
 6. `grep -rn "MockAPI" theteam/` returns nothing.
-7. `advisory/engine.py` is byte-identical after M5.
+7. `run_discussion()` in `theteam/__init__.py` is byte-identical after M5.
 8. Layer 3 contains no `subprocess` call without a Layer 4 guard in the same call frame.
 9. `grep -rn "^import rich\|^from rich" theteam/` returns nothing. `rich` is not a declared dependency, so importing it at module scope is green locally and red in CI.
 

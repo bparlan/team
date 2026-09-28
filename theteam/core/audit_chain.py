@@ -3,11 +3,12 @@
 The one audit chain a project writes to, and the one rule for writing to it.
 
 `AuditLogger` is the hash-chained component; it is not modified here and it
-hardcodes its filename. `ARCHITECTURE.md` §5.5 sketches the chain as
-`audit/chain.jsonl`, so this module resolves that disagreement once: the
-component's name wins (`audit.jsonl`) and every caller - the task repository,
-the executor, and `theteam status` - resolves the path through
-`audit_file()`, so a reported path is always a path that was opened.
+hardcodes its filename. `ARCHITECTURE.md` §5.5 used to sketch the chain as
+`audit/chain.jsonl`, which disagreed with the component. That disagreement is
+resolved on both sides now: the doc names `audit/audit.jsonl`, the component's
+name, and every caller - the task repository, the executor, and
+`theteam status` - resolves the path through `audit_file()`, so a reported path
+is always a path that was opened.
 
 Two rules live here and nowhere else:
 

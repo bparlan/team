@@ -34,7 +34,8 @@ import pytest
 import yaml
 
 from theteam.cli import main
-from theteam.state import STATE_DIR_ENV, StateStore
+from theteam.state import STATE_DIR_ENV
+from theteam.tasks.executor import TaskExecutor
 
 
 # ======= scratch project =======
@@ -88,13 +89,21 @@ def _run(task_id, minutes_ago, success):
 
 
 def _log(root, *records):
-    """Seed the execution log the way `log_execution` does: one JSON line each."""
-    path = StateStore(str(root)).execution_log
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as handle:
-        for record in records:
-            handle.write(json.dumps(record) + "\n")
-    return path
+    """
+    Seed the execution log through the writer the product uses.
+
+    Not a hand-built file. This helper used to open the log and write JSON
+    itself, which meant the suite asserted `history` against a fixture whose
+    only producer was the test - and nothing in production ever called
+    `log_execution`. A task could fail five times in a row and `history` still
+    reported `runs: 0`, and this file passed. Writing through the component
+    keeps the fixture honest about the record shape, and the integration test
+    in section 7 pins the other half: that a real run actually calls it.
+    """
+    executor = TaskExecutor(str(root))
+    for record in records:
+        executor.log_execution(record)
+    return executor.execution_log
 
 
 def _cli(root, *argv, capsys):
@@ -408,5 +417,147 @@ def test_a_log_line_for_a_task_that_no_longer_exists_is_not_attributed_to_anothe
     assert payload["count"] == 1
     row = _row(payload, "build")
     assert (row["runs"], row["failures"]) == (0, 0)
+    assert row["success_rate"] is None
+    assert row["last_failure"] is None
+
+
+# ======= 7. the numbers come from real runs, not from a fixture =======
+
+
+def _past(minutes=5):
+    return (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+
+
+def _make_due(root, task_id):
+    """Put a task back in scope. Every `run` advances `next_run`."""
+    path = root / ".omp" / "theteam" / "task-schedule.json"
+    schedule = json.loads(path.read_text(encoding="utf-8"))
+    schedule["scheduled_tasks"][task_id]["next_run"] = _past()
+    path.write_text(json.dumps(schedule, indent=2), encoding="utf-8")
+
+
+def _task(root, task_id, script):
+    """A scheduled task with one phase, plus the script its phase names."""
+    _project(root, order=(task_id,), tasks={
+        task_id: {"phases": [{"name": "one", "script": script, "memory_limit_mb": 128}]},
+    }, schedule={
+        "scheduled_tasks": {task_id: {"next_run": _past(), "interval_minutes": 60}},
+        "last_run": {},
+    })
+    path = root / script
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("pass\n", encoding="utf-8")
+    return root
+
+
+def _stub_phase(monkeypatch, success):
+    """
+    Make every phase report `success`, the way
+    `test_executor_circuit_breaker` does.
+
+    Without this the phase would go to a real Docker container, and the
+    assertion would be about Docker being installed rather than about the
+    execution log. The outcome still comes from the product's own executor.
+    """
+    monkeypatch.setattr(
+        TaskExecutor, "execute_phase",
+        lambda self, phase: {"success": success, "returncode": 0 if success else 3},
+    )
+
+
+def test_history_reports_a_task_the_product_actually_ran(tmp_path, capsys, monkeypatch):
+    """
+    The defect: `log_execution` was the only writer of the execution log and
+    nothing in production called it, so a task that had really run - and
+    really failed - reported `runs: 0`, `failures: 0`, `last_failure: null`.
+    §7.1.7 requires a per-task success rate and a last failure. It reported
+    neither, and this suite passed because every fixture seeded the log by
+    hand.
+
+    This test goes through `run`. Seeding through the component (section 1)
+    keeps the record shape honest but cannot catch a missing call site: a
+    seeded record exists whether or not the product writes one. Only a real
+    run separates those two worlds.
+    """
+    root = _task(tmp_path, "crasher", "phases/boom.py")
+    _stub_phase(monkeypatch, success=False)
+
+    for _ in range(2):
+        _make_due(root, "crasher")
+        _cli(root, "run", capsys=capsys)
+
+    code, payload = _cli(root, "history", capsys=capsys)
+
+    assert code == 0
+    row = _row(payload, "crasher")
+    assert row["runs"] == 2, "a real run must reach the execution log"
+    assert row["failures"] == 2
+    # A failed task's rate is 0.0. That is a measurement. The `None` an unrun
+    # task reports means the opposite, and the two must never be confused.
+    assert row["success_rate"] == 0.0
+    assert row["last_failure"] is not None, "history must name when it last failed"
+
+
+def test_a_task_whose_breaker_trips_is_not_counted_as_a_run(tmp_path, capsys, monkeypatch):
+    """
+    A tripped breaker skips the sixth attempt instead of executing it. A skip
+    is not a run: counting it would report six runs when the product executed
+    five, and `runs` is what the success rate divides by.
+    """
+    root = _task(tmp_path, "crasher", "phases/boom.py")
+    _stub_phase(monkeypatch, success=False)
+
+    # Five failures trip the breaker (§7.1.5); the sixth attempt is skipped.
+    for _ in range(6):
+        _make_due(root, "crasher")
+        _cli(root, "run", capsys=capsys)
+
+    code, payload = _cli(root, "history", capsys=capsys)
+
+    assert code == 0
+    row = _row(payload, "crasher")
+    assert row["runs"] == 5, "a skipped attempt is not a run"
+    assert row["breaker"] == "open"
+
+
+def test_a_successful_run_reports_a_full_rate_from_a_real_run(tmp_path, capsys, monkeypatch):
+    """
+    The other side of a real rate. A run that passed is 100.0 with no last
+    failure - neither value may come back as `None`, which means "never ran".
+    """
+    root = _task(tmp_path, "well", "phases/well.py")
+    _stub_phase(monkeypatch, success=True)
+
+    _cli(root, "run", capsys=capsys)
+
+    code, payload = _cli(root, "history", capsys=capsys)
+
+    assert code == 0
+    row = _row(payload, "well")
+    assert (row["runs"], row["successes"], row["failures"]) == (1, 1, 0)
+    assert row["success_rate"] == 100.0
+    assert row["last_failure"] is None
+
+
+def test_an_unrun_task_still_reports_no_rate_after_a_real_run_of_another(tmp_path, capsys, monkeypatch):
+    """
+    M4's correct behaviour, kept: a task that has never run reports `None`,
+    not 0.0. A real run of a different task must not turn that `None` into a
+    number that reads like a measurement.
+    """
+    root = _task(tmp_path, "well", "phases/well.py")
+    _project(root, order=("well", "fresh"), tasks={
+        "fresh": {"phases": [{"name": "one", "script": "phases/fresh.py",
+                              "memory_limit_mb": 128}]},
+    })
+    _stub_phase(monkeypatch, success=True)
+
+    _cli(root, "run", capsys=capsys)
+
+    code, payload = _cli(root, "history", capsys=capsys)
+
+    assert code == 0
+    row = _row(payload, "fresh")
+    assert row["runs"] == 0
     assert row["success_rate"] is None
     assert row["last_failure"] is None

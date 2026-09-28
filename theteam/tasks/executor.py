@@ -242,7 +242,7 @@ class TaskExecutor:
                               results[-1].get("error")
                               or f"returncode {results[-1].get('returncode')}",
                               "phase_failed")
-        return {
+        result = {
             "task_id": task_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "phases": results,
@@ -250,6 +250,14 @@ class TaskExecutor:
             "breaker": breaker.stats.state.value,
             "breaker_consecutive_failures": breaker.stats.consecutive_failures,
         }
+        # §7.1.7: the execution log is what `theteam history` reads to turn a
+        # run into a success rate and a last failure. This was the only writer
+        # of the file and nothing in production called it, so history reported
+        # `runs: 0` for tasks that had failed five times in a row. One call
+        # site, here, so every caller of execute_task - the CLI, the loop, a
+        # test - writes the record the reporting surface expects.
+        self.log_execution(result)
+        return result
 
     def log_execution(self, result: Dict):
         self.execution_log.parent.mkdir(parents=True, exist_ok=True)

@@ -282,11 +282,13 @@ theteam/
     discussion_interface.py
     team_member_manager.py
     context_aggregator.py
-  ui/                        # terminal UI plus an optional dashboard.
-    terminal_ui.py           # the only UI entry point the orchestrator calls.
+  ui/                        # panel widgets. The terminal UI entry point the
+                             # orchestrator used to call was deleted in M4;
+                             # no TUI is wired into the product.
     components/              # panel widgets: roster, activity, metrics, …
     web_dashboard/           # optional reflex dashboard (extra). Reads through
-                             # state.py; absent unless the reflex extra is installed.
+                             # state.py; absent unless the reflex extra is
+                             # installed, and it is not in the tree today.
   security/                  # path validation, audit logging, secrets handling.
 ```
 
@@ -336,7 +338,11 @@ outputs:
 
 `order` replaces `tasks/TASK_ORDER` as a file. `memory_limit_mb` is mandatory per phase — a phase without a bound is rejected at write time, not discovered mid-run.
 
-Validation runs on write. A task missing `id`, missing `phases`, or naming a `script` that does not exist is rejected by `theteam task create`. Today `executor.py:22-24` discovers that mid-loop, after registration and scheduling.
+Validation runs on write. `TaskRepository` rejects a phase without
+`memory_limit_mb` at the write that creates it (`tasks/repository.py:72-80`), and
+`theteam run` reports a task whose `script` is missing rather than silently
+skipping it as a success. The line that said `executor.py:22-24` discovers this
+mid-loop named imports, not validation; that pointer was stale.
 
 ## 5.5 State
 
@@ -346,15 +352,30 @@ All resolution goes through one function in `theteam/state.py`, which takes an e
 
 ```
 .omp/theteam/
-  loop/state.json
-  tasks/registry.cache.json      # derived, rebuildable
-  tasks/execution.log            # bounded by ResourceLimiter
-  audit/chain.jsonl              # hash-chained
-  events/                        # EventBus log
+  state.json                   # StateStore.state_file
+  task-registry.json           # derived, rebuildable from tasks/*.yaml
+  task-schedule.json           # schedule and per-task last_run
+  task-execution.log           # bounded by EXECUTION_LOG_MAX_LINES
+  audit/audit.jsonl            # hash-chained
+  event_log.json               # EventBus log
+  folder-monitor.log
+  commentary.stop
   reports/
   proposals/
-  commentary.stop
 ```
+
+Every name above is one `theteam/state.py` resolves. The list is not exhaustive:
+`StateStore` also resolves `tasks_dir`, `events_dir`, `members`, `discussions`,
+`task_stack`, `task_daemon_status`, `task_daemon_pid` and `tool_manifest`, and
+those are omitted here because this section is about the core layout, not a
+property index. Three earlier entries were wrong and are corrected here:
+`loop/state.json` (there is no `loop/` directory),
+`tasks/registry.cache.json` (the registry is `task-registry.json` at the state
+root, and §5.4 made `tasks/*.yaml` the canonical store), and `audit/chain.jsonl`
+(`AuditLogger` hardcodes `audit.jsonl`; `audit_chain.audit_file()` is the one
+resolver and the component's name wins). The execution log is bounded by
+`EXECUTION_LOG_MAX_LINES` in `tasks/executor.py`, not by `ResourceLimiter`, which
+is a counter registry with no file retention path.
 
 Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, **5** of `parents[`, **7** of `.mp/theteam`, **3** of `MockAPI` in `theteam/**/*.py`. The roadmap claimed four paths. It is seven.
 

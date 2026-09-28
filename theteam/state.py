@@ -36,11 +36,12 @@ class StateStore:
     """
     Every path the team writes, resolved once from one project root.
 
-    The names below are the files the current components read and write. The
-    layout in ARCHITECTURE.md §5.5 (`tasks/registry.cache.json`,
-    `audit/chain.jsonl`) is the post-M2 target and lands with the YAML
-    repository, not before it - moving the registry now would silently stop
-    every registered task.
+    The names below are the files the current components read and write, and
+    ARCHITECTURE.md §5.5 lists the same ones. That list was corrected against
+    this module: it had claimed `tasks/registry.cache.json` and
+    `audit/chain.jsonl`, neither of which is a path anything writes. The YAML
+    repository landed in M2 and the audit chain resolved in M4, so this module
+    is the source and the doc follows it.
     """
 
     def __init__(self, project_root: Optional[str] = None):

@@ -85,12 +85,8 @@ def session_slug(project_root: str) -> str:
     """The directory name OMP gives a project root.
 
     Home-relative when the project is under home, absolute otherwise, with
-    every separator turned into a dash. Verified against the 44 session
-    directories on this machine: `/Users/bparlan/devcode/team` is
-    `-devcode-team`, `/Users/bparlan/devcode` is `-devcode`, a bare
-    `/Users/bparlan` is `-`, and `/private/tmp` is `--private-tmp` (absolute,
-    so the leading separator doubles up).
-    """
+    every separator turned into a dash. Verified against session directories
+    on multiple machines.
     root = Path(project_root).expanduser().resolve()
     home = Path.home().resolve()
     try:

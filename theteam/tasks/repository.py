@@ -142,9 +142,13 @@ class TaskRepository:
     def __init__(self, project_root: str) -> None:
         self.project_root = os.path.abspath(project_root)
         self.tasks_dir = os.path.join(self.project_root, TASKS_DIRNAME)
-        self._order = read_task_order(self.project_root)
-        self._rank = {task_id: i for i, task_id in enumerate(self._order)}
         self._yaml = self._read_yaml()
+        # `order` is a per-task key (§5.4). `TASK_ORDER` is the transition
+        # bridge: it is read to seed the order of tasks that predate the key,
+        # and re-written on every create/edit/delete so the bridge stays
+        # consistent while it exists. It is deleted when every task carries
+        # the key, at which point `self._order` is derived from YAML alone.
+        self._rank = {task_id: i for i, task_id in enumerate(self._order)}
 
     # -- sources -----------------------------------------------------------
 

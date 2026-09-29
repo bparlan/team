@@ -205,8 +205,8 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 744 tests
-bash scripts/check_invariants.sh     # the engineering invariant gate, 6 checks
+python -m pytest -q                  # 772 tests
+bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 
 CI (`.github/workflows/ci.yml`) installs from `pyproject.toml` on Python 3.9–3.12 and runs the

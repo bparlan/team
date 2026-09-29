@@ -72,7 +72,7 @@ theteam/
 │   └── components/           # design tokens and panel widgets
 ├── security/                 # path validation, audit, secrets
 ├── bin/                      # config and report helpers (see CLI.md)
-└── tests/                    # 744 tests
+└── tests/                    # 772 tests
 ```
 
 `theteam/subskills/` still exists as an empty package directory; the task stack that lived in

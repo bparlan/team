@@ -11,7 +11,7 @@
 
 Sources of truth, in conflict order: this document defines intent; the two HTML diagrams define the rendered shape; the YAML task files define task content. If this document and a diagram disagree, this document wins. If this document and the running code disagree, **the code is the defect** — that is the next milestone's work, not a reason to edit the intent.
 
-**Start here:** §2 lists every command. §3 is the trust surface. §6 is the milestone order. Nothing is implemented past M0.
+**Start here:** §2 lists every command. §3 is the trust surface. §6 is the milestone order. §7 states what a user can check.
 
 ---
 
@@ -382,15 +382,15 @@ is the state §5.3 exists to prevent.
 | `circuit_breaker.py` | 4 Safety | `tasks/executor.py` — proven live |
 | `resource_limiter.py` | 4 Safety | `tasks/executor.py` — proven live |
 | `agent_isolation.py` | 4 Safety | `tasks/executor.py` — proven live |
-| `audit.py` | 4 Safety | `tasks/audit_chain.py` |
-| `audit_chain.py` | 4 Safety | `tasks/executor.py` |
+| `audit.py` | 4 Safety | `core/audit_chain.py`, `core/unified_loop.py` |
+| `audit_chain.py` | 4 Safety | `tasks/executor.py`, `tasks/repository.py`, `cli.py` (`status`), `ui/terminal.py`, `monitor.py` |
 | `backup.py` | 4 Safety | `state.py`, tests |
 | `health_monitor.py` | 4 Safety | `ui/components/health_dashboard.py` |
 | `event_bus.py` | 5 Telemetry | `core/__init__.py` (lazy), `core/` internals |
 | `event_log.py` | 5 Telemetry | `core/metrics.py` |
 | `rate_limiting.py` | 5 Telemetry | `core/event_bus.py` |
 | `metrics.py` | 5 Telemetry | `cmd_serve`, `ui/components/metrics_panel.py` |
-| `team_member_manager.py` | 6 Advisory | `workflow/discussion_manager_refactored.py` |
+| `team_member_manager.py` | 6 Advisory | `workflow/discussion_interface.py` |
 | `postgres_cluster.py` | — | **not on the entry point.** Imported at point of use by `database.py`. See invariant 7. |
 | `state_validator.py` | — | **no production importer.** Only `test_state_validator.py`. |
 | `schema_versioning.py` | — | **no production importer.** |
@@ -766,8 +766,18 @@ rediscover that.
 
 **Component names verified absent from the entire tree:**
 
-`StateStore` · `ConfigStore` · `ToolManifest` · `AgentRegistry` · `MetricsStore` · `Alerting` · `theteam_cli`
+`ConfigStore` · `ToolManifest` · `AgentRegistry` · `MetricsStore` · `Alerting` · `theteam_cli`
 
-**Real components the diagrams missed:** `AgentIsolation`, `ResourceLimiter`, `AuditLogger`, `UnifiedTask`, `SimpleTaskExecutor`, `SimpleTaskScheduler`, `InMemoryTaskStore`.
+> Corrected 2026-09-29. `StateStore` was listed here as absent. It is real and load-bearing:
+> `theteam/state.py:35` defines `class StateStore`, and every path in the product resolves
+> through it. It was dropped from this list when the diagrams were re-derived, before the list
+> was written.
+
+**Real components the diagrams missed:** `AgentIsolation`, `ResourceLimiter`, `AuditLogger`,
+`UnifiedTask`, `StateStore`.
+
+> Corrected 2026-09-29. `SimpleTaskExecutor`, `SimpleTaskScheduler`, and `InMemoryTaskStore`
+> were listed here. None is in the tree now; `git log -S` finds each only in commits that
+> deleted them. The five names above are the ones measured present.
 
 Ten of twelve were stale or invented. `management-candidate.json` was the most dangerous artifact in `diagrams/`: it rendered a task subsystem as wired together, and the two halves of that subsystem do not import each other.

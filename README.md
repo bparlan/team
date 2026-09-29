@@ -111,8 +111,14 @@ changes     1 since baseline (3 frames)
 | nothing listed under `changes` | No *transition* was measured. An already-open breaker stays quiet after the frame it opened; repeating it every tick would make the line unreadable exactly when it matters. |
 
 A `null` never raises an alert. A task that has never run and a chain that was never
-measured are observations of absence, not events — see **Output honesty** below. The flag
-is off by default: a `watch` without it renders exactly what it rendered before.
+measured are observations of absence, not events — see **Output honesty** below.
+
+**The flag changes no output that anyone else reads.** It is off by default, and a
+`theteam watch <view>` without it renders exactly the frame it rendered before this flag
+existed. The stronger, checkable form of that guarantee: `theteam status|tasks|history --json`
+are byte-identical with and without `--monitor` anywhere in the tree, because `watch` only
+ever read those payloads and this feature added no new data source. If a JSON payload
+changes when you add a rendering flag, the flag has become a data path — that is a bug.
 
 ### Worked example: reading the machine surface
 

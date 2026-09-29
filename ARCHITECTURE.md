@@ -89,12 +89,20 @@ Eleven subcommands. The list is the whole surface; nothing else is declared.
 | `comment on` | `--max-members N` (default 3, hard cap 4), `--json` | `{ok, on, max_members, marker}`. Above the cap is **refused with a named reason, not clamped** — silently clamping would hide a caller bug behind a success. |
 | `comment off` | `--json` | `{ok, on, sentinel}`. Writes the stop sentinel, so a controller mid-tick still sees it. |
 | `comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
-| `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. |
+| `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. `--monitor` adds a change block; see below. |
 | global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`), `--json` | Applies to every command. |
 
 `status`, `tasks`, and `history` are the **machine surface**: their output is a contract with agentic consumers (§3.3) and M6 did not change one byte of it. `watch` reads the same payloads through the same `*_payload` functions; it is a renderer, not a second source.
 
 `--json` is accepted on **either side of the subcommand** for every command. Each subparser declares its own copy with `default=argparse.SUPPRESS`, so the subparser value never clobbers one already parsed from the parent. Until M7 `watch` declared it only on the parent, which made `theteam watch status --json` an argparse usage error; the parser now matches every other command and `cmd_watch` gained the branch that prints the payload the view reads.
+
+`--monitor` turns the watch loop into a change monitor. It reads nothing extra: the loop already re-reads its payload every tick, so the only new datum is the *previous* frame, and the whole feature is a diff between two things the renderer already had. It is a flag, not a new view, and it is off by default — a `watch` without it renders byte-for-byte what it rendered before.
+
+An alert is a **transition, not a level**. The three rules are: a breaker reaching `open`, an audit chain going from `intact: true` to not-intact, and a task leaving the registry. A breaker that is open has been open since the frame it opened; reporting it every tick trains the reader to ignore the line, which makes the surface useless exactly when it matters. For the same reason, a `None` never raises an alert: a task that has never run and a task whose chain was never measured are measurements of absence, not transitions, and reading them as events would be the fabricated opinion §3.3 forbids.
+
+The first frame reports a **baseline**, not "0 changes". It has no previous frame, so nothing has been compared, and a change count of zero there would claim a stability nobody has checked. A change count counts *frames that differed*, not fields — one frame that moved six fields is one change.
+
+The implementation is `theteam/monitor.py`: `diff` and `alerts` are pure, so the rules are testable without a running loop. It imports only the standard library. It is deliberately **not** given an API layer (`get_monitor_status`, `get_recent_events`, `clear_alerts`): those would read a process-local deque from outside the process, which has no caller and would be a second adapter past the payload boundary R1 forbids.
 
 Every command takes an explicit `project_root`. Every command returns a real exit code.
 
@@ -332,6 +340,9 @@ theteam/
                              # scheduler.py. Gains the M4 safety wrapper on executor.
     executor.py              # runs one phase, collects its result. Gains the
                              # mandatory Layer 4 safety wrapper in M4.
+  monitor.py                 # `--monitor`: what changed between two frames,
+                             # and which transitions are worth naming. Pure,
+                             # stdlib only, no API layer of its own (§2).
   workflow/                  # discussion and member management.
     discussion_manager_refactored.py
     discussion_interface.py

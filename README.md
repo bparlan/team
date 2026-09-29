@@ -69,12 +69,50 @@ Eleven subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam comment on` | `--max-members N` (default 3, hard cap 4), `--json` | `{ok, on, max_members, marker}`. |
 | `theteam comment off` | `--json` | `{ok, on, sentinel}`. Takes effect on the next tick. |
 | `theteam comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
-| `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--json` | A rendered frame, or the payload the frame draws with `--json`. |
+| `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | A rendered frame, or the payload the frame draws with `--json`. `--monitor` adds a change block; see below. |
 
 Global: `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`).
 
 `status`, `tasks`, and `history` are the **machine surface** — their output is a contract with
 agentic consumers. `watch` is a renderer over the same payloads and does not restate them.
+
+### Watching for change
+
+`--monitor` diffs each frame against the one before it and names the transitions worth
+noticing. It reads nothing extra — the watch loop already re-reads its payload every tick,
+so the only new datum is the previous frame.
+
+```bash
+$ theteam watch status --once --monitor
+theteam watch status  2026-09-29 12:07:09
+──────────────────────────────────────────────────────────────
+
+roster      5 members active (architect, pragmatist, skeptic, designer, devops)
+tasks       4 registered, 1 scheduled
+breakers    none tripped
+audit chain  intact, 2 entries (/your/project/.omp/theteam/audit/audit.jsonl)
+
+changes     baseline - first frame, nothing compared yet
+```
+
+Three rules, each firing on a **transition** rather than a level: a breaker reaching `open`,
+an audit chain going from `intact: true` to not-intact, and a task leaving the registry.
+After a change the block reports the count and lists recent transitions:
+
+```
+changes     1 since baseline (3 frames)
+  12:07:14  breaker opened: health-check
+```
+
+| You see | It means |
+|---|---|
+| `baseline - first frame` | Nothing has been compared yet. **Not** "0 changes" — a zero here would claim a stability nobody has checked. |
+| `N since baseline` | Frames that differed. One frame that moved six fields is `1`, not `6`. |
+| nothing listed under `changes` | No *transition* was measured. An already-open breaker stays quiet after the frame it opened; repeating it every tick would make the line unreadable exactly when it matters. |
+
+A `null` never raises an alert. A task that has never run and a chain that was never
+measured are observations of absence, not events — see **Output honesty** below. The flag
+is off by default: a `watch` without it renders exactly what it rendered before.
 
 ### Worked example: reading the machine surface
 

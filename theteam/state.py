@@ -120,9 +120,6 @@ class StateStore:
     def commentary_stop(self) -> Path:
         return self.root / "commentary.stop"
 
-    @property
-    def folder_monitor_log(self) -> Path:
-        return self.root / "folder-monitor.log"
 
     # -- io ----------------------------------------------------------------
 

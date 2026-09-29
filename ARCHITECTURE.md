@@ -350,6 +350,8 @@ theteam/
 | `scripts/task_archive.py` | orphaned, duplicates parsing |
 | `MockAPI` in `__init__.py:3-25` | fabricates consensus |
 | `__init__.py.corrupted`, `event_bus.py.backup`, `test_*.backup` | dead weight |
+| `theteam/core/loop_manager.py.bak2` | 25,558 bytes, 724 lines, git-tracked, zero importers. M0 removed `.bak` (identical size) and missed this one. Removed 2026-09-29. |
+| `theteam/tests/test_state_validator.py.backup2` | Not collected by pytest (0 tests), not imported. The live `test_state_validator.py` and `core/state_validator.py` are unaffected. Removed 2026-09-29. |
 | `theteam/__main__.py` as entry point | it is a metrics server, not an orchestrator |
 
 ## 5.4 One task format

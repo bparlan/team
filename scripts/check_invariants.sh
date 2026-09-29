@@ -76,6 +76,20 @@ else
   hard_fail=1
 fi
 
+# 7. The import graph of the package entry point. The only check here that
+# measures load instead of scanning text: checks 1-6 are greps and AST walks
+# over source, and all six passed while `import theteam` was pulling a
+# PostgreSQL cluster layer that §5.1 never places in this stack. Budgets are
+# the measured floor; see scripts/check_import_graph.py for why each number is
+# what it is.
+if out=$(python3 scripts/check_import_graph.py 2>&1); then
+  echo "check 7 PASS: import graph within budget, no cluster tier loaded"
+else
+  echo "check 7 FAIL: import graph over budget or a database tier is loaded"
+  echo "$out" | sed 's/^/  /'
+  hard_fail=1
+fi
+
 if [ "$hard_fail" -ne 0 ]; then
   echo "invariant gate FAILED"
   exit 1

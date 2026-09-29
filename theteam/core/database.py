@@ -6,6 +6,8 @@ This module provides database functionality with migrations and connection pooli
 supporting both SQLite (for prototyping) and PostgreSQL (for production).
 """
 
+from __future__ import annotations
+
 import os
 import json
 import threading
@@ -21,15 +23,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Phase 4: production PostgreSQL cluster (pooling, read replicas, failover).
-# ConnectionPool is aliased because this module already defines its own
-# generic SQLite pool class further down; the local definition must keep
-# winning for existing callers.
-from theteam.core.postgres_cluster import (
-    ConnectionPool as PostgresConnectionPool,
-    FailoverManager,
-    PostgresClusterConfig,
-    ReadReplicaRouter,
-)
+#
+# Imported inside the three properties that need it, not here. This module is
+# on the import path of `theteam.core.state_manager`, which `theteam/__init__`
+# imports, so an eager import here meant every `import theteam` loaded the
+# PostgreSQL cluster layer (pool, failover, read replicas) - a database tier
+# §5.1 never places in this stack. Nothing in the product constructs a
+# DatabaseManager with `use_sqlite=False`, so that cost was paid for code no
+# caller reached. The objects were already constructed lazily inside the
+# properties; this only moves the module load to match.
+#
+# `ConnectionPool` is aliased because this module defines its own generic
+# SQLite pool class further down, and the local definition must keep winning
+# for existing callers.
 
 class DatabaseConfig:
     """Database configuration."""
@@ -551,35 +557,38 @@ class DatabaseManager:
         # Phase 4: production PostgreSQL support. Lazily constructed so SQLite
         # callers (including `state_manager`) pay nothing.
         self.pg_config = pg_config
-        self._failover: Optional[FailoverManager] = None
-        self._replicas: Optional[ReadReplicaRouter] = None
-        self._pool: Optional[PostgresConnectionPool] = None
+        self._failover: Optional["FailoverManager"] = None
+        self._replicas: Optional["ReadReplicaRouter"] = None
+        self._pool: Optional["PostgresConnectionPool"] = None
 
-    def _cluster_config(self) -> PostgresClusterConfig:
+    def _cluster_config(self) -> "PostgresClusterConfig":
         """Explicit config if supplied, else the environment's."""
+        from theteam.core.postgres_cluster import PostgresClusterConfig
         return self.pg_config or PostgresClusterConfig.from_env()
 
     @property
-    def connection_pool(self) -> PostgresConnectionPool:
+    def connection_pool(self) -> "PostgresConnectionPool":
         """Lazily built psycopg2 pool for the primary. SQLite users never touch this."""
+        from theteam.core.postgres_cluster import ConnectionPool as PostgresConnectionPool
         if self._pool is None:
             self._pool = PostgresConnectionPool(self._cluster_config())
         return self._pool
 
     @property
-    def failover_manager(self) -> FailoverManager:
+    def failover_manager(self) -> "FailoverManager":
         """Failover manager bound to the configured cluster."""
+        from theteam.core.postgres_cluster import FailoverManager
         if self._failover is None:
             self._failover = FailoverManager(self._cluster_config())
         return self._failover
 
     @property
-    def replica_router(self) -> ReadReplicaRouter:
+    def replica_router(self) -> "ReadReplicaRouter":
         """Read router sharing the same failover state as the manager."""
+        from theteam.core.postgres_cluster import ReadReplicaRouter
         if self._replicas is None:
             self._replicas = ReadReplicaRouter(self._cluster_config(), self.failover_manager)
         return self._replicas
-
     def execute_on_replica(self, sql: str, params: Tuple = ()) -> Optional[Any]:
         """
         Run a read query against a replica, falling back to the primary.

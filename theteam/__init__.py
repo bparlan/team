@@ -20,39 +20,30 @@ import os
 import json
 import yaml
 import tempfile
-import threading
+
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+
 
 # Import enhancement modules
-from .core.state_manager import get_state_manager, StateEventType
+from .core.state_manager import get_state_manager
 
-# Canonical stability surface (Phase 1-3 deliverables). These are the single
-# implementations the roadmap requires; importing them here makes the whole
-# architecture reachable from the package entry point instead of leaving
-# modules orphaned on disk.
-from .core.task_contract import UnifiedTask, TaskStatus, TaskPriority
-from .core.unified_loop import UnifiedLoop, LoopConfig, LoopState
-from .core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
-from .core.health_monitor import HealthMonitor, HealthStatus
-from .core.resource_limiter import ResourceLimiter, ResourceType
-from .core.event_bus import EventBus, EventType
-from .core.event_log import EventLog, EventSourcingManager
-from .core.rate_limiting import EventRateLimiter, EventRateLimitingManager
-from .core.schema_versioning import SchemaRegistry, SchemaVersion
-from .core.state_validator import StateValidationManager, validate_and_load_state
-from .core.team_member_manager import TeamMemberManager
-from .core.system_integration import SystemIntegration
-from .core.integrated_orchestrator import IntegratedOrchestrator
-from .core.folder_monitor import assess_folder_structure, get_compact_summary
-from .workflow.context_aggregator import aggregate_project_context
-from .workflow.discussion_interface import DiscussionInterface, discuss_in_context
-from .workflow.team_member_manager import TeamMemberManager as WorkflowTeamMemberManager
+# The stability layer (circuit breaker, resource limiter, health monitor,
+# event bus, loop) is wired where it runs, not re-exported here. These were 41
+# import-for-re-export lines that nothing in the package, the CLI, the tests or
+# the bin scripts ever read. They cost more than dead weight: `core/__init__`
+# eagerly loads `state_manager`, which loads `database`, which loads the
+# PostgreSQL cluster/wal/transaction modules. So every `import theteam` pulled
+# a database layer that §5.1 never placed in this stack. `check_invariants.sh`
+# invariant 7 now measures that.
+
+# 2026-09-29, M7 follow-up. If you need one of these, import it from its own
+# module at the point of use (`from theteam.core.circuit_breaker import ...`).
+# That is what the CLI, the executor and the tests already do.
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CURRENT_DIR)
-from .security import log_security_event, validate_project_root, secure_join_path, is_within_project, encrypt_sensitive_fields
+from .security import log_security_event
 from .core.member import load_config, write_member_note, validate_member_note
 from .bin.theteam_config import _load_yaml, _load_json, merge_config, validate_config
 class ProviderUnavailable(RuntimeError):

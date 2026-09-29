@@ -599,10 +599,16 @@ def cmd_watch(args: argparse.Namespace) -> int:
     three commands are the machine surface (§2) and their output is
     unchanged - a TUI that improves them by rewriting them has broken the
     contract they exist to serve.
+
+    `--monitor` turns on change detection over the same payloads. It is a flag
+    on this command, not a new command, and it reads nothing `watch` did not
+    already read: the transition is between two frames, so the data was on hand
+    before this flag existed.
     """
     from theteam.ui.terminal import watch
 
     project_root = _project_root(args)
+    monitoring = getattr(args, "monitor", False)
 
     # `--json` is honoured here as every other command honours it, so a
     # consumer can read the frame the renderer draws from a scripted run
@@ -620,9 +626,10 @@ def cmd_watch(args: argparse.Namespace) -> int:
         return _emit(args, payload, "\n".join(lines))
 
     if args.once:
-        return watch(project_root, args.view, once=True)
+        return watch(project_root, args.view, once=True, monitoring=monitoring)
     try:
-        return watch(project_root, args.view, interval=args.interval)
+        return watch(project_root, args.view, interval=args.interval,
+                     monitoring=monitoring)
     except KeyboardInterrupt:
         # Ctrl-C is how a watch loop is meant to end. Returning the error
         # code would report a normal exit as a failure.
@@ -780,6 +787,9 @@ def build_parser() -> argparse.ArgumentParser:
     from theteam.ui.terminal import DEFAULT_INTERVAL
     watch.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,
                        help=f"Seconds between frames. Default {DEFAULT_INTERVAL:g}.")
+    watch.add_argument("--monitor", action="store_true",
+                       help="Show what changed since the previous frame, and name "
+                            "state transitions (breaker opened, chain broken, task removed).")
     watch.set_defaults(func=cmd_watch)
 
     # Declared so the rest of the surface in ARCHITECTURE.md §2 is discoverable

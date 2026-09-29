@@ -253,9 +253,18 @@ class TestSingleBoundary:
         # that *mentions* a module in order to say it does not use one is not
         # a use of it. `theteam` is the function-local `from theteam import cli`
         # the watch loop uses - the one data source it is allowed.
+        #
+        # `theteam.monitor` joined this set with `--monitor`. It is a new
+        # import, so it is named here rather than the assertion loosened: it
+        # reads nothing. It takes the two payloads the loop already fetched and
+        # returns the difference between them, so the data path is still
+        # `state.py` -> `*_payload` -> renderer. A monitor that resolved a path
+        # or opened a file would be the second adapter R1 forbids, and the two
+        # assertions below are what would catch it.
         assert {name for name, _ in _imports()} == {
             "theteam",
             "theteam.core.audit_chain",
+            "theteam.monitor",
             "theteam.ui.components.design_tokens",
             "shutil",
             "sys",

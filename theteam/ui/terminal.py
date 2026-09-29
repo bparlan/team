@@ -42,6 +42,32 @@ NEVER_RUN = "never run"
 # Seconds between frames when `--once` is not given. Named in `--help`.
 DEFAULT_INTERVAL = 5.0
 
+# ======= monitoring =======
+
+# Frames drawn, changes seen, and transitions to name. The watch loop owns
+# these; `_frame` reads them. A renderer that computed them would be measuring
+# instead of displaying, and this module measures nothing.
+from theteam.monitor import Monitor  # noqa: E402
+
+
+def _banner(mon: Optional[Monitor]) -> List[str]:
+    """
+    The monitoring block: how much moved, and what moved recently.
+
+    Empty unless a monitor is attached, so every existing caller renders
+    byte-identically. A watch with no monitor is a watch; this only reports on
+    one that is watching.
+    """
+    if mon is None:
+        return []
+    if mon.baseline():
+        # The honest first frame. "No changes" here would mean nothing was
+        # compared, which is a different claim from a stable system.
+        return ["", "changes     baseline - first frame, nothing compared yet"]
+    out = [f"changes     {mon.changes} since baseline ({mon.frames} frames)"]
+    out.extend(f"  {line}" for line in mon.recent())
+    return out
+
 
 # ======= cells =======
 
@@ -99,12 +125,10 @@ def _paint(text: str, color: str) -> str:
 
 
 # ======= frames =======
-
 def _frame(view: str, width: int) -> List[str]:
     """The one header every frame shares."""
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     return [f"theteam watch {view}  {stamp}", "─" * min(width, 78), ""]
-
 
 def render_status(payload: Dict[str, Any]) -> str:
     """Roster, task counts, breaker trips, audit chain state."""
@@ -213,17 +237,26 @@ def _clear() -> None:
 
 
 def watch(project_root: str, view: str, once: bool = False,
-          interval: float = DEFAULT_INTERVAL, stream: Optional[Any] = None) -> int:
+          interval: float = DEFAULT_INTERVAL, stream: Optional[Any] = None,
+          monitoring: bool = False) -> int:
     """
     Render `view` until interrupted, or exactly once.
 
     `frame` is read fresh every tick: a watch loop that renders a value it
     captured at start is showing a stale measurement, which is the one thing
     this surface must not do.
+
+    `monitoring` adds the change block below the frame. It is a flag, not a
+    second view, so the three machine commands and the frames they draw are
+    untouched - a monitor that improved them by rewriting them would have
+    broken the contract they exist to serve. The monitor holds nothing but the
+    previous frame, so a loop run without it renders byte-for-byte what it
+    rendered before.
     """
     from theteam import cli
 
     out = stream if stream is not None else sys.stdout
+    mon = Monitor(view) if monitoring else None
     readers = {
         "status": lambda: cli.status_payload(project_root),
         "tasks": lambda: cli.tasks_payload(project_root),
@@ -241,7 +274,11 @@ def watch(project_root: str, view: str, once: bool = False,
                   file=out)
             return 1
 
-        frame = RENDERERS[view](payload)
+        if mon is not None:
+            mon.observe(payload)
+            frame = RENDERERS[view](payload) + "\n" + "\n".join(_banner(mon))
+        else:
+            frame = RENDERERS[view](payload)
         _clear()
         out.write(frame + "\n\n")
         out.flush()

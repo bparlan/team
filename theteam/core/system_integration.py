@@ -27,8 +27,6 @@ import theteam as _theteam
 
 PROJECT_ROOT = str(Path(_theteam.__file__).resolve().parent.parent)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class SystemIntegration:
     def __init__(self, project_root: str, state_manager=None, discussion_manager=None):

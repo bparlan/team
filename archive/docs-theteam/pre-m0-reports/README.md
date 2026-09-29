@@ -39,7 +39,7 @@ must be project-agnostic; that name is a live example of the failure mode.
 
 The files are archived **unmodified**. Rewriting them here would hide what they
 said. The project-agnostic rewrite is recorded as an open task in
-`ARCHITECTURE.md` Part 7, so the next reader sees both the defect and the fix.
+`ARCHITECTURE.md` §7.3, so the next reader sees both the defect and the fix.
 
 The idea the subskill describes — a ledger of known project structure, kept
 current, with a background loop watching for new files — has **no working

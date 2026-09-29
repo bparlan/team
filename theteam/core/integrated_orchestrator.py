@@ -17,7 +17,6 @@ from typing import Dict, Any, List, Optional
 from pathlib import Path
 import logging
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 from theteam.workflow.discussion_manager_refactored import create_discussion_manager

@@ -15,8 +15,6 @@ from typing import Dict, Any, List, Optional, Set
 from collections import defaultdict
 from enum import Enum
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class CorrelationError(Exception):
     """Exception raised for correlation ID errors."""

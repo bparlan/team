@@ -23,7 +23,6 @@ import socket
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import unquote, urlparse
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 

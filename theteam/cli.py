@@ -27,6 +27,25 @@ EXIT_OK = 0
 EXIT_ERROR = 1
 
 
+def _configure_logging() -> None:
+    """The one place the product sets up logging.
+
+    This used to be `logging.basicConfig(level=logging.INFO)` at module scope in
+    25 modules, so importing theteam - which the CLI, the executor and the tests
+    all do - attached a stderr handler to the *host's* root logger before the
+    host had configured logging of its own. An OMP session or a test runner that
+    had chosen WARNING inherited INFO output it never asked for.
+
+    `force=False` is the default: if the host already configured the root
+    logger, this leaves it alone. That is what makes it safe to call at all.
+    """
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s %(name)s: %(message)s",
+    )
+
+
 # ======= helpers =======
 
 def _project_root(args: argparse.Namespace) -> str:
@@ -776,6 +795,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    _configure_logging()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

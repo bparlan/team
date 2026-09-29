@@ -23,8 +23,6 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional, Set
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # TeamMemberManager integration for context-aware discussions

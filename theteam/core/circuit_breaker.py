@@ -14,8 +14,6 @@ from enum import Enum
 import logging
 from dataclasses import dataclass
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class CircuitState(Enum):

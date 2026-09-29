@@ -20,8 +20,6 @@ import logging
 from dataclasses import dataclass, asdict
 from enum import Enum
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import Phase 2 modules for robust state management

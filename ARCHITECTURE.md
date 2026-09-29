@@ -263,10 +263,22 @@ Each selected member receives, and nothing more:
 | Last 3 user messages | `SessionReader` | 400 chars each |
 | Recent tool names | `SessionReader` | 8 names |
 | What the user asked the team | the team-call prompt | user-supplied |
-| Project awareness digest | cache | 400 tokens |
-| File-structure digest | cache | 400 tokens |
+| Project awareness digest | `aggregate_project_context` | 400 tokens |
+| File-structure digest | `aggregate_project_context` | 400 tokens |
 
-The two digests are cached and recomputed only when the project root's mtime changes, or on `theteam comment status --refresh`. They are the single largest token saving in the layer: recomputing a project digest per turn is what would make this feature unaffordable.
+> **Corrected 2026-09-29.** This section previously claimed the two digests are
+> "cached and recomputed only when the project root's mtime changes, or on
+> `theteam comment status --refresh`". **No digest cache exists.** There is no
+> `st_mtime` check, no cache module, and no `--refresh` flag — `refresh` appears
+> nowhere in `theteam/cli.py`. Both digests are recomputed on every call, which is
+> the correct behaviour for an mtime check: touching one file under the project
+> root does not change the root directory's mtime, so a root-mtime key would miss
+> most real edits and serve a stale digest while looking correct.
+>
+> The token cost that caching was meant to avoid is therefore real and currently
+> paid. That is unimplemented design intent, recorded in Part 7 — not a
+> documented saving. Building it means a correct invalidation key (content hash
+> or a walk of the watched set), not a root mtime.
 
 **Ceiling: 4 member calls per turn, ~2k tokens each, ~8k tokens per turn.** In a quiet session: zero calls.
 
@@ -312,7 +324,8 @@ theteam/
     health_monitor.py        # Layer 4.
     event_bus.py             # Layer 5.
     metrics.py               # Layer 5.
-    # … plus the other Layer 4/5 modules (backup, state_manager, event_log, …).
+    # Every other core/ module is assigned in §5.2.1 below. This comment is
+    # not an open licence to add modules here unassigned.
   tasks/                     # NEW. absorbs subskills/task_stack/.
     repository.py            # YAML canonical. ONE store. Schema, schedule, and
                              # due/next-run all live here; no separate schema.py or
@@ -336,6 +349,49 @@ theteam/
                              # installed, and it is not in the tree today.
   security/                  # path validation, audit logging, secrets handling.
 ```
+
+### 5.2.1 Every `core/` module, with its layer
+
+`core/` holds 26 modules. The tree above names 8; this table assigns the rest,
+so no module is unowned. "Reached by" is measured, not asserted: a module with
+no production importer is called out, because an unowned module with no caller
+is the state §5.3 exists to prevent.
+
+| Module | Layer | Reached by |
+|---|---|---|
+| `unified_loop.py` | 1 Control | `theteam/__init__.py` |
+| `task_contract.py` | 2 Task | `tasks/`, tests |
+| `member.py` | 2 Task | `theteam/__init__.py`, CLI |
+| `state_manager.py` | 2 Task | `theteam/__init__.py` (`get_state_manager`) |
+| `wal.py` | 2 Task | `state_manager` |
+| `transactions.py` | 2 Task | `state_manager` |
+| `correlation.py` | 2 Task | `state_manager` |
+| `checksum.py` | 2 Task | `state_manager`, `eventsourcing` tests |
+| `database.py` | 2 Task | `state_manager` (`UnifiedStateManager.db`, never read) |
+| `circuit_breaker.py` | 4 Safety | `tasks/executor.py` — proven live |
+| `resource_limiter.py` | 4 Safety | `tasks/executor.py` — proven live |
+| `agent_isolation.py` | 4 Safety | `tasks/executor.py` — proven live |
+| `audit.py` | 4 Safety | `tasks/audit_chain.py` |
+| `audit_chain.py` | 4 Safety | `tasks/executor.py` |
+| `backup.py` | 4 Safety | `state.py`, tests |
+| `health_monitor.py` | 4 Safety | `ui/components/health_dashboard.py` |
+| `event_bus.py` | 5 Telemetry | `core/__init__.py` (lazy), `core/` internals |
+| `event_log.py` | 5 Telemetry | `core/metrics.py` |
+| `rate_limiting.py` | 5 Telemetry | `core/event_bus.py` |
+| `metrics.py` | 5 Telemetry | `cmd_serve`, `ui/components/metrics_panel.py` |
+| `team_member_manager.py` | 6 Advisory | `workflow/discussion_manager_refactored.py` |
+| `postgres_cluster.py` | — | **not on the entry point.** Imported at point of use by `database.py`. See invariant 7. |
+| `state_validator.py` | — | **no production importer.** Only `test_state_validator.py`. |
+| `schema_versioning.py` | — | **no production importer.** |
+| `system_integration.py` | — | **no production importer.** Was reachable only via a removed `core/__init__` re-export. |
+| `integrated_orchestrator.py` | — | **no importer at all**, production or test. |
+
+The last four are Layer-less by measurement, not by omission. They are
+candidates for §5.3 removal or for a real caller; what they may not be is
+silently present. `postgres_cluster.py` is the exception and is explained: it is
+real, tested, and reachable — but only through `DatabaseManager`'s three
+properties, deliberately, so that importing the package does not load a database
+tier.
 
 `subskills/task_stack/` is not a package anyone may extend. Its contents move; the directory goes.
 
@@ -375,7 +431,7 @@ schedule:
   retry_on_failure: true
 phases:
   - name: inventory
-    script: tasks/system-awareness/analyze_system_awareness.py
+    script: scripts/sa_runner.py
     args: ["--json"]
     timeout_seconds: 120
     memory_limit_mb: 64
@@ -405,7 +461,6 @@ All resolution goes through one function in `theteam/state.py`, which takes an e
   task-execution.log           # bounded by EXECUTION_LOG_MAX_LINES
   audit/audit.jsonl            # hash-chained
   event_log.json               # EventBus log
-  folder-monitor.log
   commentary.stop
   reports/
   proposals/
@@ -599,6 +654,83 @@ A user can check every one of these by running a command.
 7. `run_discussion()` in `theteam/__init__.py` is byte-identical after M5.
 8. Layer 3 contains no `subprocess` call without a Layer 4 guard in the same call frame.
 9. `grep -rn "^import rich\|^from rich" theteam/` returns nothing. `rich` is not a declared dependency, so importing it at module scope is green locally and red in CI.
+10. `python3 scripts/check_import_graph.py` exits 0. `import theteam` loads at most 90 modules, at most 8 of them `theteam.core.*`, and none from the PostgreSQL cluster tier. This is the only invariant measured rather than grepped: checks 1-6 all passed while the entry point loaded a database layer that §5.1 does not place in this stack.
+
+### 7.3 M7 follow-up: defects found by review, 2026-09-29
+
+A five-member review of the M7 tree produced six claims of still-false
+documentation. Each was verified against the code before acting. Two did not
+survive verification; four were fixed. The review is recorded because two of its
+numbers were wrong in opposite directions, and a reader should not have to
+rediscover that.
+
+**Fixed.**
+
+1. **41 unused re-exports in `theteam/__init__.py`.** An AST pass excluding
+   `ast.alias` nodes found 41 of 59 imports never referenced in the module, and
+   no external caller of any of them. The stated number was right; a
+   token-based pass that counted string literals as usage reported 7, and a
+   second pass that included alias nodes in the used set reported 0. Both were
+   wrong, in opposite directions from the truth.
+2. **Transitive PostgreSQL dependency.** `core/__init__.py` re-exported the
+   cluster layer and `core/database.py` imported it eagerly, so every
+   `import theteam` loaded connection pooling, failover and read replicas — a
+   database tier §5.1 does not place in this stack, reached by no product
+   command. `core/__init__.py` now resolves its 21 re-exports through PEP 562
+   `__getattr__`, and `database.py` imports the cluster inside the three
+   properties that use it. Measured: **150 → 88 modules, 26 → 7 `core.*`, and
+   `postgres_cluster` no longer loads at all.**
+3. **26 `logging.basicConfig(level=logging.INFO)` calls at module scope**, in 25
+   files, 7 of them on the live import path. Importing theteam attached a
+   handler to the host's root logger before the host configured one. Removed
+   from all 25; `cli.main()` is now the single place the product configures
+   logging, and it uses `force=False` so a host that already configured logging
+   keeps its own setup.
+4. **`theteam/subskills/` and `core/folder_monitor.py`.** The subskill is
+   theteam's own (it names `theteam` as parent) but hardcodes a foreign
+   project name in three files, which a project-agnostic package may not. The
+   four design files are archived **unmodified**; the rewrite is open task 1
+   below. `folder_monitor.py` went with them: its only importer was one of the
+   41 dead re-exports, and it required a ledger file that **nothing in the
+   product writes**, so it would have reported every project as structurally
+   broken. `state.py:folder_monitor_log`, orphaned by that removal, went too.
+5. **`loop_manager.py.bak2` and `test_state_validator.py.backup2`.** 25,558
+   bytes of git-tracked dead weight with zero importers; pytest collected zero
+   tests from the second. Both now have rows in §5.3.
+6. **`ARCHITECTURE.md:269` claimed a digest cache that does not exist.** No
+   `st_mtime` check, no cache module, no `--refresh` flag. Corrected in place,
+   with the token cost it was meant to avoid recorded as unimplemented intent.
+
+**Not defects.**
+
+- **`theteam history` reporting `runs: 0`.** Already fixed in `82d7acf`, four
+  hours before the review. The cause was `log_execution()` never being called
+  in production, not two divergent paths — the executor and `history` both read
+  `StateStore.execution_log`, and the executor now writes on every
+  `execute_task`.
+- **A claimed `MockAPI` and five invariant violations.** False. No `MockAPI` in
+  source, no hardcoded `/Users/bparlan` in the package, no `parents[`, and
+  `.mp/theteam` confined to the `DEAD_DIR` guard. The gate was 6/6 correctly.
+
+**Open, by decision.**
+
+1. **Rewrite the archived subskill project-agnostically.** The four files in
+   `archive/docs-theteam/pre-m0-reports/` still say "Ledras Lament" at
+   `IMPLEMENTATION.md:4`, `INTEGRATION.md:11` and `TEAM_MEMBER_PROPOSAL.md:22`.
+   They are archived verbatim on purpose — history stays true — so the fix is a
+   separate act on a separate copy, not a quiet edit of a historical record.
+2. **Four `core/` modules have no production importer** (§5.2.1):
+   `state_validator`, `schema_versioning`, `system_integration` (all
+   test-only) and `integrated_orchestrator` (no importer at all). They are
+   assigned no layer on purpose. Each needs a caller or a §5.3 row; what they may
+   not do is stay silently present.
+3. **No digest cache** (§4.6). The per-turn token cost is real and currently
+   paid. A correct implementation needs a content hash or a walk of the watched
+   set as the invalidation key — a root-directory mtime would miss most edits
+   and serve a stale digest while appearing correct.
+
+**Verification after every item above:** 744 tests passed,
+`scripts/check_invariants.sh` 7/7.
 
 ---
 

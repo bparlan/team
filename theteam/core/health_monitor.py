@@ -7,8 +7,6 @@ import logging
 from dataclasses import dataclass
 from collections import deque
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class HealthStatus(Enum):

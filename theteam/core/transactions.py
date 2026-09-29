@@ -14,8 +14,6 @@ from typing import Dict, Any, List, Optional, Tuple, Callable, Union
 from enum import Enum
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class TransactionState(Enum):
     """Transaction state enumerator."""

@@ -27,8 +27,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple, Union
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class ChecksumAlgorithm(str, Enum):
     """Supported checksum algorithms."""

@@ -59,7 +59,7 @@ theteam/
 │   ├── event_bus.py
 │   ├── metrics.py
 │   └── state_manager.py, system_integration.py, integrated_orchestrator.py,
-│       event_bus.py, folder_monitor.py
+│       event_log.py, rate_limiting.py, postgres_cluster.py
 ├── advisory/                 # commentary layer
 │   ├── session_reader.py, selector.py, commentary.py, roster.py
 ├── workflow/                 # discussion and member management

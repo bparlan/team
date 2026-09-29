@@ -18,8 +18,6 @@ from pathlib import Path
 from contextlib import contextmanager
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Phase 4: production PostgreSQL cluster (pooling, read replicas, failover).

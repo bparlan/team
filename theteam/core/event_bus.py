@@ -14,8 +14,6 @@ from enum import Enum
 from pathlib import Path
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Import Phase 2 modules for robust event handling

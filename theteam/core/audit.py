@@ -20,7 +20,6 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Fields excluded from the hash: `hash` cannot cover itself, and `timestamp`

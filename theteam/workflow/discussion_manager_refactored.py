@@ -22,8 +22,6 @@ from typing import Dict, Any, List, Optional
 import threading
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class LightweightDiscussionManager:

@@ -15,8 +15,6 @@ from dataclasses import dataclass, asdict, field
 from enum import Enum
 from abc import ABC, abstractmethod
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class SchemaVersionError(Exception):
     """Exception raised for schema versioning errors."""

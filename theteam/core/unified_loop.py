@@ -552,6 +552,4 @@ def restore_state(backup_path, project_root: Optional[str] = None) -> None:
     """Restore state from a backup, verifying integrity first."""
     BackupManager(project_root or os.getcwd()).restore_from_backup(Path(backup_path))
 
-# Initialize logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

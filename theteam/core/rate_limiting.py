@@ -13,8 +13,6 @@ from typing import Dict, Any, List, Optional, Tuple, Set, Callable
 from collections import defaultdict, deque
 import logging
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 class RateLimitError(Exception):
     """Exception raised when rate limits are exceeded."""

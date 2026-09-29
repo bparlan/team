@@ -26,5 +26,4 @@ __all__ = [
 
 # Initialize logging
 import logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

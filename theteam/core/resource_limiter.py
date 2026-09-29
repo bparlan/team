@@ -16,8 +16,6 @@ import logging
 from dataclasses import dataclass
 from collections import defaultdict, deque
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 

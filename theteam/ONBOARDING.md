@@ -75,8 +75,11 @@ theteam/
 └── tests/                    # 772 tests
 ```
 
-`theteam/subskills/` still exists as an empty package directory; the task stack that lived in
-it moved to `theteam/tasks/`.
+`theteam/subskills/` no longer exists. The task stack that lived in `subskills/task_stack/` moved
+to `theteam/tasks/` in M2; the directory itself was deleted during the M7 review, when the four
+design files it held were archived verbatim to
+`archive/docs-theteam/pre-m0-reports/`. An earlier version of this file still told readers the
+directory was present.
 
 ## Configuration
 
@@ -84,7 +87,7 @@ it moved to `theteam/tasks/`.
 
 | Key | Meaning |
 |---|---|
-| `behavior.*` | Skill behavior: `block_edits_without_plan`, `pre_analysis_search`, `option_selection_required` |
+| `behavior.*` | Skill behavior: `block_edits_without_plan`, `pre_analysis_search`, `enable_persona_comments`. `option_selection_required` is retired, read by nothing, and kept only so old configs still validate. |
 | `team.*` | Member roster: id, role, expertise, voice |
 | `permitted_skills` | Hard boundary on what members may invoke (default `ponytail`, `evolve-skills`, `code-search`) |
 | `output.*` | `report_dir` (default `.omp/theteam/reports`), `keep_last` |

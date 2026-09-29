@@ -28,10 +28,15 @@ REQUIRED_BEHAVIOR_KEYS = [
     "block_edits_without_plan",
     "pre_analysis_search",
     "max_discussion_rounds",
-    # Enhanced chat behaviors
+    # Retired 2026-09-29. `option_selection_required` gated a prompt that
+    # offered "Abort Discussion" and then ran the discussion to completion
+    # regardless of the answer — a control that lied about its own effect,
+    # which §3.3 forbids. The prompt and its three-option fallback are gone
+    # from `run_discussion`. The key is still accepted, so a config written
+    # against the old schema still validates; it is no longer required and
+    # nothing reads it.
     "enable_persona_comments",
     "chat_mode",
-    "option_selection_required",
     "gamification_enabled",
     "auto_summarization",
     "dynamic_interaction",

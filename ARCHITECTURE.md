@@ -370,9 +370,9 @@ is the state §5.3 exists to prevent.
 
 | Module | Layer | Reached by |
 |---|---|---|
-| `unified_loop.py` | 1 Control | `theteam/__init__.py` |
-| `task_contract.py` | 2 Task | `tasks/`, tests |
-| `member.py` | 2 Task | `theteam/__init__.py`, CLI |
+| `unified_loop.py` | 1 Control | `cli.py` (`cmd_serve`, `cmd_run`), `core/integrated_orchestrator.py` |
+| `task_contract.py` | 2 Task | `core/unified_loop.py`, `core/integrated_orchestrator.py`, `core/state_validator.py` (test-only) |
+| `member.py` | 2 Task | `theteam/__init__.py`, `cli.py` (`status`) |
 | `state_manager.py` | 2 Task | `theteam/__init__.py` (`get_state_manager`) |
 | `wal.py` | 2 Task | `state_manager` |
 | `transactions.py` | 2 Task | `state_manager` |
@@ -384,12 +384,12 @@ is the state §5.3 exists to prevent.
 | `agent_isolation.py` | 4 Safety | `tasks/executor.py` — proven live |
 | `audit.py` | 4 Safety | `core/audit_chain.py`, `core/unified_loop.py` |
 | `audit_chain.py` | 4 Safety | `tasks/executor.py`, `tasks/repository.py`, `cli.py` (`status`), `ui/terminal.py`, `monitor.py` |
-| `backup.py` | 4 Safety | `state.py`, tests |
-| `health_monitor.py` | 4 Safety | `ui/components/health_dashboard.py` |
+| `backup.py` | 4 Safety | `core/unified_loop.py` (`BackupManager`); `state.py`, tests |
+| `health_monitor.py` | 4 Safety | `core/unified_loop.py` — the loop's only importer. `ui/components/health_dashboard.py` names it in a docstring and does not import it. |
 | `event_bus.py` | 5 Telemetry | `core/__init__.py` (lazy), `core/` internals |
-| `event_log.py` | 5 Telemetry | `core/metrics.py` |
+| `event_log.py` | 5 Telemetry | `core/event_bus.py` |
 | `rate_limiting.py` | 5 Telemetry | `core/event_bus.py` |
-| `metrics.py` | 5 Telemetry | `cmd_serve`, `ui/components/metrics_panel.py` |
+| `metrics.py` | 5 Telemetry | `cli.py` (`cmd_serve`), `core/integrated_orchestrator.py`, `core/__init__.py` (lazy) |
 | `team_member_manager.py` | 6 Advisory | `workflow/discussion_interface.py` |
 | `postgres_cluster.py` | — | **not on the entry point.** Imported at point of use by `database.py`. See invariant 7. |
 | `state_validator.py` | — | **no production importer.** Only `test_state_validator.py`. |

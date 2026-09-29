@@ -9,6 +9,57 @@ roadmap that was never planned. Those entries were removed rather than carried f
 pre-M0 reports they described are preserved in
 `archive/docs-theteam/pre-m0-reports/`, where they are history rather than documentation.
 
+## M8 — The docs tell the truth, and one of them is a lie in the code
+
+A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was
+undocumented in both `README.md` and `ARCHITECTURE.md`; it was already documented in both, in
+detail. The real findings were elsewhere. Most were documents disagreeing with the code. The last
+one was the reverse — and it was the only one that mattered, because it was a control promising
+an effect it did not have.
+
+- `--monitor` was missing from `theteam/CLI.md`'s command table. It is the only doc of the three
+  that enumerates the surface, and it listed the flag nowhere. Now documented there, with a
+  pointer to the full semantics.
+- **Stale counts.** `README.md` said 744 tests and "6 checks"; `theteam/ONBOARDING.md` said 744
+  tests. The measured numbers are **772** and **7** (gate check 7, the import-graph budget, was
+  added in the M7 review and the docs were never updated for it).
+- **`ARCHITECTURE.md:14` claimed "Nothing is implemented past M0."** Six milestones and a
+  documentation milestone have shipped since. The line was a leftover from the draft, in a
+  document whose first page is otherwise accurate.
+- **Four wrong rows in the §5.2.1 reachability table**, each verified by grep before correction:
+  `audit.py` was attributed to `tasks/audit_chain.py` (it lives in `core/`; `tasks/` has no such
+  module), `audit_chain.py` was attributed to `tasks/executor.py` only (five importers),
+  `team_member_manager.py` to `workflow/discussion_manager_refactored.py` (it is
+  `workflow/discussion_interface.py` that imports it), and `unified_loop.py` to
+  `theteam/__init__.py` (nothing there imports it; `cli.py` and `integrated_orchestrator.py` do).
+  `task_contract.py` and `backup.py` were also wrong and were corrected in the same pass.
+- **Part 8 listed `StateStore` as a component "verified absent from the entire tree."** It is
+  `theteam/state.py:35`, and every path in the product resolves through it. Conversely it listed
+  `SimpleTaskExecutor`, `SimpleTaskScheduler`, and `InMemoryTaskStore` as real components the
+  diagrams missed; none is in the tree, and `git log -S` finds each only in the commit that
+  deleted it. Corrected in place, with the correction stated.
+- **`SKILL.md` claimed the selection prompt presents four options "defined in `selection_options`
+  (see `theteam.config`)."** It does not: the key is optional per `REQUIRED_TOP_KEYS`, absent
+  from both the shipped template and this project's config, and `theteam/__init__.py:692` carried
+  a divergent three-option fallback. An agent following SKILL.md literally would show the user a
+  prompt the code never produced.
+- **That prompt lied, and it is deleted.** `run_discussion` offered "Abort Discussion — Stop the
+  current discussion loop", printed the answer at `__init__.py:712`, and then ran the discussion
+  to completion regardless, under the comment "For now, we'll proceed with a default path." A
+  control that reports an effect it does not have is the `MockAPI` defect class §3.3 forbids, so
+  this was a code defect the documentation pass uncovered, not a documentation defect.
+  `run_discussion` no longer offers a choice: the `ask` call, the three-option fallback, and the
+  `option_selection_required` gate that drove them are gone. `SKILL.md` step 3 is now a plain
+  gate, and the discussion's step list was renumbered 1–10 after removing the one that described
+  the prompt. `option_selection_required` is no longer required by the schema and is no longer
+  emitted by bootstrap or the template, but the validator ignores unknown keys, so every config
+  written before this change still validates — verified against this project's own config, which
+  still carries the key. Falsified: `theteam discuss` outside OMP still raises
+  `ProviderUnavailable` naming the OMP requirement, and `grep -rn "Abort Discussion" theteam/`
+  returns nothing outside `CHANGELOG.md`.
+
+`772 passed`, gate 7/7.
+
 ## M7 — The documentation tells the truth
 
 Every document audited against the code it names. Where a document and the code disagreed, the

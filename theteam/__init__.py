@@ -460,7 +460,6 @@ def generate_team_members_from_context(project_root):
                 'pre_analysis_search': True,
                 'enable_persona_comments': True,
                 'chat_mode': True,
-                'option_selection_required': True,
                 'gamification_enabled': True,
                 'auto_summarization': False,
                 'dynamic_interaction': True,
@@ -687,33 +686,6 @@ def run_discussion(project_root, topic):
     all_insights = [intro['personal_insight'] for intro in intros]
     tldr = f"Team discussion initiated. Members shared initial thoughts: {'. '.join(all_insights)}."
     print(tldr)
-
-    # User Selection Prompt
-    options = config.get("selection_options", [
-        {"label": "Proceed with Plan", "description": "Execute the recommended actions."},
-        {"label": "Detailed Review", "description": "Request more in-depth analysis from each member."},
-        {"label": "Abort Discussion", "description": "Stop the current discussion loop."}
-    ])
-    question_options = [{'label': opt['label'], 'description': opt.get('description', '')} for opt in options]
-
-    # Check if option_selection_required is true
-    if config["behavior"].get("option_selection_required", False):
-        user_choice = default_api.ask(
-            i="Select next action",
-            questions=[
-                {
-                    "id": "next_action",
-                    "question": "How should the team proceed?",
-                    "options": question_options,
-                    "recommended": 0 # Default to the first option
-                }
-            ]
-        )
-        print(f"User chose: {user_choice['next_action']}")
-        # Based on user_choice, you would then branch to different behaviors.
-        # For now, we'll proceed with a default path.
-    else:
-        print("Option selection skipped as not required.")
 
     # Create a task for the discussion
     discussion_task = {

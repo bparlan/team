@@ -224,9 +224,10 @@ same three things: the suite, an import check, and the invariant gate.
 | **M5** — the team comments | `advisory/` reads a real OMP session and speaks when there is something to say, or reports why it did not. |
 | **M6** — the terminal shows the truth | The terminal renderer, stdlib only, over the unchanged machine surface. |
 | **M7** — the documentation tells the truth | This file and the command surface. Brought every document current against the code, corrected the diagrams, and fixed the `watch --json` inconsistency. |
+| **M8** — the watch loop monitors | `theteam/monitor.py` and `watch --monitor`: the same payloads, diffed frame to frame, naming the transitions worth noticing. Plus a documentation audit that corrected six documents against the code. |
 
-M7 is a documentation milestone, not a product milestone. It is deliberately not in Part 6 of
-`ARCHITECTURE.md`, which tracks delivered product milestones.
+M7 and M8 are documentation-and-surface milestones, not product milestones. They are deliberately
+not in Part 6 of `ARCHITECTURE.md`, which tracks delivered product milestones.
 
 ## What this project is not
 

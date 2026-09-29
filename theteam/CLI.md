@@ -30,9 +30,15 @@ theteam <command> --help
 | `history` | Per-task success rate, last run, last failure. |
 | `task create\|edit\|delete\|show` | Single-task operations. |
 | `comment on\|off\|status` | Continuous in-context commentary. |
-| `watch status\|tasks\|history` | The trust surface, rendered in the terminal. |
+| `watch status\|tasks\|history` | The trust surface, rendered in the terminal. `--once`, `--interval`, `--monitor`, `--json`. |
 
 Global flags: `--project-root PATH` and `--json`, both accepted on either side of the subcommand.
+
+`watch --monitor` is the change monitor: it diffs each frame against the one before it and names
+the transitions worth noticing (a breaker reaching `open`, an audit chain leaving `intact`, a task
+leaving the registry). It is a flag on the same payload, not a new view, and it is off by default.
+Full semantics are in the root [`README.md`](../README.md) under **Watching for change** and in
+`ARCHITECTURE.md` §2.
 
 ## The helper scripts in `theteam/bin/`
 

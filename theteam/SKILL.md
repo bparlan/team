@@ -95,37 +95,45 @@ When the skill is invoked, it must immediately begin a structured round‑robin 
    - `personal_insight` – a concise comment on the current situation/topic.
    These are gathered from the members' individual notes before any synthesis.
 2. **Team Consolidation TL;DR** – after all intros, the orchestrator drafts a one‑sentence summary of the discussion so far.
-3. **User Selection Prompt** – present the four selectable options defined in `selection_options` (see `theteam.config`). The user must choose one before any further back‑and‑forth.
-
-Only after the user selects an option does the skill proceed to the usual synthesis, report rendering, and final output phases.
+3. **Gate** – the discussion proceeds to synthesis and report rendering. There is no user-choice
+   prompt here; see the correction below.
 
 This flow ensures a deterministic start and chat‑room‑like interaction for every invocation.
 
-```yaml
-selection_options:
-  - label: "Proceed / Accept / Continue"
-    value: proceed
-  - label: "Do plan B / Choose alternative path"
-    value: alternative
-  - label: "Tell me more: relevant team members report more details"
-    value: more_details
-  - label: "User input"
-    value: user_input
-```
+> **Corrected 2026-09-29, twice.** This step previously described a four-option selection prompt
+> gated on the user choosing one. It was wrong in two separate ways, and the second is the
+> important one.
+>
+> *First*: the four options were never in anyone's config. `selection_options` is not a required
+> key, it is in neither the shipped template nor any bootstrapped project, and an agent following
+> this file literally was showing the user a prompt the code never produced.
+>
+> *Second, and the reason the prompt is now gone rather than merely documented*: the code had a
+> **different** prompt, and that one lied. `run_discussion` offered "Abort Discussion — Stop the
+> current discussion loop", printed the answer, and then ran the discussion to completion
+> regardless. A control that reports an effect it does not have is the same defect class as the
+> `MockAPI` that M0 removed, and `ARCHITECTURE.md` §3.3 forbids it outright. The prompt, its
+> three-option fallback, and the `option_selection_required` gate that drove them have all been
+> deleted.
+>
+> If a user-choice gate is ever reintroduced, it must branch for **every** option it offers —
+> including an abort that actually returns before any member is spawned — and only then does
+> `selection_options` belong in the schema. A prompt whose answer is printed and discarded should
+> not exist. `option_selection_required` is still accepted in configs so old ones keep validating;
+> nothing reads it.
 
-All subsequent steps (pre‑analysis, spawning, synthesis, report) remain unchanged but are gated behind the user's choice.
-   follow the same sequence internally.
-2. **Guardrail — no edits without an approved plan.** If the discussion
+All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from the intros.
+4. **Guardrail — no edits without an approved plan.** If the discussion
    topic implies a file change, `behavior.block_edits_without_plan` (true by
    default) means: no `write`/`edit` calls happen until the todo plan above
    has been posted and — for anything non-trivial — the user has had a
    chance to react to it. This applies even if a member's note recommends a
    specific code change. A recommendation is not a plan.
-3. **Pre-analysis research (if enabled).** If `behavior.pre_analysis_search`
+5. **Pre-analysis research (if enabled).** If `behavior.pre_analysis_search`
    is true and the topic warrants it, run it via the permitted skills only
    (see below) before spawning members, so all members see the same
    grounding material instead of each doing their own ad hoc research.
-4. **Context aggregation.** Before spawning anyone, ground the discussion in actual
+6. **Context aggregation.** Before spawning anyone, ground the discussion in actual
    project state. Run the deterministic context aggregator and read the config:
    ```bash
    python3 theteam/workflow/context_aggregator.py "$(pwd)"
@@ -136,21 +144,21 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) remain unchan
    one. Do not read it and do not report its absence as a problem; if a discussion
    needs a tool contract, read the tool's own source. If the aggregator is
    missing or fails, say so and proceed — never invent config values from memory.
-5. **Spawn each enabled member independently**, one `task` call per member
+7. **Spawn each enabled member independently**, one `task` call per member
    (isolated — members must not see each other's output). Each member's
    system prompt should be built from its `role`, `expertise`, and `voice`
-   fields, plus the topic, any shared research context from step 3, and the
-   project context from step 4. Each member's
+   fields, plus the topic, any shared research context from step 5, and the
+   project context from step 6. Each member's
    `outputSchema` should require exactly:
    `{id, role, verdict, note}` — matching what `theteam_report.py` expects.
    Write each member's returned JSON to its own file under a scratch notes
    directory, e.g. `/tmp/theteam-notes-<timestamp>/<id>.json`.
-6. **You do the synthesis pass** — after all members have reported, read
+8. **You do the synthesis pass** — after all members have reported, read
    every note yourself and write `synthesis.json` with `summary`,
    `agreements`, `disagreements`, `open_questions`, `recommendation`. Be
    honest about disagreement; `"No consensus — see disagreements"` is a
    legitimate recommendation. Do not average away a real split.
-7. **Render the report:**
+9. **Render the report:**
    ```bash
    PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
      --topic "<topic>" \
@@ -165,7 +173,7 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) remain unchan
    complete. If it fails, fix the actual gap (missing note file, failed
    task) and rerun; don't drop the missing member from `--expected-ids` just
    to make the command pass.
-8. **Present the report to the user**: link/quote the written file, and
+10. **Present the report to the user**: link/quote the written file, and
    summarize the recommendation and any open questions in your own reply —
    don't just dump the raw markdown unremarked.
 

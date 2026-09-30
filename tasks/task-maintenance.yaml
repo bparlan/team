@@ -16,4 +16,12 @@ phases:
   args: []
   timeout_seconds: 300
   memory_limit_mb: 64
+  # This phase is the one task in the repo that writes. `loop_maintenance.py`
+  # has 23 mutating call sites — `shutil.rmtree` on `__pycache__`, `unlink` on
+  # `.pyc`, log rotation — and the executor mounts the project read-only by
+  # default. Without this flag it died on the first unlink with
+  # `OSError: [Errno 30] Read-only file system`, so `maintenance` could never
+  # succeed through the executor on any machine. Confirmed by running the
+  # phase both ways: returncode 1 read-only, returncode 0 with the flag.
+  writable_project: true
 order: 3

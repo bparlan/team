@@ -55,13 +55,44 @@ def write_report(report_type: str, data: Dict, content_fn) -> Path:
         raise
 
 def run_analysis() -> Optional[Dict[str, Any]]:
-    """Run the 4-phase analysis engine. Single pass."""
+    """Run the 4-phase analysis engine. Single pass.
+
+    Three defects lived here, and each was found by running the script rather
+    than reading it:
+
+    1. `from tasks.system_awareness...` — a dotted path with no `__init__.py`
+       anywhere in the chain. It raised `ModuleNotFoundError` on every call.
+       `SA_DIR` is already on `sys.path` (line 22), so the module is top-level
+       there; the dotted form could never resolve.
+    2. `analyzer.analyze()` — no such method. The analyzer's entrypoint is
+       `run_complete_analysis`, so this raised `AttributeError` next.
+    3. The return was passed on as the analysis results, but
+       `run_complete_analysis` returns `{"analysis_results": ..., ...}`.
+       Every consumer (`extract_health_score`, the report writers) reads the
+       phase keys from the top level, so all of them silently fell back to
+       `0.0`/`"F"` on absent keys.
+
+    The unwrap is the part that matters: those `.get(..., 0.0)` defaults mean a
+    wrong shape cannot raise — it just reports a zero score, which is a
+    plausible-looking measurement. That is how `health-check` came to print
+    "PASSED, overall score 0.70" from a cached file while this function had
+    never once succeeded.
+    """
     try:
-        # Import here to avoid circular imports
-        from tasks.system_awareness.analyze_system_awareness import SystemArchitectureAnalyzer
-        
-        analyzer = SystemArchitectureAnalyzer(PROJECT_ROOT)
-        results = analyzer.analyze()
+        # Top-level import: `SA_DIR` is on sys.path, and the dotted package
+        # path this used to use has never existed.
+        from analyze_system_awareness import SystemArchitectureAnalyzer
+
+        analyzer = SystemArchitectureAnalyzer(str(PROJECT_ROOT))
+        envelope = analyzer.run_complete_analysis()
+        if not envelope:
+            return None
+        # Unwrap so callers see the phase keys at the top level, which is what
+        # `extract_health_score` and the report writers all read.
+        results = envelope.get("analysis_results")
+        if results is None:
+            print("Error: analyzer returned no analysis_results")
+            return None
         return results
     except Exception as e:
         print(f"Error running analysis: {e}")
@@ -69,21 +100,28 @@ def run_analysis() -> Optional[Dict[str, Any]]:
         return None
 
 def extract_health_score(analysis_results: Dict) -> Dict:
-    """Extract health score from analysis results."""
-    try:
-        return {
-            "overall_score": analysis_results.get("health_metrics", {}).get("overall_score", 0.0),
-            "grade": analysis_results.get("health_metrics", {}).get("grade", "F"),
-            "documentation_completeness": analysis_results.get("documentation", {}).get("completeness_score", 0.0),
-            "architecture_cohesion": analysis_results.get("architecture", {}).get("cohesion_score", 0.0),
-            "infrastructure_reliability": analysis_results.get("infrastructure", {}).get("reliability_score", 0.0),
-            "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
-            "last_run_success": True,
-            "consecutive_failures": 0,
-            "recommendations": analysis_results.get("health_metrics", {}).get("recommendations", []),
-        }
-    except Exception as e:
-        print(f"Error extracting health score: {e}")
+    """Extract the health score from analysis results.
+
+    The keys read here were all wrong against the shape the analyzer actually
+    produces, and every one was wrong in the same direction — a `.get` default
+    of `0.0` on a key that is never present. So a total contract failure
+    produced a valid-looking report reading `0.0`, grade `F`, rather than an
+    error:
+
+    - `health_metrics` does not exist. `generate_system_health_score` assigns
+      the dict to `analysis_results["health_score"]`.
+    - the per-phase scores are not at `documentation.completeness_score`.
+      They are at `documentation.quality_metrics.completeness_score`, and the
+      component scores the analyzer computes live in
+      `health_score.component_scores` keyed by phase name.
+
+    The score is now read from `health_score.component_scores`, which is the
+    one place the analyzer publishes all four, and a missing health score is
+    reported rather than defaulted: this function feeds `health-check`, and a
+    defaulted 0.0 there is indistinguishable from a genuinely failing project.
+    """
+    health = analysis_results.get("health_score") or {}
+    if not health:
         return {
             "overall_score": 0.0,
             "grade": "F",
@@ -94,7 +132,23 @@ def extract_health_score(analysis_results: Dict) -> Dict:
             "last_run_success": False,
             "consecutive_failures": 1,
             "recommendations": [],
+            "error": "analysis results carried no health_score; "
+                     "the analyzer did not produce a score",
         }
+
+    components = health.get("component_scores") or {}
+    return {
+        "overall_score": health.get("overall_score", 0.0),
+        "grade": health.get("grade", "F"),
+        "documentation_completeness": components.get("documentation", 0.0),
+        "architecture_cohesion": components.get("architecture", 0.0),
+        "infrastructure_reliability": components.get("infrastructure", 0.0),
+        "project_structure": components.get("project_structure", 0.0),
+        "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
+        "last_run_success": True,
+        "consecutive_failures": 0,
+        "recommendations": health.get("recommendations", []),
+    }
 
 def extract_team_summary(analysis_results: Dict, health: Dict) -> Dict:
     """Extract a concise summary for team review."""

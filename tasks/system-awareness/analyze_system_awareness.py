@@ -34,11 +34,36 @@ class SystemArchitectureAnalyzer:
     recursive analysis framework following Ponytail principles.
     """
     
+    # 2MB cap. Without it this ledger grows without bound — it reached 25MB
+    # and was committed, because nothing that could write it also trimmed it.
+    # The cap is not new policy: it was already implemented in the
+    # `optimized_system_awareness_runner` variant, which nothing imported, so
+    # the protection existed in the repo while the live analyzer had none.
+    LEDGER_MAX_BYTES = 2 * 1024 * 1024
+
     def __init__(self, project_root: str):
         self.project_root = Path(project_root)
         self.ledger_file = self.project_root / "system-awareness-ledger.json"
         self.report_dir = self.project_root / "theteam" / "reports"
         self.load_ledger()
+
+    def _rotate_ledger(self) -> None:
+        """Archive an oversized ledger before rewriting it.
+
+        Rotation rather than truncation: the previous analysis stays readable
+        on disk instead of being deleted, which is the only reason to keep a
+        ledger at all.
+        """
+        archive_dir = self.ledger_file.parent / "archives"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        try:
+            self.ledger_file.replace(archive_dir / f"ledger_{stamp}.json")
+        except OSError as exc:
+            # A failed archive must not lose the ledger. The write below
+            # truncates, so an unrotated oversized file still gets replaced
+            # rather than left in place.
+            print(f"Warning: could not archive ledger ({exc}); continuing")
         
     def load_ledger(self):
         """Load analysis ledger or create new one."""
@@ -79,7 +104,9 @@ class SystemArchitectureAnalyzer:
             }
     
     def save_ledger(self):
-        """Save analysis ledger to disk."""
+        """Save analysis ledger to disk, rotating it if it has grown too large."""
+        if self.ledger_file.exists() and self.ledger_file.stat().st_size > self.LEDGER_MAX_BYTES:
+            self._rotate_ledger()
         with open(self.ledger_file, 'w') as f:
             json.dump(self.ledger_data, f, indent=2)
     

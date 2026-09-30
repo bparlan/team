@@ -123,8 +123,20 @@ class TestTestIsolation(unittest.TestCase):
                 offenders.append(test_file.name)
         self.assertEqual(offenders, [],
                          "self.temp_dir created without teardown: " + ", ".join(offenders))
+
+
 class TestLedgerRotation(unittest.TestCase):
-    """Fix 3: Ledger writes must rotate when exceeding a deterministic size cap."""
+    """Fix 3: Ledger writes must rotate when exceeding a deterministic size cap.
+
+    This test used to load `optimized_system_awareness_runner`, a variant that
+    nothing imported. It passed for years while the class that actually
+    writes the ledger had no rotation at all, and the ledger reached 25MB
+    tracked in git. The protection existed in the repo; it was simply not
+    attached to the code that ran.
+
+    So the assertion is now against `SystemArchitectureAnalyzer`, the class
+    `analyze_system_awareness` defines and `sa_runner` is supposed to use.
+    """
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
@@ -132,33 +144,60 @@ class TestLedgerRotation(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
 
-    def _load_runner(self):
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(
-            "optimized_runner",
-            str(PROJECT_ROOT / "tasks" / "system-awareness" / "optimized_system_awareness_runner.py"),
-        )
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        return mod.OptimizedSystemAwarenessRunner(str(PROJECT_ROOT))
+    def _load_analyzer(self):
+        sys.path.insert(0, str(PROJECT_ROOT / "tasks" / "system-awareness"))
+        try:
+            from analyze_system_awareness import SystemArchitectureAnalyzer
+        finally:
+            sys.path.remove(str(PROJECT_ROOT / "tasks" / "system-awareness"))
+        # Returned as a class, not an instance: instantiating would read the
+        # real 25MB ledger in `__init__`. Tests build instances via `__new__`
+        # and set `ledger_file` themselves.
+        return SystemArchitectureAnalyzer
 
-    def test_runner_has_rotation_threshold(self):
-        runner = self._load_runner()
-        self.assertGreater(runner._ledger_max_bytes, 0)
-        self.assertTrue(callable(runner._rotate_ledger))
+    def test_live_analyzer_has_rotation_threshold(self):
+        analyzer_cls = self._load_analyzer()
+        self.assertGreater(analyzer_cls.LEDGER_MAX_BYTES, 0)
+        self.assertTrue(callable(analyzer_cls._rotate_ledger))
 
     def test_rotation_archives_oversized_ledger(self):
-        runner = self._load_runner()
-        runner._ledger_max_bytes = 100  # tiny cap to force rotation
-        runner.ledger_file = self.tmp / "ledger.json"
-        runner.ledger_file.write_text(json.dumps({"big": "x" * 200}))
-        # Point archive dir under temp dir to avoid writing to scripts/
-        with patch.object(runner, "ledger_file", self.tmp / "ledger.json"):
-            runner._rotate_ledger()
+        analyzer_cls = self._load_analyzer()
+        big = self.tmp / "ledger.json"
+        big.write_text(json.dumps({"big": "x" * 200}))
+
+        analyzer = analyzer_cls.__new__(analyzer_cls)
+        analyzer.ledger_file = big
+        analyzer._rotate_ledger()
+
         archives = list(self.tmp.glob("archives/ledger_*.json"))
         self.assertEqual(len(archives), 1, "Rotation must archive the old ledger")
+        self.assertFalse(big.exists(), "Rotation must move the ledger, not copy it")
 
+    def test_save_ledger_rotates_when_over_cap(self):
+        """The cap must be enforced on the write path, not merely declared.
 
+        Asserting that `LEDGER_MAX_BYTES` exists proves nothing: the original
+        defect was a class with no cap at all, which is also a passing
+        assertion if you only look for the constant. So this writes a file
+        over the cap and calls `save_ledger`, which is the code path that
+        actually runs.
+        """
+        analyzer_cls = self._load_analyzer()
+        ledger = self.tmp / "ledger.json"
+        ledger.write_text(json.dumps({"big": "x" * 200}))
+
+        analyzer = analyzer_cls.__new__(analyzer_cls)
+        analyzer.ledger_file = ledger
+        analyzer.ledger_data = {"fresh": True}
+        analyzer.LEDGER_MAX_BYTES = 100
+
+        analyzer.save_ledger()
+
+        archives = list(self.tmp.glob("archives/ledger_*.json"))
+        self.assertEqual(len(archives), 1,
+                         "save_ledger must rotate an oversized ledger before rewriting")
+        self.assertEqual(json.loads(ledger.read_text()), {"fresh": True},
+                         "save_ledger must write the new ledger after rotating")
 
 
 class TestReportWriterContract(unittest.TestCase):

@@ -164,6 +164,65 @@ milestone did not merge them.
 
 `816 passed` (789 + 27 new), gate 7/7, `import theteam` succeeds.
 
+## M9 Phase 3 — Context efficiency
+
+`theteam/__init__.py:93` did `yaml.dump(project_context)` into **every** member's prompt, so
+the same tokens were paid N times. Measured on this repository: **2,499 characters per
+member, 12,495 across a 5-member roster**, of which `runtime_config` alone was 1,272.
+
+`advisory/context_slice.py` delivers the sections a member's declared focus implies. After:
+
+```
+                before    after
+architect        2499     1398     (runtime_config: architecture, contract, layering)
+pragmatist       2499      126
+skeptic          2499      126
+designer         2499      126
+devops           2499     1398     (runtime_config: ci, infrastructure, stability)
+                -----    -----
+total           12495     3174     75% less
+```
+
+**There are no flags in the context, and the milestone assumed there were.** §M9 says "slice
+`project_context` per member by the flag its focus implies", but
+`aggregate_project_context` returns `project_goal`, `runtime_config`, `token_budget`,
+`registered_structure`, `last_health_scan`, `production_invariants`, `timestamp`,
+`project_root` — no `security_focus`, no `database_focus`. Those flags come from
+`analyze_project_context` and decide the **roster** (`manager.py` reads them). So the phase
+means slicing by *section*, matched against the member's declared vocabulary.
+
+**A single incidental token is not evidence, and the milestone's own instruction covers it.**
+§M9: "add an explicit mapping only if the match proves unreliable in testing." It proved
+unreliable. An unfiltered match carried `runtime_config` — 91% of a member's whole budget —
+to four of five members on the strength of `scope` and `reviewer` appearing once in a
+package description. `MATCH_THRESHOLD = 2` requires corroboration: 75% saved instead of 39%,
+and `runtime_config` reaches only the members matching on multiple terms. The fix is a
+threshold, **not** a hand-written section-to-member table — a mapping would be a second
+source of truth beside `FOCUS_TOKENS`. Pinned by
+`test_the_threshold_is_two_matching_tokens`.
+
+**Stop words were removed first, and the measurement shows it was not sufficient.** The
+unfiltered match carried `runtime_config` on `in` (from "pack**in**-module scope"), `and`,
+and `for`. Filtering those via the selector's existing `STOP_TOKENS` left only real words —
+but not few enough, which is what the threshold addresses. Both changes reuse the selector's
+tables rather than re-declaring them; a second copy of "what summons the architect" is the
+dead end `selector.py:201-207` records.
+
+**A section delivered to nobody is reported, not dropped.** Every discussion now prints:
+
+```
+context section 'production_invariants' reached no member (all 5 missed it)
+context section 'registered_structure' reached no member (all 5 missed it)
+```
+
+Both are genuinely orphaned on this roster — `production_invariants` is config settings and
+`registered_structure` a directory listing, neither matching any member's declared
+vocabulary. The report is the feature working: §M9 asks for it precisely so a member cannot
+silently stop knowing something. `timestamp` is dropped by design and is never reported,
+because delivering it would make two identical discussions produce two different prompts.
+
+`836 passed` (816 + 20 new), gate 7/7, `import theteam` loads 88 modules (budget 90).
+
 ## M8 — The docs tell the truth, and one of them is a lie in the code
 
 A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was

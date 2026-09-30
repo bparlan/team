@@ -90,7 +90,7 @@ def spawn_member_task(member, topic, project_context, permitted_skills):
         "\n## Discussion Topic",
         topic,
         "\n## Project Architecture Context",
-        yaml.dump(project_context, default_flow_style=False) if isinstance(project_context, dict) else str(project_context),
+        _member_context(project_context, member),
         "\n## Tool Inventory",
         _render_skills(permitted_skills),
         "\n## Your Task",
@@ -599,6 +599,21 @@ def bootstrap_flow(project_root):
         return False
     finally:
         os.remove(answers_file_path) # Clean up temporary file
+def _member_context(project_context, member):
+    """The project context one member receives.
+
+    M9 Phase 3. `__init__.py:93` used to `yaml.dump(project_context)` into
+    every member's prompt, so the same tokens were paid N times: measured on
+    this repository, 2,499 characters per member across a 5-member roster.
+    The section a member's declared focus implies is delivered and the rest
+    is not; see `theteam.advisory.context_slice`, which owns the rule.
+    """
+    from theteam.advisory.context_slice import slice_context
+
+    rendered, _undelivered = slice_context(project_context, member)
+    return rendered
+
+
 def _permitted_skills(config):
     """The skills this project's members may use, as the list it declares.
 
@@ -726,6 +741,17 @@ def run_discussion(project_root, topic):
               f"{len(selected_ids)} speak, {suppressed} suppressed (cap {MEMBER_CAP})")
     if selection.get("signals"):
         print(f"  signals: {selection['signals']}")
+
+    # M9 Phase 3: a context section no member receives is reported, not
+    # dropped. Silently slicing it away is how a member stops knowing
+    # something and no document says so.
+    from theteam.advisory.context_slice import undelivered_sections
+
+    orphans = undelivered_sections(project_context, config["team"])
+    if orphans:
+        for section, missed_by in sorted(orphans.items()):
+            print(f"  context section '{section}' reached no member "
+                  f"(all {len(missed_by)} missed it)")
 
     member_tasks_to_spawn = [
         spawn_member_task(by_id[mid], topic, project_context, permitted_skills)

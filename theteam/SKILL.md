@@ -145,6 +145,12 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    one. Do not read it and do not report its absence as a problem; if a discussion
    needs a tool contract, read the tool's own source. If the aggregator is
    missing or fails, say so and proceed — never invent config values from memory.
+
+   **Context is sliced per member (M9 Phase 3).** Each selected member receives only the
+   project sections its own expertise matches, not the whole snapshot — a section needs two
+   matching terms to be delivered, and one incidental word is not evidence. If a discussion
+   needs a section no member received, say so; the run reports it as
+   `context section '<name>' reached no member`, and that is a gap to name, not to ignore.
 7. **Select, then spawn.** Selection is deterministic and happens *before*
    any member is spawned — `theteam.advisory.selector.select_members` decides,
    and at most **4** members speak. It reads two signals: tokens in the topic

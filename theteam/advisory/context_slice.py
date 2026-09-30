@@ -40,7 +40,7 @@ names them, and the caller prints them.
 """
 
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import AbstractSet, Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -57,7 +57,18 @@ _WORD = re.compile(r"[a-z0-9][a-z0-9._-]*")
 
 
 def _tokens(text: str) -> Set[str]:
-    return set(_WORD.findall(str(text).lower()))
+    """Word tokens, minus the words that mean nothing as evidence.
+
+    The stop filter is not cosmetic. Measured on this repository's real
+    context, an unfiltered match carried `runtime_config` (1,272 chars) to
+    all five members on the strength of the tokens `in` (from
+    "pack**in**-module scope"), `and`, `for` and `reviewer`. The saving was
+    39%. `selector.STOP_TOKENS` is the existing list, reused here rather
+    than re-declared, for the same reason `FOCUS_TOKENS` is reused.
+    """
+    from theteam.advisory.selector import STOP_TOKENS
+
+    return {t for t in _WORD.findall(str(text).lower()) if t not in STOP_TOKENS}
 
 
 def _member_focus(member: Dict[str, Any]) -> Set[str]:
@@ -72,25 +83,41 @@ def _member_focus(member: Dict[str, Any]) -> Set[str]:
                             ("expertise", "role", "voice")))
 
 
+#: How many distinct tokens must match before a section is delivered.
+#:
+#: Measured, not chosen. A single-token match carried `runtime_config`
+#: (1,272 chars — 91% of a member's whole budget) to four of five members
+#: on the strength of `scope` and `reviewer` appearing somewhere in a
+#: package description. At 2, the same context saves 75% instead of 39%
+#: and reaches only the architect and devops, who match on
+#: architecture/contract and ci/infrastructure/stability respectively.
+#: Three matches changes nothing over two, so the extra requirement would
+#: be cost without effect.
+MATCH_THRESHOLD = 2
+
+
 def _section_matches(key: str, value: Any, focus: Set[str],
                      focus_tokens: Set[str]) -> bool:
     """Whether a context section is relevant to this member.
 
     §M9: start with a token match against `expertise`, and add an explicit
-    mapping only if the match proves unreliable. It has not proven
-    unreliable, so there is no mapping. The match is over the section's
-    *content*, not just its name: a member who knows about `package.json`
-    cares about a section called `runtime_config` that happens to contain
-    one.
+    mapping only if the match proves unreliable in testing. It proved
+    unreliable, and the fix is `MATCH_THRESHOLD` rather than a hand-written
+    section-to-member table: a mapping would be a second source of truth
+    beside `FOCUS_TOKENS`, and this keeps one rule instead of two.
+
+    The match is over the section's *content*, not just its name, because a
+    member who cares about a `pyproject.toml` deserves it whether the
+    enclosing key is `runtime_config` or `manifest`.
     """
     haystack = _tokens(f"{key} {yaml.dump(value, default_flow_style=False)}")
-    return bool(haystack & (focus | focus_tokens))
+    return len(haystack & (focus | focus_tokens)) >= MATCH_THRESHOLD
 
 
 def slice_context(
     project_context: Any,
     member: Dict[str, Any],
-    focus_tokens: Optional[Set[str]] = None,
+    focus_tokens: Optional[AbstractSet[str]] = None,
 ) -> Tuple[str, List[str]]:
     """The project context this member gets, and what it does not.
 

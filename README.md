@@ -206,7 +206,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 816 tests
+python -m pytest -q                  # 836 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

@@ -297,6 +297,25 @@ Each selected member receives, and nothing more:
 > documented saving. Building it means a correct invalidation key (content hash
 > or a walk of the watched set), not a root mtime.
 
+> **Per-member slicing, M9 Phase 3 (2026-09-30).** The table above caps what a member
+> *should* receive; before this milestone every member received all of it.
+> `theteam/__init__.py:93` did `yaml.dump(project_context)` into every prompt, so the
+> same tokens were paid once per member. `advisory/context_slice.py` now delivers the
+> sections a member's declared vocabulary implies, measured on this repository as
+> **12,495 → 3,174 characters across a 5-member roster (75% less)**.
+>
+> Two details the numbers depend on. A section needs **two** matching tokens, not one:
+> a single match carried `runtime_config` — 1,272 characters, 91% of a member's budget —
+> to four of five members on the strength of `scope` and `reviewer` appearing once in a
+> package description. And a section **no member receives is reported**, not dropped;
+> every discussion prints `context section 'production_invariants' reached no member
+> (all 5 missed it)`. `timestamp` is dropped by design and never reported, because
+> delivering it would make two identical discussions produce two different prompts.
+>
+> The "there are no flags in the context" point matters: the `*_focus` flags live in
+> `analyze_project_context` and decide the **roster** (§M9 Phase 2), not this slice.
+> `aggregate_project_context` returns sections, and those are what gets sliced.
+
 **Ceiling: 4 member calls per turn, ~2k tokens each, ~8k tokens per turn.** In a quiet session: zero calls.
 
 ## 4.7 Task proposals, never task creation

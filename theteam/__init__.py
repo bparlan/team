@@ -287,6 +287,169 @@ def analyze_project_context(project_root):
     )
 
     return context
+# The team catalog: every member that can exist, in one place.
+#
+# `generate_team_members_from_context` builds a roster from these, and M9
+# Phase 2's `theteam manager` reads the same two tables. Two tables would
+# drift, and a roster grown from a table bootstrap does not know about is a
+# member with no origin. The catalog is also the roster cap: there are
+# `len(BASE_MEMBERS) + len(FOCUS_MEMBERS)` = 9 possible members, so a manager
+# that "grows" the roster every run cannot reach 30.
+
+BASE_MEMBERS = [
+    {
+        'id': 'architect',
+        'role': 'Systems Architect',
+        'expertise': 'long-term maintainability, coupling, failure modes, blast radius',
+        'voice': 'skeptical of shortcuts; asks what breaks in 6 months',
+        'enabled': True,
+        'personality': {
+            'emoji': '🧱',
+            'color': '#FF6B6B',
+            'greeting': "Hello team! Let's architect this properly...",
+            'closing': "🏗️ Architect signing off — think about those long-term implications",
+            'style': 'technical',
+            'speech_pattern': 'methodical',
+            'interaction_frequency': 'balanced'
+        }
+    },
+    {
+        'id': 'pragmatist',
+        'role': 'Delivery Pragmatist',
+        'expertise': 'shipping speed, scope control, solo-developer bandwidth',
+        'voice': 'pushes back on over-engineering; asks for the smallest real fix',
+        'enabled': True,
+        'personality': {
+            'emoji': '⚡',
+            'color': '#4ECDC4',
+            'greeting': "Alright team! Let's ship this FAST! 🚀",
+            'closing': "✅ Pragmatist done — shipping first, perfect second",
+            'style': 'direct',
+            'speech_pattern': 'quick',
+            'interaction_frequency': 'high'
+        }
+    },
+    {
+        'id': 'skeptic',
+        'role': 'Adversarial Reviewer',
+        'expertise': 'edge cases, silent failure modes, unverified claims',
+        'voice': 'distrusts prose-only completion reports; demands raw evidence',
+        'enabled': True,
+        'personality': {
+            'emoji': '🔍',
+            'color': '#95E77E',
+            'greeting': 'Whoa whoa! Let\'s slow down and test this! 📋',
+            'closing': '🤔 Skeptic signing off — ask again later!',
+            'style': 'analytical',
+            'speech_pattern': 'cautious',
+            'interaction_frequency': 'as_needed'
+        }
+    }
+]
+
+# One member per detected focus. Every flag `analyze_project_context`
+# can set has a reviewer here, so a Python web project and a Rust CLI
+# do not get the same team.
+FOCUS_MEMBERS = {
+    'security_focus': {
+        'id': 'security',
+        'role': 'Security Reviewer',
+        'expertise': 'auth, secrets handling, input validation, supply chain',
+        'voice': 'assumes hostile input until proven otherwise',
+        'personality': {
+            'emoji': '🔒',
+            'color': '#8B0000',
+            'greeting': 'Security team on duty! Let\'s find the vulnerabilities...',
+            'closing': '🔒 Security sign-off — if it isn\'t locked down, it\'s broken',
+            'style': 'strict',
+            'speech_pattern': 'methodical',
+            'interaction_frequency': 'as_needed'
+        }
+    },
+    'data_science_focus': {
+        'id': 'analyst',
+        'role': 'Data Analyst',
+        'expertise': 'data quality, leakage, metric definitions, reproducibility',
+        'voice': 'asks what the number was measured over, and on what sample',
+        'personality': {
+            'emoji': '📊',
+            'color': '#2F6F9F',
+            'greeting': 'Let\'s look at the data before we trust the conclusion.',
+            'closing': '📊 Analyst done — the claim now matches the sample.',
+            'style': 'precise',
+            'speech_pattern': 'steady',
+            'interaction_frequency': 'balanced'
+        }
+    },
+    'frontend_focus': {
+        'id': 'designer',
+        'role': 'Interface Reviewer',
+        'expertise': 'layout, states, accessibility, visual consistency',
+        'voice': 'asks what the user sees on a slow connection and with a keyboard',
+        'personality': {
+            'emoji': '🎨',
+            'color': '#B56576',
+            'greeting': 'How does this actually feel to use?',
+            'closing': '🎨 Interface reviewed — states, contrast, focus order.',
+            'style': 'concrete',
+            'speech_pattern': 'observant',
+            'interaction_frequency': 'balanced'
+        }
+    },
+    'api_focus': {
+        'id': 'api',
+        'role': 'API Reviewer',
+        'expertise': 'contracts, versioning, error shapes, backwards compatibility',
+        'voice': 'asks what breaks for the caller when this changes',
+        'personality': {
+            'emoji': '🔌',
+            'color': '#3F8F6B',
+            'greeting': 'Let\'s check the contract before the implementation.',
+            'closing': '🔌 API reviewed — the contract is the stable part.',
+            'style': 'exact',
+            'speech_pattern': 'deliberate',
+            'interaction_frequency': 'balanced'
+        }
+    },
+    'database_focus': {
+        'id': 'data',
+        'role': 'Data Reviewer',
+        'expertise': 'schema, migrations, indexes, transaction boundaries',
+        'voice': 'asks what the migration does to the live table at 3am',
+        'personality': {
+            'emoji': '🗄️',
+            'color': '#7A5C2E',
+            'greeting': 'Show me the migration path.',
+            'closing': '🗄️ Data reviewed — the migration is reversible.',
+            'style': 'grounded',
+            'speech_pattern': 'patient',
+            'interaction_frequency': 'as_needed'
+        }
+    },
+    'infrastructure_focus': {
+        'id': 'devops',
+        'role': 'Infrastructure Reviewer',
+        'expertise': 'deployment, resource bounds, failure and recovery behaviour',
+        'voice': 'asks what this looks like when the host goes away',
+        'personality': {
+            'emoji': '⚙️',
+            'color': '#5B6E7A',
+            'greeting': 'Let\'s check how this behaves under failure.',
+            'closing': '⚙️ Infra reviewed — bounded, observable, recoverable.',
+            'style': 'pragmatic',
+            'speech_pattern': 'measured',
+            'interaction_frequency': 'as_needed'
+        }
+    },
+}
+
+# Which focus flag put each focus member on the roster. The manager reads
+# this so `--status` can name the flag rather than assert a reason.
+FOCUS_FLAG_BY_MEMBER = {member["id"]: flag
+                        for flag, member in FOCUS_MEMBERS.items()}
+
+
+
 
 
 def generate_team_members_from_context(project_root):
@@ -294,152 +457,8 @@ def generate_team_members_from_context(project_root):
     try:
         context = analyze_project_context(project_root)
 
-        base_members = [
-            {
-                'id': 'architect',
-                'role': 'Systems Architect',
-                'expertise': 'long-term maintainability, coupling, failure modes, blast radius',
-                'voice': 'skeptical of shortcuts; asks what breaks in 6 months',
-                'enabled': True,
-                'personality': {
-                    'emoji': '🧱',
-                    'color': '#FF6B6B',
-                    'greeting': "Hello team! Let's architect this properly...",
-                    'closing': "🏗️ Architect signing off — think about those long-term implications",
-                    'style': 'technical',
-                    'speech_pattern': 'methodical',
-                    'interaction_frequency': 'balanced'
-                }
-            },
-            {
-                'id': 'pragmatist',
-                'role': 'Delivery Pragmatist',
-                'expertise': 'shipping speed, scope control, solo-developer bandwidth',
-                'voice': 'pushes back on over-engineering; asks for the smallest real fix',
-                'enabled': True,
-                'personality': {
-                    'emoji': '⚡',
-                    'color': '#4ECDC4',
-                    'greeting': "Alright team! Let's ship this FAST! 🚀",
-                    'closing': "✅ Pragmatist done — shipping first, perfect second",
-                    'style': 'direct',
-                    'speech_pattern': 'quick',
-                    'interaction_frequency': 'high'
-                }
-            },
-            {
-                'id': 'skeptic',
-                'role': 'Adversarial Reviewer',
-                'expertise': 'edge cases, silent failure modes, unverified claims',
-                'voice': 'distrusts prose-only completion reports; demands raw evidence',
-                'enabled': True,
-                'personality': {
-                    'emoji': '🔍',
-                    'color': '#95E77E',
-                    'greeting': 'Whoa whoa! Let\'s slow down and test this! 📋',
-                    'closing': '🤔 Skeptic signing off — ask again later!',
-                    'style': 'analytical',
-                    'speech_pattern': 'cautious',
-                    'interaction_frequency': 'as_needed'
-                }
-            }
-        ]
-
-        # One member per detected focus. Every flag `analyze_project_context`
-        # can set has a reviewer here, so a Python web project and a Rust CLI
-        # do not get the same team.
-        focus_members = {
-            'security_focus': {
-                'id': 'security',
-                'role': 'Security Reviewer',
-                'expertise': 'auth, secrets handling, input validation, supply chain',
-                'voice': 'assumes hostile input until proven otherwise',
-                'personality': {
-                    'emoji': '🔒',
-                    'color': '#8B0000',
-                    'greeting': 'Security team on duty! Let\'s find the vulnerabilities...',
-                    'closing': '🔒 Security sign-off — if it isn\'t locked down, it\'s broken',
-                    'style': 'strict',
-                    'speech_pattern': 'methodical',
-                    'interaction_frequency': 'as_needed'
-                }
-            },
-            'data_science_focus': {
-                'id': 'analyst',
-                'role': 'Data Analyst',
-                'expertise': 'data quality, leakage, metric definitions, reproducibility',
-                'voice': 'asks what the number was measured over, and on what sample',
-                'personality': {
-                    'emoji': '📊',
-                    'color': '#2F6F9F',
-                    'greeting': 'Let\'s look at the data before we trust the conclusion.',
-                    'closing': '📊 Analyst done — the claim now matches the sample.',
-                    'style': 'precise',
-                    'speech_pattern': 'steady',
-                    'interaction_frequency': 'balanced'
-                }
-            },
-            'frontend_focus': {
-                'id': 'designer',
-                'role': 'Interface Reviewer',
-                'expertise': 'layout, states, accessibility, visual consistency',
-                'voice': 'asks what the user sees on a slow connection and with a keyboard',
-                'personality': {
-                    'emoji': '🎨',
-                    'color': '#B56576',
-                    'greeting': 'How does this actually feel to use?',
-                    'closing': '🎨 Interface reviewed — states, contrast, focus order.',
-                    'style': 'concrete',
-                    'speech_pattern': 'observant',
-                    'interaction_frequency': 'balanced'
-                }
-            },
-            'api_focus': {
-                'id': 'api',
-                'role': 'API Reviewer',
-                'expertise': 'contracts, versioning, error shapes, backwards compatibility',
-                'voice': 'asks what breaks for the caller when this changes',
-                'personality': {
-                    'emoji': '🔌',
-                    'color': '#3F8F6B',
-                    'greeting': 'Let\'s check the contract before the implementation.',
-                    'closing': '🔌 API reviewed — the contract is the stable part.',
-                    'style': 'exact',
-                    'speech_pattern': 'deliberate',
-                    'interaction_frequency': 'balanced'
-                }
-            },
-            'database_focus': {
-                'id': 'data',
-                'role': 'Data Reviewer',
-                'expertise': 'schema, migrations, indexes, transaction boundaries',
-                'voice': 'asks what the migration does to the live table at 3am',
-                'personality': {
-                    'emoji': '🗄️',
-                    'color': '#7A5C2E',
-                    'greeting': 'Show me the migration path.',
-                    'closing': '🗄️ Data reviewed — the migration is reversible.',
-                    'style': 'grounded',
-                    'speech_pattern': 'patient',
-                    'interaction_frequency': 'as_needed'
-                }
-            },
-            'infrastructure_focus': {
-                'id': 'devops',
-                'role': 'Infrastructure Reviewer',
-                'expertise': 'deployment, resource bounds, failure and recovery behaviour',
-                'voice': 'asks what this looks like when the host goes away',
-                'personality': {
-                    'emoji': '⚙️',
-                    'color': '#5B6E7A',
-                    'greeting': 'Let\'s check how this behaves under failure.',
-                    'closing': '⚙️ Infra reviewed — bounded, observable, recoverable.',
-                    'style': 'pragmatic',
-                    'speech_pattern': 'measured',
-                    'interaction_frequency': 'as_needed'
-                }
-            },
-        }
+        base_members = [dict(member) for member in BASE_MEMBERS]
+        focus_members = FOCUS_MEMBERS
 
         for flag in sorted(context):
             if context.get(flag):

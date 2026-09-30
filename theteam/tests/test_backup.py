@@ -36,7 +36,11 @@ SAMPLE_STATE = {
 }
 
 # A source file that must NEVER be captured (backing up data, not code).
-SOURCE_FILE = "theteam/core/unified_loop.py"
+# M10 changed this from `theteam/core/unified_loop.py`, which it named only
+# because that module used to be the loop. The test creates the file itself in
+# a tmp tree, so it stayed meaningful — but naming a module that no longer
+# exists made the regression read as history rather than as a live rule.
+SOURCE_FILE = "theteam/core/backup.py"
 SOURCE_BYTES = b"# production source, not state\n"
 
 

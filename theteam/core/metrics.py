@@ -243,7 +243,18 @@ class MetricsCollector:
         self._start_time = time.time()
 
     def bind(self, loop: Any = None, limiter: Any = None) -> None:
-        """Attach the live UnifiedLoop and ResourceLimiter to scrape."""
+        """Attach the live scheduler and resource limiter to scrape.
+
+        The parameter is still named `loop` because the scraping contract is
+        duck-typed on attribute names, not on a type. M10 changed what is bound
+        here from `UnifiedLoop` to `tasks.scheduler.TaskScheduler`; the
+        attributes read below (`.metrics`, `.tasks`, `.circuit_breaker`,
+        `.health_monitor`) are the whole interface.
+
+        The name is kept rather than renamed because a Prometheus scrape is a
+        wire contract with whatever already queries it, and renaming a local
+        parameter buys nothing.
+        """
         if loop is not None:
             self._loop = loop
         if limiter is not None:

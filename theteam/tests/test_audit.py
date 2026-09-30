@@ -24,7 +24,9 @@ import pytest
 
 
 from theteam.core.audit import AuditLogger
-from theteam.core.task_contract import UnifiedTask
+# M10 removed this import with `core/task_contract.py`. It was unused: the
+# tests below construct no `UnifiedTask`, and the one that referenced it was
+# ported to `TaskScheduler`.
 
 
 # -- helpers ---------------------------------------------------------------
@@ -330,28 +332,67 @@ def test_audit_trail_filters_by_task_name(tmp_path):
 
 # -- sink failure isolation ------------------------------------------------
 
-def test_unwritable_audit_sink_does_not_block_task_admission(tmp_path):
-    """A failing audit write is swallowed; the task is still accepted.
+def test_task_execution_survives_a_broken_audit_sink(tmp_path):
+    """A failing audit write is swallowed; the task still runs.
 
     Real failure, not a mock: `audit.jsonl` is a directory, so every read and
-    append on it raises OSError. The loop wraps audit calls defensively
+    append on it raises OSError. The executor wraps its audit call defensively
     precisely so observability failure cannot become control flow.
+
+    M10 ported this from `UnifiedLoop.add_task` to `TaskScheduler.tick`, and
+    renamed it: the original asserted that a task could be *admitted*, which
+    tested a method that no longer exists. The invariant is the same and still
+    worth defending — a broken audit trail must not stop work.
+
+    Deterministic by construction: no `start()`, so the only sweep is the
+    explicit `tick()`. Starting the scheduler would fire an immediate sweep of
+    its own and the counter would be 2.0 rather than 1.0.
     """
-    from theteam.core.unified_loop import LoopConfig, UnifiedLoop
+    from theteam.tasks.scheduler import TaskScheduler
 
     log_dir = tmp_path / ".loop-log"
     log_dir.mkdir()
     (log_dir / "audit.jsonl").mkdir()  # appends to this path raise OSError
 
-    loop = UnifiedLoop(str(tmp_path), LoopConfig(loop_id="audit-sink", project_root=str(tmp_path)))
     with pytest.raises(OSError):
-        loop.audit.get_audit_trail()  # guard: the sink really is broken
+        AuditLogger(str(log_dir)).get_audit_trail()  # guard: sink really is broken
 
-    assert loop.start() is True, "a broken audit sink must not break start()"
-    assert loop.add_task(UnifiedTask("task-1", "Work", lambda: None)) is True
-    assert "task-1" in loop.tasks
-    assert loop.tasks_started == 1
-    assert loop.stop() is True
+    def _run(root):
+        return {"ran": 1, "skipped": 0, "failures": 0,
+                "results": [{"id": "task-1", "result": "ok"}]}
+
+    scheduler = TaskScheduler(str(tmp_path), _run, tick_seconds=60)
+    payload = scheduler.tick()
+
+    assert payload["ran"] == 1
+    assert scheduler.metrics["tasks_started"] == 1.0
+    assert scheduler.metrics["tasks_completed"] == 1.0
+    assert scheduler.metrics["tasks_failed"] == 0.0
+    assert "task-1" in scheduler.tasks
+    assert scheduler.last_error is None
+
+
+def test_scheduler_survives_a_raising_run_callable(tmp_path):
+    """A sweep that raises is recorded, and the scheduler keeps running.
+
+    The other half of observability-is-not-control-flow: an unreadable task
+    file must not take the metrics endpoint down with it. The failure is named
+    in `last_error` rather than swallowed into a silent zero.
+    """
+    from theteam.tasks.scheduler import TaskScheduler
+
+    def _boom(root):
+        raise OSError("tasks/task-x.yaml: unreadable")
+
+    scheduler = TaskScheduler(str(tmp_path), _boom, tick_seconds=60)
+    payload = scheduler.tick()
+    assert payload == {"ran": 0, "skipped": 0, "failures": 0, "results": []}
+    assert "unreadable" in scheduler.last_error
+    # A later successful sweep clears it rather than leaving a stale failure.
+    scheduler._run_due_tasks = lambda root: {
+        "ran": 1, "skipped": 0, "failures": 0, "results": []}
+    scheduler.tick()
+    assert scheduler.last_error is None
 
 
 def test_audit_failure_does_not_mask_the_task_outcome(tmp_path):

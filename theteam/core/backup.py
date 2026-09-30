@@ -4,11 +4,12 @@ Backup and restore for theteam state.
 
 Phase 4 deliverable. This is the single canonical implementation: the previous
 logic was duplicated byte-for-byte in `scripts/backup.py` and in
-`UnifiedLoop.create_backup`/`restore_from_backup`, and it wrote a literal
+`UnifiedLoop.create_backup`/`restore_from_backup` (both deleted in M10 with the
+module they belonged to), and it wrote a literal
 `"checksum": "TODO"` that nothing ever verified.
 
 Design rules that matter:
-  * Back up DATA, not source. The old code copied `unified_loop.py` into the
+  * Back up DATA, not source. The old code copied a production module into the
     backup, which is not a state backup.
   * Verify before mutating. `restore_from_backup` checks every sha256 against
     the manifest first and raises `BackupIntegrityError` without touching live

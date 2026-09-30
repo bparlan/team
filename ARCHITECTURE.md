@@ -54,8 +54,8 @@ These are the product's promises. Each is a test.
 |---|---|
 | Bootstrap into any project | `theteam bootstrap` — M1 |
 | In-context team commentary | `theteam comment` — M5 |
-| Create, edit, delete tasks | `theteam tasks` — M3 |
-| Loop and manage tasks | `theteam run` + `theteam tasks` — M2, M4 |
+| Create, edit, delete tasks | `theteam task create\|edit\|delete` — M3 |
+| Loop and manage tasks | `theteam loop` to schedule, `theteam run` to execute now, `theteam serve` to execute on an interval — M2, M4, M10. M10 made `serve` actually schedule; see §2.3. |
 
 ---
 
@@ -84,7 +84,7 @@ Eleven subcommands. The list is the whole surface; nothing else is declared.
 | `bootstrap [path]` | `--interactive`, `--json` | `{ok, config, state_dir}` in JSON; the config path and state directory as text. Non-interactive unless `--interactive`. |
 | `status` | `--json` | Roster, state directory, task counts, breaker trips, audit-chain state. |
 | `discuss <topic>` | `--json` | The synthesized verdict — or, outside OMP, `{ok: false, error: ...}` naming the command to run inside OMP. Never an invented opinion. |
-| `serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else 8000), `--json` | Prometheus endpoint on the port. The only thing in the product that starts a server. |
+| `serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else 8000), `--tick-seconds S` (default `$THETEAM_TICK_SECONDS`, else 60), `--json` | Runs due tasks on an interval and serves Prometheus `/metrics` and `/health`. **M10 changed this command**: it used to bind metrics to a `UnifiedLoop` whose only task producer had no caller, so every counter read `0.0` forever. It now sweeps the same due tasks `theteam run` executes, so `/metrics` reports work that actually ran. |
 | `loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. An unknown task id is a named failure, not a silent no-op. |
 | `tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`, `breaker_consecutive_failures`. |
 | `run` | `--only <id>`, `--json` | `{ran, skipped, failures, results}`. Idempotent: with nothing due it is `{ran: 0}` twice, identically. |
@@ -147,7 +147,50 @@ The parser reads these at build time, so a caller that does not know about them 
 |---|---|---|
 | `THETEAM_PROJECT_ROOT` | `build_parser()` | Default for `--project-root`. Falls back to `$PWD`. |
 | `THETEAM_METRICS_PORT` | `build_parser()` | Default for `serve --port`. Falls back to `8000`. |
+| `THETEAM_TICK_SECONDS` | `build_parser()` | Default for `serve --tick-seconds`. Falls back to `60`. M10 added it with the scheduler. |
 | `THETEAM_STATE_DIR` | `state.py` | Overrides the whole state directory. The tests and containers use it to point at a scratch tree. |
+
+## 2.3 One scheduler (M10)
+
+**There is exactly one scheduler in this product, and it is `TaskRepository`
+plus `TaskExecutor`.** A task becomes due because `TaskRepository.due()` says
+so, and it runs because `TaskExecutor.execute_task()` says so. Nothing else
+decides either.
+
+Two schedulers were removed to make that true, and neither was reachable:
+
+| Removed | What it scheduled | Why it was dead |
+|---|---|---|
+| `core/unified_loop.py` + `core/task_contract.py` | `UnifiedTask` objects added at runtime | Its only producer was `integrated_orchestrator.py`, which had no importer. `theteam serve` constructed the loop and nothing ever called `add_task`, so `/metrics` published `0.0` for every task counter, forever. |
+| `routine-engine/` (276 KB, 18 tracked files) | Markdown routine definitions with phases | Zero references from `theteam/`, not in `pyproject.toml`'s `packages.find include`, and no test collected it. It duplicated `theteam/tasks/` function for function: `should_execute` ≈ `due()`, `execute_phase` ≈ `execute_phase`, `safety/rollback.py` ≈ breaker + backup. |
+
+`tasks/scheduler.py` is what remains, and it is deliberately thin: it owns a
+clock and nothing else. `run_due_tasks()` is injected by the caller so the
+scheduler does not import the CLI. `theteam run` and `theteam serve` call the
+**same function**, so a one-shot run and a scheduled tick cannot drift — which
+is the entire reason `run_due_tasks()` was extracted out of `cmd_run` rather
+than duplicated into `serve`.
+
+The binding to `/metrics` is duck-typed. `MetricsCollector.collect()` reads
+`.metrics`, `.tasks`, `.circuit_breaker` and `.health_monitor` off whatever it
+is given, so `TaskScheduler` satisfies it with no change to `metrics.py` and no
+second mapping of metric names to producers. The parameter is still named
+`loop` for the same reason the Prometheus names were never renamed: a scrape is
+a wire contract, and renaming a local binding buys nothing.
+
+**A sweep that raises is recorded, not fatal.** `tick()` catches the exception,
+stores it in `last_error`, and returns an empty payload, because one unreadable
+task file must not take the metrics endpoint down with it. The next successful
+sweep clears `last_error` rather than leaving a stale failure.
+
+**`loop` was not renamed.** It schedules one registered task once and prints
+`next_run`; it does not iterate, so `routine` would promise a repetition the
+command does not perform. `routine` was also already a loaded noun in this repo
+(`RoutineScheduler`, `run_routine`, three `routines/*.md`) belonging to a
+different data model — markdown phases rather than YAML. If the name ever
+reads wrong, `schedule` is the accurate one: it maps 1:1 onto
+`TaskRepository.schedule_task`.
+
 
 ---
 
@@ -373,7 +416,6 @@ theteam/
   state.py                   # the single state directory resolver.
   __init__.py                # skill entry point: bootstrap, discussion, context analysis.
   core/
-    unified_loop.py          # Layer 1. already correct — keep as-is.
     circuit_breaker.py       # Layer 4.
     resource_limiter.py      # Layer 4.
     agent_isolation.py       # Layer 4. proven live.
@@ -381,21 +423,27 @@ theteam/
     health_monitor.py        # Layer 4.
     event_bus.py             # Layer 5.
     metrics.py               # Layer 5.
-    # Every other core/ module is assigned in §5.2.1 below. This comment is
-    # not an open licence to add modules here unassigned.
-  tasks/                     # NEW. absorbs subskills/task_stack/.
+    # M10 deleted `unified_loop.py` and `task_contract.py`. They were the
+    # other two schedulers; `tasks/scheduler.py` is now the only one. Every
+    # other core/ module is assigned in §5.2.1 below. This comment is not an
+    # open licence to add modules here unassigned.
+  tasks/                     # absorbs subskills/task_stack/.
     repository.py            # YAML canonical. ONE store. Schema, schedule, and
-                             # due/next-run all live here; no separate schema.py or
-                             # scheduler.py. Gains the M4 safety wrapper on executor.
-    executor.py              # runs one phase, collects its result. Gains the
-                             # mandatory Layer 4 safety wrapper in M4.
+                             # due/next-run all live here; no separate schema.py.
+    executor.py              # runs one phase, collects its result. Layer 3.
+    scheduler.py             # Layer 1. M10. `serve`'s clock: sweeps due tasks
+                             # on an interval and exposes the counters
+                             # `metrics.py` scrapes. Holds no policy — what is
+                             # due belongs to repository.py, how it runs to
+                             # executor.py. M10 added this file; the comment
+                             # above previously said `scheduler.py` must not
+                             # exist, which described the pre-M10 defect.
+    runners/
+      llm.py                 # the second phase kind, beside `script`.
   monitor.py                 # `--monitor`: what changed between two frames,
                              # and which transitions are worth naming. Pure,
                              # stdlib only, no API layer of its own (§2).
-  workflow/                  # discussion and member management.
-    discussion_manager_refactored.py
-    discussion_interface.py
-    team_member_manager.py
+  workflow/                  # context aggregation. M10 deleted the rest.
     context_aggregator.py
   ui/                        # panel widgets, and the terminal renderer.
     terminal.py              # the trust surface, rendered. `theteam watch`.
@@ -412,46 +460,73 @@ theteam/
 
 ### 5.2.1 Every `core/` module, with its layer
 
-`core/` holds 26 modules. The tree above names 8; this table assigns the rest,
-so no module is unowned. "Reached by" is measured, not asserted: a module with
-no production importer is called out, because an unowned module with no caller
-is the state §5.3 exists to prevent.
+`core/` holds 23 modules. The tree above names 8; this table assigns the rest,
+so no module is unowned. "Reached by" is measured, not asserted.
+
+**M10 re-measured this whole table** after deleting `unified_loop.py`, which
+was the last importer of three modules. Each is recorded on its own evidence
+below, because they are three different situations and not one bucket. None is
+deleted, and none is claimed dead.
 
 | Module | Layer | Reached by |
 |---|---|---|
-| `unified_loop.py` | 1 Control | `cli.py` (`cmd_serve`, `cmd_run`), `core/integrated_orchestrator.py` |
-| `task_contract.py` | 2 Task | `core/unified_loop.py`, `core/integrated_orchestrator.py`, `core/state_validator.py` (test-only) |
 | `member.py` | 2 Task | `theteam/__init__.py`, `cli.py` (`status`) |
 | `state_manager.py` | 2 Task | `theteam/__init__.py` (`get_state_manager`) |
 | `wal.py` | 2 Task | `state_manager` |
 | `transactions.py` | 2 Task | `state_manager` |
 | `correlation.py` | 2 Task | `state_manager` |
-| `checksum.py` | 2 Task | `state_manager`, `eventsourcing` tests |
+| `checksum.py` | 2 Task | `state_manager` — M10 removed its `state_validator` half, so this is the only checksum validator |
 | `database.py` | 2 Task | `state_manager` (`UnifiedStateManager.db`, never read) |
 | `circuit_breaker.py` | 4 Safety | `tasks/executor.py` — proven live |
 | `resource_limiter.py` | 4 Safety | `tasks/executor.py` — proven live |
 | `agent_isolation.py` | 4 Safety | `tasks/executor.py` — proven live |
-| `audit.py` | 4 Safety | `core/audit_chain.py`, `core/unified_loop.py` |
+| `audit.py` | 4 Safety | `core/audit_chain.py` |
 | `audit_chain.py` | 4 Safety | `tasks/executor.py`, `tasks/repository.py`, `cli.py` (`status`), `ui/terminal.py`, `monitor.py` |
-| `backup.py` | 4 Safety | `core/unified_loop.py` (`BackupManager`); `state.py`, tests |
-| `health_monitor.py` | 4 Safety | `core/unified_loop.py` — the loop's only importer. `ui/components/health_dashboard.py` names it in a docstring and does not import it. |
-| `event_bus.py` | 5 Telemetry | `core/__init__.py` (lazy), `core/` internals |
+| `backup.py` | 4 Safety | `scripts/backup.py` — a real operator CLI, **not** dead |
+| `health_monitor.py` | 4 Safety | **no production importer.** See below. |
+| `event_bus.py` | 5 Telemetry | **no production importer.** See below. |
 | `event_log.py` | 5 Telemetry | `core/event_bus.py` |
 | `rate_limiting.py` | 5 Telemetry | `core/event_bus.py` |
-| `metrics.py` | 5 Telemetry | `cli.py` (`cmd_serve`), `core/integrated_orchestrator.py`, `core/__init__.py` (lazy) |
-| `team_member_manager.py` | 6 Advisory | `workflow/discussion_interface.py` |
+| `metrics.py` | 5 Telemetry | `cli.py` (`cmd_serve`) — proven live |
 | `postgres_cluster.py` | — | **not on the entry point.** Imported at point of use by `database.py`. See invariant 7. |
-| `state_validator.py` | — | **no production importer.** Only `test_state_validator.py`. |
-| `schema_versioning.py` | — | **no production importer.** |
-| `system_integration.py` | — | **no production importer.** Was reachable only via a removed `core/__init__` re-export. |
-| `integrated_orchestrator.py` | — | **no importer at all**, production or test. |
 
-The last four are Layer-less by measurement, not by omission. They are
-candidates for §5.3 removal or for a real caller; what they may not be is
-silently present. `postgres_cluster.py` is the exception and is explained: it is
-real, tested, and reachable — but only through `DatabaseManager`'s three
-properties, deliberately, so that importing the package does not load a database
-tier.
+**M10 deleted** `unified_loop.py` and `task_contract.py` (the two schedulers
+this milestone consolidated away), plus `integrated_orchestrator.py`,
+`schema_versioning.py`, `system_integration.py`, `state_validator.py`,
+`core/team_member_manager.py`, `workflow/discussion_interface.py`,
+`workflow/team_member_manager.py`, `workflow/discussion_manager_refactored.py`,
+`ui/components/reflex_renderers.py`, `ui/components/visibility.py`,
+`bin/theteam_report.py`, and `skill/SKILL_metadata.py`. Measured by an AST
+scan for imports at any nesting level plus a runtime `sys.modules` check across
+all three entry points, because a grep alone had already missed one live
+caller (`scripts/backup.py`).
+
+### Three modules that lost their importer, recorded individually
+
+**`backup.py` is live and was nearly deleted on a wrong reading.** Its only
+in-package importer was `unified_loop.py`, but `scripts/backup.py` is an
+operator CLI over it — `create`, `list`, `verify`, `restore`, `prune`. Verified
+by running it: `Backup created: /private/tmp/bk/backups/backup_20260930_194816`,
+with a `manifest.json` and the captured data. It is reachable from a shell and
+is the only backup path the product has. **Keep.**
+
+**`event_bus.py` is the mechanism, not a file.** §5.1 names the EventBus as the
+Layer-2 communication mechanism, and `event_log.py` and `rate_limiting.py` are
+reachable only through it. It has no production importer today, but deleting it
+would remove the principle the layering is built on and take two more modules
+with it. Wiring it, or dropping the principle, is a §5.1 decision. **Not
+decided here.**
+
+**`health_monitor.py` is genuinely unreferenced.** No production importer, and
+`ui/components/health_dashboard.py` only names it in prose — the dashboard
+ducks-types whatever monitor it is handed, and the tests hand it a
+`SimpleNamespace`. Deleting the class would leave the dashboard reading a score
+from nothing. It is the one safe candidate, and it is left in place because the
+fix is to wire the dashboard, not to remove its input. **Open work.**
+
+`postgres_cluster.py` is layer-less by measurement, not by omission: it is real,
+tested, and reachable — but only through `DatabaseManager`'s three properties,
+deliberately, so that importing the package does not load a database tier.
 
 `subskills/task_stack/` is not a package anyone may extend. Its contents move; the directory goes.
 
@@ -1015,11 +1090,19 @@ rediscover that.
    `IMPLEMENTATION.md:4`, `INTEGRATION.md:11` and `TEAM_MEMBER_PROPOSAL.md:22`.
    They are archived verbatim on purpose — history stays true — so the fix is a
    separate act on a separate copy, not a quiet edit of a historical record.
-2. **Four `core/` modules have no production importer** (§5.2.1):
-   `state_validator`, `schema_versioning`, `system_integration` (all
-   test-only) and `integrated_orchestrator` (no importer at all). They are
-   assigned no layer on purpose. Each needs a caller or a §5.3 row; what they may
-   not do is stay silently present.
+2. ~~**Four `core/` modules have no production importer.**~~ **Resolved by M10.**
+   `state_validator`, `schema_versioning`, `system_integration` and
+   `integrated_orchestrator` were deleted after measuring that none had a
+   production importer, by AST scan at any nesting level plus a runtime
+   `sys.modules` check across all three entry points. See §5.2.1.
+2b. **Two `core/` modules still have no production importer**, and M10
+   deliberately did not delete them: `health_monitor.py`, because the fix is to
+   wire `ui/components/health_dashboard.py` to it rather than remove the input
+   the dashboard reads; and `event_bus.py`, because §5.1 names the EventBus as
+   the Layer-2 communication mechanism, so deleting it is a §5.1 decision and
+   not a cleanup. `backup.py` looked orphaned by the same scan and is **not**:
+   `scripts/backup.py` is a working operator CLI over it, verified by running
+   `create`. This entry exists because the scan was wrong once already.
 3. **No digest cache** (§4.6). The per-turn token cost is real and currently
    paid. A correct implementation needs a content hash or a walk of the watched
    set as the invalidation key — a root-directory mtime would miss most edits
@@ -1078,10 +1161,11 @@ Each entry names the check that would falsify "this is broken".
 |---|---|---|---|
 | 1 | `theteam/core/state_manager.py` calls `self._notify_listeners` from `DiscussionState`, `TaskState` and `SystemAwarenessState`; the method is defined only on `UnifiedStateManager`. `start_discussion` therefore raises `AttributeError`. | `grep -c "_notify_listeners" theteam/core/state_manager.py` → 13 (12 calls, 1 definition, on a different class); running `run_discussion` with a recording provider raises `AttributeError: 'DiscussionState' object has no attribute '_notify_listeners'`. | not M9. A different module; fixing it needs a decision about what a listener is. |
 | 2 | **The roster lives in two stores with no link between them.** `run_discussion` reads `theteam.config` via `load_config`; `CommentaryController` reads `<state_dir>/roster.json` via `advisory/roster.py`. A roster change made in one is invisible to the other. | `grep -n "load_config\|load_roster" theteam/__init__.py` shows only `load_config`; `grep -rn "load_roster" theteam/ --include=*.py` shows only `commentary.py:263`. Writing `roster.json` would leave `theteam discuss` unchanged while reporting success. | M9 wrote `theteam.config` because that is the store the `discuss`/`manager` commands read. Merging the two is a separate decision. |
-| 3 | **Three member stores exist.** `advisory/roster.py` (`roster.json`), `core/team_member_manager.py` (`.omp/theteam/members/<id>.json`), and `workflow/team_member_manager.py` (a 606-line older copy). | `wc -l theteam/core/team_member_manager.py theteam/workflow/team_member_manager.py` → 563 / 606; neither is imported by `cli.py` or `theteam/__init__.py`. | not M9. Deleting them is a §5.3 decision, not a side effect of adding a manager. |
+| 3 | ~~**Three member stores exist.**~~ **Partly resolved by M10.** `core/team_member_manager.py` (563 lines) and `workflow/team_member_manager.py` (a 606-line older copy) were both deleted; neither had a production importer. What remains is `advisory/roster.py` (`roster.json`) and `theteam.config`, which is still the two-store split recorded as row 2. | `git rm` of both files; suite green. | Row 2 is the remaining half and is not fixed. |
 
-`theteam manager` (M9 Phase 2) writes `theteam.config` and not `roster.json`, deliberately:
-that is the store the commands in §2 read. Row 2 records what that choice does *not* fix.
+`theteam manager` (M9 Phase 2) writes `theteam.config` and not `roster.json`,
+deliberately: that is the store the commands in §2 read. Row 2 records what that
+choice does *not* fix.
 
 This is recorded rather than fixed because the owner is not this milestone. The
 alternative — a `try/except` around the call in the product — is exactly the §3.3

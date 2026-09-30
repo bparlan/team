@@ -580,7 +580,45 @@ def cmd_history(args: argparse.Namespace) -> int:
         return _fail(args, "history", lines)
     return _emit(args, payload, "\n".join(lines))
 
+def cmd_serve(args: argparse.Namespace) -> int:
+    """The scheduler and the metrics endpoint, in one process.
 
+    M10 changed what this command is. It used to construct a `UnifiedLoop` and
+    bind metrics to it, which published a static snapshot of a scheduler whose
+    only task producer (`integrated_orchestrator.py`) had no caller: every
+    counter read `0.0` forever. It now sweeps the same due tasks `theteam run`
+    executes, on an interval, so `/metrics` reports work that actually ran.
+
+    The binding is duck-typed on purpose. `MetricsCollector.collect()` reads
+    `.metrics`, `.tasks`, `.circuit_breaker` and `.health_monitor` off whatever
+    it is given, so `TaskScheduler` satisfies it unchanged and the collector
+    needs no second mapping of metric names to producers.
+    """
+    from theteam.core.metrics import MetricsCollector
+    from theteam.tasks.scheduler import DEFAULT_TICK_SECONDS, TaskScheduler
+
+    project_root = _project_root(args)
+    scheduler = TaskScheduler(project_root, run_due_tasks,
+                              tick_seconds=args.tick_seconds)
+    collector = MetricsCollector(port=args.port)
+    collector.bind(loop=scheduler)
+    scheduler.start()
+    if not collector.start_http_server():
+        print("Metrics endpoint failed to start.", file=sys.stderr)
+        scheduler.stop()
+        return EXIT_ERROR
+    print(f"theteam serving /metrics and /health on port {args.port} "
+          f"(scheduler every {args.tick_seconds:g}s, default {DEFAULT_TICK_SECONDS:g})")
+    try:
+        import threading
+
+        threading.Event().wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        collector.stop()
+        scheduler.stop()
+    return EXIT_OK
 def _task_runs(project_root: str, task_id: str) -> List[Dict]:
     """Every logged execution of one task, oldest first. Unparseable lines skipped."""
     path = StateStore(project_root).execution_log
@@ -599,33 +637,6 @@ def _task_runs(project_root: str, task_id: str) -> List[Dict]:
             if record.get("task_id") == task_id:
                 runs.append(record)
     return runs
-
-
-def cmd_serve(args: argparse.Namespace) -> int:
-    """The metrics endpoint. The only thing in the product that starts a server."""
-    from theteam.core.metrics import MetricsCollector
-    from theteam.core.unified_loop import LoopConfig, UnifiedLoop
-
-    project_root = _project_root(args)
-    loop = UnifiedLoop(project_root, LoopConfig(loop_id="theteam", project_root=project_root))
-    loop.start()
-    collector = MetricsCollector(port=args.port)
-    collector.bind(loop=loop, limiter=loop.resource_limiter)
-    if not collector.start_http_server():
-        print("Metrics endpoint failed to start.", file=sys.stderr)
-        loop.stop()
-        return EXIT_ERROR
-    print(f"theteam serving /metrics and /health on port {args.port}")
-    try:
-        import threading
-
-        threading.Event().wait()
-    except KeyboardInterrupt:
-        pass
-    finally:
-        collector.stop()
-        loop.stop()
-    return EXIT_OK
 
 
 def cmd_task(args: argparse.Namespace) -> int:
@@ -912,11 +923,21 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Machine-readable output.")
     discuss.set_defaults(func=cmd_discuss)
 
-    serve = sub.add_parser("serve", help="Prometheus metrics endpoint.")
+    serve = sub.add_parser(
+        "serve", help="Run due tasks on an interval and publish /metrics.")
     serve.add_argument("--port", type=int,
                        default=int(os.environ.get("THETEAM_METRICS_PORT", "8000")))
+    # Hoisted import: the parser needs the default at build time, and the
+    # module it lives in is `theteam.tasks.scheduler`, which imports nothing
+    # from this file — so this is not a cycle.
+    from theteam.tasks.scheduler import DEFAULT_TICK_SECONDS
+    serve.add_argument("--tick-seconds", type=float,
+                       default=float(os.environ.get("THETEAM_TICK_SECONDS",
+                                                    DEFAULT_TICK_SECONDS)),
+                       help=f"Seconds between scheduler sweeps. Default "
+                            f"{DEFAULT_TICK_SECONDS:g}.")
     serve.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
-                        help="Machine-readable output.")
+                       help="Machine-readable output.")
     serve.set_defaults(func=cmd_serve)
 
     loop = sub.add_parser("loop", help="Schedule a registered task to run on an interval.")

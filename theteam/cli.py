@@ -420,6 +420,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     project_root = _project_root(args)
     repo = TaskRepository(project_root)
     due = repo.due(only=args.only)
+    # An id that matches no task is a named failure, not `nothing due`.
+    # `theteam loop` already refuses an unknown id this way (ARCHITECTURE.md
+    # §2: "An unknown task id is a named failure, not a silent no-op"), and
+    # `run --only <typo>` reporting "nothing due" is the same lie: it reads
+    # as "the scheduler had nothing for you" when the truth is "that task
+    # does not exist".
+    if args.only and repo.get(args.only) is None:
+        return _fail(args, "run --only", f"Task not found: {args.only}")
     # Breakers outlive the process: a task whose breaker tripped an hour ago
     # must still be tripped now, or the trip only survives as long as the run
     # that observed it. The repository owns the schedule (Layer 2), so it hands
@@ -452,10 +460,21 @@ def cmd_run(args: argparse.Namespace) -> int:
             results.append({"id": task["id"], "result": "skipped", "detail": reason})
             continue
         ok = outcome["overall_success"]
-        repo.record_run(task["id"], "ok" if ok else "failed",
-                        "" if ok else f"returncode {outcome['phases'][-1].get('returncode')}",
+        # The reason a phase failed, whatever kind it was. `returncode` is
+        # real for a script phase and absent for an `llm` one, so reading it
+        # unconditionally recorded "returncode None" as the last failure —
+        # a reason that explains nothing, on exactly the path §3.3 governs.
+        detail = ""
+        if not ok and outcome.get("phases"):
+            failed = outcome["phases"][-1]
+            detail = (failed.get("error")
+                      or f"returncode {failed.get('returncode')}")
+        repo.record_run(task["id"], "ok" if ok else "failed", detail,
                         breaker=breaker, consecutive_failures=consecutive)
-        results.append({"id": task["id"], "result": "ok" if ok else "failed"})
+        result = {"id": task["id"], "result": "ok" if ok else "failed"}
+        if detail:
+            result["detail"] = detail
+        results.append(result)
 
     payload = {
         # `ran` counts what actually executed. A task with a missing script was
@@ -471,7 +490,12 @@ def cmd_run(args: argparse.Namespace) -> int:
              for r in results]
     lines.append(f"{payload['ran']} ran, {payload['skipped']} skipped, "
                  f"{payload['failures']} failed")
-    return _emit(args, payload, "\n".join(lines))
+    # §2.1: a command that exists and failed returns 1. `theteam run` used to
+    # return 0 with `failures: N` in the payload, so a shell could not tell a
+    # red suite from a green one without parsing JSON. This is a behaviour
+    # change for the pre-existing four tasks, and it is the documented one.
+    _emit(args, payload, "\n".join(lines))
+    return EXIT_ERROR if payload["failures"] else EXIT_OK
 
 
 def history_payload(project_root: str, task_id: Optional[str] = None):

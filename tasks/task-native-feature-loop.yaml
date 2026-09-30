@@ -1,0 +1,42 @@
+id: native-feature-loop
+name: Native Feature Loop
+type: analysis
+priority: 7
+description: >-
+  Four phases in order: skeptic reconnaissance decides whether the feature is
+  real, pragmatist implements the smallest change that satisfies it, pytest
+  proves it, and a documentation sync makes the documents describe what the
+  code now does. The test phase stays a script, not a prompt: a test suite is
+  deterministic and must not be judged by a model.
+failure_handling: retry
+context:
+- The feature under consideration, named by the operator
+- .omp/theteam/reports/native-feature-recon.md, the first phase's verdict
+expected_output: >-
+  An implementation, a passing test suite, and documentation that matches
+  the code, or a named reason the feature was not built.
+phases:
+  - name: recon
+    runner: llm
+    member: skeptic
+    prompt_file: prompts/native-feature-loop-recon.md
+    output: .omp/theteam/reports/native-feature-recon.md
+    memory_limit_mb: 64
+  - name: implement
+    runner: llm
+    member: pragmatist
+    prompt_file: prompts/native-feature-loop-implement.md
+    output: .omp/theteam/reports/native-feature-implementation.md
+    memory_limit_mb: 64
+  - name: test
+    script: scripts/run_pytest.py
+    args: []
+    timeout_seconds: 900
+    memory_limit_mb: 512
+  - name: docs
+    runner: llm
+    member: architect
+    prompt_file: prompts/native-feature-loop-docs.md
+    output: .omp/theteam/reports/native-feature-docs.md
+    memory_limit_mb: 64
+order: 7

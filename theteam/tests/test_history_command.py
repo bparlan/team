@@ -461,7 +461,7 @@ def _stub_phase(monkeypatch, success):
     """
     monkeypatch.setattr(
         TaskExecutor, "execute_phase",
-        lambda self, phase: {"success": success, "returncode": 0 if success else 3},
+        lambda self, phase, task=None: {"success": success, "returncode": 0 if success else 3},
     )
 
 

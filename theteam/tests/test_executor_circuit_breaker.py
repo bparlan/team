@@ -172,7 +172,13 @@ def test_five_failures_across_five_runs_then_a_sixth_is_skipped_breaker_open(tmp
         # past is time passing, not forcing the task to run.
         _make_due(root, "crasher")
         code, payload = _run(root, capsys)
-        assert payload["results"] == [{"id": "crasher", "result": "failed"}], attempt
+        # A failure now carries its reason, like the skipped branch below
+        # carries `breaker_open`. M9 Phase 4: an `llm` phase has no
+        # returncode, so a failure without a detail recorded "returncode
+        # None" — a reason that explained nothing.
+        assert payload["results"] == [
+            {"id": "crasher", "result": "failed", "detail": "returncode 3"}
+        ], attempt
         assert _last(root, "crasher")["breaker_consecutive_failures"] == attempt
 
     assert _last(root, "crasher")["breaker"] == "open"
@@ -313,7 +319,7 @@ def test_execute_task_reports_the_breaker_state_and_the_failure_count(tmp_path, 
     `CircuitState.value` and `stats.consecutive_failures`.
     """
     executor = TaskExecutor(str(tmp_path))
-    executor.execute_phase = lambda phase: {"success": False, "returncode": 3}
+    executor.execute_phase = lambda phase, task=None: {"success": False, "returncode": 3}
     task = {"id": "solo", "phases": [{"name": "boom", "script": "phases/boom.py"}]}
 
     first = executor.execute_task(task)
@@ -334,7 +340,7 @@ def test_execute_task_does_not_run_a_tripped_breaker(tmp_path):
     """
     executor = TaskExecutor(str(tmp_path))
     calls = []
-    executor.execute_phase = lambda phase: calls.append(phase["name"]) or {
+    executor.execute_phase = lambda phase, task=None: calls.append(phase["name"]) or {
         "success": False, "returncode": 3
     }
     task = {"id": "solo", "phases": [{"name": "boom", "script": "phases/boom.py"}]}

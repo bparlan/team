@@ -79,6 +79,91 @@ entry point now loads **88** modules against a budget of 90.
 
 `789 passed` (772 + 17 new), gate 7/7, `import theteam` succeeds.
 
+## M9 Phase 2 — `theteam manager`: the team that staffs itself
+
+`theteam discuss` spawned whoever was on the roster, and the roster was frozen at
+bootstrap. This phase adds the command that grows it from the topic, and answers the four
+open questions §M9 left.
+
+**The decision is deterministic; the LLM is not involved.** `advisory/manager.py`'s
+`detect_triggers` reads the project flags and the topic and returns candidates with their
+evidence. Two independent triggers, as §M9 requires: a focus flag no member covers, or topic
+vocabulary no member's `expertise` covers. Falsified by
+`test_m9_manager.py::TestTwoIndependentTriggers` — project context alone gives the same team
+for every question (a topic about rate limiting adds nobody), and topic alone gives a team
+blind to the repo.
+
+**`--topic` proposes. `--apply` persists.** A bare `--topic` writes nothing, deliberately:
+`--topic` also fires on every uncovered *project* flag, so a version that wrote on propose
+would grow a committed config as a side effect of asking a question. That is the HITL
+premise, not a prompt. Falsified by
+`test_m9_manager.py::test_a_bare_topic_proposal_writes_nothing`, which byte-compares the
+config across the call.
+
+**The four open questions, answered from the code rather than from preference:**
+
+1. **Manual, not automatic.** §M9 reads "separate HITL process" as manual, and it is the only
+   honest option: an automatic manager spends an LLM call per discussion to change state
+   nobody approved.
+2. **`theteam.config`, versioned.** The roster is a team composition, so every change is a
+   reviewable diff. A state file is disposable; this is not. Writes go through
+   `theteam_config.validate_config` and are **refused** if the result would be invalid.
+3. **The cap is the catalog: 9 members.** §M9 warned a manager that grows every run reaches
+   30, at which point the selector picks 4 from 30 on stale signals. The code already
+   answers this: `theteam.BASE_MEMBERS` + `theteam.FOCUS_MEMBERS` define every member that
+   can exist. A member outside the catalog is not addable. Falsified by
+   `test_the_catalog_is_finite_and_small` and by a kitchen-sink topic over a
+   every-flag-fired project.
+4. **`permitted_skills`, not a new key.** One list, one boundary. Two keys would need a rule
+   for which wins.
+
+**`--status` states why, or says it cannot.** A member with no recorded evidence is listed
+under `no recorded reason` rather than given a plausible line. This is load-bearing: running
+it against **this repository's own `theteam.config`** reports `designer` and `devops` as
+unjustified, because the committed roster (hand-edited at M0) disagrees with the project's
+own detectors — `api_focus` and `database_focus` fire and `api`/`data` are absent. The
+manager reports the drift instead of papering over it.
+
+**A topic-triggered addition records its reason at apply time.** `--status` cannot re-derive
+it: a member added for "auth" is unjustified by any project flag, so a re-deriving `--status`
+reports the member the manager *just added* as unjustified. `added_reason` and
+`added_for_topic` are written with the member. A recorded fact is a fact; a re-derivation is
+a guess.
+
+**Two pre-existing defects found and fixed:**
+
+- **`generate_team_members_from_context` emitted a config with no `schema_version`**, so its
+  own output can never pass `validate_config`. `theteam bootstrap` only ever worked because
+  `merge_config` inherited the value from the template; anything using the return value
+  directly got a config it was forbidden to write — which is exactly what `manager --reset`
+  does. Falsified by running `validate_config(generate_team_members_from_context("."))`,
+  which returned `Missing 'schema_version' key` before the fix.
+- **The member catalog was duplicated in three places** once `manager` needed to read it.
+  Extracted to `theteam.BASE_MEMBERS` / `FOCUS_MEMBERS` / `FOCUS_FLAG_BY_MEMBER` at module
+  scope, which is also what makes the catalog the roster cap. The generated roster is
+  byte-identical before and after the extraction.
+
+**End to end**, with a recording provider in `run_discussion`:
+
+```
+roster before:            [architect, pragmatist, skeptic, designer, devops]
+manager --topic:          proposed 1 addition; nothing written yet
+roster after propose:     [architect, pragmatist, skeptic, designer, devops]   (unchanged)
+manager --topic --apply:  roster grew to 6
+roster after apply:       [architect, pragmatist, skeptic, designer, devops, security]
+discuss "auth token...":  Selector chose 1 member(s): security   -> spawned: [security]
+```
+
+**Which store the roster lives in — measured, because there are two.** `run_discussion`
+reads `theteam.config` through `load_config`; `CommentaryController` reads
+`<state_dir>/roster.json` through `advisory/roster.py`. The manager writes `theteam.config`,
+which is the store the `discuss` and `manager` commands actually read. Growing `roster.json`
+instead would have left `theteam discuss` spawning the same old members while the command
+reported success. The two-store split is pre-existing and is recorded in Part 9; this
+milestone did not merge them.
+
+`816 passed` (789 + 27 new), gate 7/7, `import theteam` succeeds.
+
 ## M8 — The docs tell the truth, and one of them is a lie in the code
 
 A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was

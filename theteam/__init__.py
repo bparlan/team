@@ -467,6 +467,13 @@ def generate_team_members_from_context(project_root):
                 base_members.append(member)
 
         return {
+            # `validate_config` requires this key at the top level, so a
+            # generated config that omits it can never pass the gate
+            # `cmd_init` runs. Bootstrap only ever worked because
+            # `merge_config` inherited the value from the template; anything
+            # using this return value directly — M9's `manager --reset` —
+            # got a config it was forbidden to write.
+            'schema_version': 1,
             'project': {
                 'name': 'team',
                 'root': '.',

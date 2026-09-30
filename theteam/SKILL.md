@@ -211,6 +211,34 @@ parallel and the parent blocks on each one, so a member calling `ask`
 suspends the parent once per member with no visible provenance. The
 orchestrator asks, once, in the parent session.
 
+## Growing the team (M9 Phase 2)
+
+`theteam manager` decides who is *on the roster*; `theteam discuss` decides who *speaks*
+from it. Run the manager when a topic needs a perspective the current team has no expertise
+for; skip it when the roster already covers the question.
+
+```bash
+theteam manager --topic "<topic>"    # PROPOSES. Writes nothing.
+theteam manager --topic "<topic>" --apply   # persists
+theteam manager --status             # why every member is on the roster
+theteam manager --reset              # back to the bootstrapped team
+```
+
+**`--topic` never writes on its own.** The manager also proposes members for *uncovered
+project flags*, so a version that persisted on propose would edit the user's committed
+`theteam.config` as a side effect of asking a question. Read the proposal, then `--apply`.
+
+**An added member must name its evidence.** The manager either names a focus flag the
+project fired or quotes the topic tokens no member covered. "You might want a database
+person" is not a reason and is not what you should say either. If you cannot state the
+reason, do not add the member.
+
+**`--status` reports what it cannot justify.** A member with no recorded reason is listed
+under `no recorded reason` rather than given a plausible story. Pass that list to the user;
+do not tidy it away. The roster is capped by the team catalog (9 members), so it cannot grow
+without bound — and if a topic needs a perspective the catalog has no member for, say so
+instead of inventing one.
+
 ## Notes on stability
 
 - All schema/format enforcement lives in `bin/theteam_config.py` and

@@ -102,6 +102,164 @@ def cmd_bootstrap(args: argparse.Namespace) -> int:
                  f"Config written to {config_path}\nState directory: {state}")
 
 
+
+# ======= manager (M9 Phase 2) =======
+
+def _manager_config_path(project_root: str) -> str:
+    """Where the roster lives. One path, named once."""
+    return os.path.join(project_root, "theteam.config")
+
+
+def _load_project_config(project_root: str):
+    """The project's config, or `(None, reason)`. Never a default roster."""
+    path = _manager_config_path(project_root)
+    if not os.path.isfile(path):
+        return None, f"no theteam.config at {path}; run 'theteam bootstrap' first"
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle), None
+    except (OSError, yaml.YAMLError) as e:
+        return None, f"cannot read {path}: {e}"
+
+
+def _write_project_config(project_root: str, config: Dict[str, Any]) -> Optional[str]:
+    """Write a roster through the same validator bootstrap uses, or refuse.
+
+    Returns an error string, or None on success. The write is validated
+    *before* it reaches disk, because a config that fails validation is a
+    config that breaks every later command — and §3.3 forbids leaving one.
+    """
+    from theteam.bin.theteam_config import validate_config
+
+    is_valid, message = validate_config(config)
+    if not is_valid:
+        return f"refusing to write an invalid config: {message}"
+    path = _manager_config_path(project_root)
+    with open(path, "w", encoding="utf-8") as handle:
+        yaml.dump(config, handle, default_flow_style=False, sort_keys=False)
+    return None
+
+
+def cmd_manager(args: argparse.Namespace) -> int:
+    """`manager --topic | --status | --reset [--apply]`. Grows the roster.
+
+    Three steps, and the middle one is the user: `--topic` **proposes**,
+    `--apply` **persists**. A bare `--topic` writes nothing, because
+    `--topic` also fires on every *uncovered project flag* — a plain
+    `theteam manager --topic "anything"` would otherwise grow the user's
+    committed config as a side effect of asking a question.
+
+    The decision of *whether* to add a member is deterministic
+    (`advisory.manager.detect_triggers`): this command proposes, reports the
+    evidence, and persists on request. It decides nothing on its own, and it
+    never asks a model to invent a member.
+    """
+    from theteam.advisory.manager import (
+        CATALOG,
+        detect_triggers,
+        reasons_for,
+        reset_roster,
+    )
+
+    project_root = _project_root(args)
+    config, reason = _load_project_config(project_root)
+    if config is None:
+        return _fail(args, "manager", reason)
+
+    from theteam import analyze_project_context
+    context = analyze_project_context(project_root)
+    roster = list(config.get("team") or [])
+
+    if args.reset:
+        fresh = reset_roster(project_root)
+        error = _write_project_config(project_root, dict(config, team=fresh))
+        if error:
+            return _fail(args, "manager --reset", error)
+        return _emit(args,
+                     {"ok": True, "reset": True,
+                      "team": [m["id"] for m in fresh]},
+                     f"roster reset to {len(fresh)} member(s): "
+                     f"{', '.join(m['id'] for m in fresh)}")
+
+    if args.status:
+        lines = []
+        members = []
+        unjustified = []
+        for member in roster:
+            why = reasons_for(member.get("id", ""), context, member=member)
+            members.append({"id": member.get("id"),
+                            "role": member.get("role"),
+                            "enabled": member.get("enabled", True),
+                            "reasons": why})
+            lines.append(f"  {member.get('id')}: {'; '.join(why)}")
+            if why and "no recorded reason" in why[0]:
+                unjustified.append(member.get("id"))
+        # A member on the roster with no evidence is reported, not hidden.
+        payload = {"ok": True, "members": members,
+                   "roster_size": len(roster),
+                   "catalog_size": len(CATALOG),
+                   "unjustified": unjustified}
+        text = "\n".join(lines) or "  (no members on the roster)"
+        if unjustified:
+            text += f"\n  no recorded reason: {', '.join(unjustified)}"
+        return _emit(args, payload, text)
+
+    if not args.topic:
+        return _fail(args, "manager",
+                     "one of --topic, --status or --reset is required")
+
+    detected = detect_triggers(args.topic, context, roster)
+    proposal = detected["add"]
+
+    if not proposal:
+        return _emit(args,
+            {"ok": True, "proposed": [], "applied": False,
+             "considered": args.topic,
+             "roster": [m.get("id") for m in roster]},
+            f"roster already covers '{args.topic}' ({len(roster)} members)")
+
+    additions = [{"id": c["member"],
+                  "role": CATALOG[c["member"]].get("role"),
+                  "reasons": c["reasons"]} for c in proposal]
+    lines = [f"  + {a['id']}: {'; '.join(a['reasons'])}" for a in additions]
+    proposed_roster = sorted({m.get("id") for m in roster}
+                             | {a["id"] for a in additions})
+
+    if not args.apply:
+        # Proposal only. Nothing is written, so this is safe to run to see
+        # what the manager thinks before deciding.
+        return _emit(args,
+            {"ok": True, "proposed": additions, "applied": False,
+             "considered": args.topic, "roster": proposed_roster,
+             "hint": "re-run with --apply to persist"},
+            f"proposed {len(additions)} addition(s); nothing written yet\n"
+            + "\n".join(lines)
+            + "\nre-run with --apply to persist")
+
+    by_id = {m.get("id"): m for m in roster}
+    for addition in additions:
+        member = dict(CATALOG[addition["id"]])
+        member["enabled"] = True
+        # The reason is recorded with the member, not re-derived later. A
+        # topic-triggered addition cannot be re-justified from live project
+        # context — the flag never fired — so a `--status` that re-derives
+        # would report the member the manager just added as unjustified.
+        # A recorded fact is a fact; a re-derivation is a guess.
+        member["added_reason"] = addition["reasons"]
+        member["added_for_topic"] = args.topic
+        by_id[addition["id"]] = member
+    new_roster = list(by_id.values())
+    error = _write_project_config(project_root, dict(config, team=new_roster))
+    if error:
+        return _fail(args, "manager", error)
+
+    return _emit(args,
+        {"ok": True, "proposed": additions, "applied": True,
+         "considered": args.topic,
+         "roster": [m.get("id") for m in new_roster]},
+        f"roster grew to {len(new_roster)} member(s)\n" + "\n".join(lines))
+
+
 def status_payload(project_root: str):
     """The `status` view, as data: `(payload, lines)` on success,
     `(None, error_message)` when the project is not bootstrapped.
@@ -769,6 +927,21 @@ def build_parser() -> argparse.ArgumentParser:
     # the missing subcommand. Without this default argparse has no `func` and
     # the command dies on an AttributeError instead of a usage error.
     comment.set_defaults(func=cmd_comment)
+
+    manager = sub.add_parser(
+        "manager",
+        help="Propose, apply, inspect or reset the roster for a topic.")
+    manager.add_argument("--topic", help="The topic the roster should cover.")
+    manager.add_argument("--status", action="store_true",
+                         help="Why every member is on the roster.")
+    manager.add_argument("--reset", action="store_true",
+                         help="Restore the roster a fresh bootstrap would produce.")
+    manager.add_argument("--apply", action="store_true",
+                         help="Persist a --topic proposal. Without it, nothing "
+                              "is written.")
+    manager.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                         help="Machine-readable output.")
+    manager.set_defaults(func=cmd_manager)
 
     watch = sub.add_parser("watch", help="Render status, tasks, or history in the terminal.")
     watch.add_argument("view", choices=("status", "tasks", "history"),

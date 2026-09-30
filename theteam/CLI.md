@@ -14,7 +14,7 @@ exactly the kind of thing that drifts, so it does not live here.
 ## The surface, in one place
 
 ```bash
-theteam --help          # eleven subcommands
+theteam --help          # twelve subcommands
 theteam <command> --help
 ```
 
@@ -31,6 +31,7 @@ theteam <command> --help
 | `task create\|edit\|delete\|show` | Single-task operations. |
 | `comment on\|off\|status` | Continuous in-context commentary. |
 | `watch status\|tasks\|history` | The trust surface, rendered in the terminal. `--once`, `--interval`, `--monitor`, `--json`. |
+| `manager` | Grow the roster from a topic. `--topic` proposes and writes nothing; `--apply` persists. `--status` states why every member is on the roster; `--reset` restores the bootstrapped team. |
 
 Global flags: `--project-root PATH` and `--json`, both accepted on either side of the subcommand.
 

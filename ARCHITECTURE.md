@@ -995,6 +995,11 @@ Each entry names the check that would falsify "this is broken".
 | # | Defect | Evidence | Owner |
 |---|---|---|---|
 | 1 | `theteam/core/state_manager.py` calls `self._notify_listeners` from `DiscussionState`, `TaskState` and `SystemAwarenessState`; the method is defined only on `UnifiedStateManager`. `start_discussion` therefore raises `AttributeError`. | `grep -c "_notify_listeners" theteam/core/state_manager.py` → 13 (12 calls, 1 definition, on a different class); running `run_discussion` with a recording provider raises `AttributeError: 'DiscussionState' object has no attribute '_notify_listeners'`. | not M9. A different module; fixing it needs a decision about what a listener is. |
+| 2 | **The roster lives in two stores with no link between them.** `run_discussion` reads `theteam.config` via `load_config`; `CommentaryController` reads `<state_dir>/roster.json` via `advisory/roster.py`. A roster change made in one is invisible to the other. | `grep -n "load_config\|load_roster" theteam/__init__.py` shows only `load_config`; `grep -rn "load_roster" theteam/ --include=*.py` shows only `commentary.py:263`. Writing `roster.json` would leave `theteam discuss` unchanged while reporting success. | M9 wrote `theteam.config` because that is the store the `discuss`/`manager` commands read. Merging the two is a separate decision. |
+| 3 | **Three member stores exist.** `advisory/roster.py` (`roster.json`), `core/team_member_manager.py` (`.omp/theteam/members/<id>.json`), and `workflow/team_member_manager.py` (a 606-line older copy). | `wc -l theteam/core/team_member_manager.py theteam/workflow/team_member_manager.py` → 563 / 606; neither is imported by `cli.py` or `theteam/__init__.py`. | not M9. Deleting them is a §5.3 decision, not a side effect of adding a manager. |
+
+`theteam manager` (M9 Phase 2) writes `theteam.config` and not `roster.json`, deliberately:
+that is the store the commands in §2 read. Row 2 records what that choice does *not* fix.
 
 This is recorded rather than fixed because the owner is not this milestone. The
 alternative — a `try/except` around the call in the product — is exactly the §3.3

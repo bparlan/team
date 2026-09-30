@@ -70,6 +70,7 @@ Eleven subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam comment off` | `--json` | `{ok, on, sentinel}`. Takes effect on the next tick. |
 | `theteam comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
 | `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | A rendered frame, or the payload the frame draws with `--json`. `--monitor` adds a change block; see below. |
+| `theteam manager` | `--topic`, `--status`, `--reset`, `--apply`, `--json` | Proposes roster additions for a topic; `--apply` persists them. `--status` states why every member is on the roster, and reports any it cannot justify. |
 
 Global: `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`).
 
@@ -205,7 +206,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 789 tests
+python -m pytest -q                  # 816 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

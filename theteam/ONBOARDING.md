@@ -74,7 +74,7 @@ theteam/
 │   └── components/           # design tokens and panel widgets
 ├── security/                 # path validation, audit, secrets
 ├── bin/                      # config helpers (see CLI.md)
-└── tests/                    # 656 tests
+└── tests/                    # 659 tests
 ```
 
 M10 removed the other two schedulers. `core/unified_loop.py` and

@@ -454,9 +454,24 @@ class UnifiedStateManager:
 _state_manager = None
 
 def get_state_manager(state_file: Optional[str] = None) -> UnifiedStateManager:
-    """Get or create the global state manager instance."""
+    """Get or create the process-wide state manager.
+
+    M11: this ignored `state_file` on every call after the first. The singleton
+    was built with whichever path happened to arrive first, so a second call
+    naming a different project returned a manager still bound to the first
+    one — reading and *writing* the wrong project's state, with nothing in the
+    return value to say so.
+
+    A differing path now rebuilds the manager and reloads from the new file. A
+    repeat call with the same path stays the cheap path it was, which is what
+    the hot path needs (`run_discussion` calls it once per run).
+
+    The superseded monitoring thread is left to exit on its own: it is a daemon
+    that sleeps for `interval` between sweeps, so joining it would block the
+    caller for up to that long.
+    """
     global _state_manager
-    if _state_manager is None:
+    if _state_manager is None or _state_manager.state_file != state_file:
         _state_manager = UnifiedStateManager(state_file)
         # Load existing state if available
         _state_manager.load_state()

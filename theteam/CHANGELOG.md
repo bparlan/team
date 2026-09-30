@@ -355,6 +355,61 @@ testing something the product never produces.
 **Both regressions are proven to bite**: reverting the mixin fails 7 tests, restoring
 `log_state_change` fails 3.
 
+**And the reader test had a hole of its own.** The reload test asserted
+`discussion_history` and `task_history`; deleting the `active_discussions` restore from
+`load_state` still passed it. The reason is not subtle: after a completed discussion both
+`active_discussions` and `task_assignments` are **empty**, so comparing them against the
+on-disk value cannot distinguish "restored correctly" from "never assigned". Two of five
+mutated restores were invisible.
+
+Fixed by a test that writes known values into every field before saving, so each restore is
+exercised with something to restore. Measured after the fix: removing any of
+`active_discussions`, `discussion_history`, `current_discussion_id`, `task_assignments` or
+`tasks` fails. All five are pinned; before, two were not.
+
+`load_state` itself was never wrong — it restores all ten fields. The defect was a reader
+test that could not see half of them, which is the same class of problem as the defects it
+was written to catch.
+
+### The singleton ignored which project it was asked about
+
+Chasing the reader tests further found a third defect, in `get_state_manager`. It ignored
+`state_file` on every call after the first: the process-wide singleton was built with
+whichever path happened to arrive first, so a later call naming a **different project**
+returned a manager still bound to the first one.
+
+Measured before the fix: two calls with two different paths returned the *same object*, and
+the second still pointed at the first project's file — reading it, and writing to it on the
+next `save_state`. Nothing in the return value said so.
+
+A differing path now rebuilds the manager and reloads; the same path still takes the cheap
+path, which is what the hot path needs (`run_discussion` calls it once per run). The
+superseded monitoring thread is left to exit on its own — it is a daemon that sleeps
+between sweeps, so joining it would block the caller.
+
+**The first version of that test still had a hole, and it was mine.** It drove two real
+discussions and asserted project B did not contain project A's topic — but
+`run_discussion` calls `get_state_manager` itself, so by the time the test called it, B's
+state was already in memory. The assertions were reading memory the product had just
+written, not state loaded from disk. A mutation that rebuilt the manager **without
+reloading it** still passed.
+
+The fix is to drop the in-memory manager (`_state_manager = None`) and read B back cold.
+Measured after that, all three mutations fail: rebind-without-reload, no-rebind-at-all, and
+always-rebuild (which would break the cheap path the hot path depends on).
+
+Recorded because the lesson is not specific to this test: *a test that runs the product and
+then inspects the same process's memory has not tested persistence at all.*
+
+**On the framing of the original suggestion.** It proposed seeding `discussion_history`
+with a distinct pre-existing value before reload, on the premise that a fresh manager is
+already populated. It is not: `DiscussionState.__init__` sets `discussion_history = []`, and
+the mutation test confirms the non-emptiness assertion does fail when the restore is
+removed. The suggestion did identify a real untested property underneath, though — whether
+`load_state` **overwrites** rather than accumulates — and because `get_state_manager` is a
+singleton, an already-populated manager is the *normal* case in production. That is now
+tested with sentinel values, and the sentinel test is what exposed the singleton bug above.
+
 One assertion of mine was wrong and is recorded as such: I first asserted the discussion
 task would be in `task_state.tasks`. It is not, and should not be — `update_task` moves a
 task to `task_history` and deletes it on `completed`, which `run_discussion` does before

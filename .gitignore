@@ -111,3 +111,8 @@ team/context/
 team/.team/
 # Runtime audit / event logs
 .loop-log/
+
+# Analysis output, not source: rewritten on every run and capped at 2MB by
+# SystemArchitectureAnalyzer.save_ledger. It reached 25MB in git.
+system-awareness-ledger.json
+archives/

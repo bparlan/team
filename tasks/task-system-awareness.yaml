@@ -12,45 +12,19 @@ context:
 - Infrastructure build systems and configs
 expected_output: 'System awareness analysis complete: grade A-F, score 0.00-1.00/1.00'
 phases:
-- name: execute
-  script: scripts/sa_runner.py
-  args: []
-  timeout_seconds: 300
-  memory_limit_mb: 64
-prompt: '# Task: system-awareness
-
-  ## Type
-
-  analysis
-
-  ## Priority
-
-  7
-
-  ## Description
-
-  Run comprehensive system architecture analysis (4-phase: structure, documentation,
-  architecture, infrastructure) with health scoring and team commentary
-
-  ## Execution
-
-  python3 scripts/sa_runner.py
-
-  ## Context
-
-  - Project structure and module organization
-
-  - Documentation quality and completeness
-
-  - Architecture patterns and technical debt
-
-  - Infrastructure build systems and configs
-
-  ## Expected Output
-
-  System awareness analysis complete: grade A-F, score 0.00-1.00/1.00
-
-  ## Failure Handling
-
-  skip'
+  # `args` was empty, so this ran `sa_runner.py` bare. With no subcommand it
+  # falls through every branch in `main()` to `parser.print_help()` and exits 0
+  # — the task reported success while running no analysis at all. That is the
+  # §3.3 failure: a result that looks like a measurement and is not one.
+  #
+  # `self-correct` is the subcommand that does the work: it runs the 4-phase
+  # analysis, writes all five reports, and refreshes `.loop-state.json`, which
+  # is what keeps `project-integrity` and `health-check` reading real values
+  # rather than a month-old cache. `health-check` would be wrong here — it only
+  # reads state, so the task would again pass without analysing anything.
+  - name: analyse and correct
+    script: scripts/sa_runner.py
+    args: ["self-correct"]
+    timeout_seconds: 300
+    memory_limit_mb: 64
 order: 2

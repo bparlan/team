@@ -24,8 +24,22 @@ REQUIRED_SCRIPTS = [
 REQUIRED_TOOLS = ["python3", "git"]
 
 REQUIRED_LOOP_FILES = [
-    "tasks/TASK_ORDER",
+    # `tasks/TASK_ORDER` used to be required here. It stopped existing when
+    # ordering moved into each task's own `order:` key (M1), and this check kept
+    # demanding it — so `infrastructure-check` failed unconditionally, on a
+    # file no code path could produce. A check that can only fail is not a
+    # check; it is a task guaranteed to report a red that nobody can action.
     ".loop-state.json",
+]
+
+# The directories this repo actually has. `docs` was previously listed here and
+# has never existed — no directory, no deletion commit — so the check reported a
+# missing directory that nobody could create. Hoisted to module scope so the
+# summary line below counts the list it validates rather than a hardcoded `9`
+# that had stopped matching it.
+REQUIRED_DIRS = [
+    "tasks", "scripts", "bin", "theteam", "prompts",
+    ".loop-log", ".loop-archive",
 ]
 
 MIN_PYTHON = (3, 12)
@@ -78,16 +92,20 @@ def _which(name: str) -> bool:
 
 
 def check_directory_layout() -> list:
-    expected = [
-        "tasks", "scripts", "bin", "theteam", "docs",
-        ".loop-log", ".loop-archive",
-    ]
+    """Check the directories this repo actually has.
+
+    `docs` was listed here and has never existed in this repository — no
+    deletion commit, no directory. Asking for it meant this check reported a
+    missing directory that no one could create, for the same reason
+    `tasks/TASK_ORDER` did.
+    """
     missing = []
-    for d in expected:
+    for d in REQUIRED_DIRS:
         path = PROJECT_ROOT / d
         if not path.is_dir():
             missing.append(d)
     return [f"Missing directory: {d}" for d in missing]
+
 
 
 def main():
@@ -107,7 +125,7 @@ def main():
     print(f"  Python: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")
     print(f"  Scripts checked: {len(REQUIRED_SCRIPTS)}")
     print(f"  Tools checked: {len(REQUIRED_TOOLS)}")
-    print(f"  Directories checked: 9")
+    print(f"  Directories checked: {len(REQUIRED_DIRS)}")
     sys.exit(0)
 
 

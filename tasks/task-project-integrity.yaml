@@ -1,0 +1,34 @@
+id: project-integrity
+name: Project Integrity Check
+type: monitoring
+priority: 10
+description: >-
+  Verifies the project is intact: required directories, required configs,
+  required scripts, required tools, Python version, and that the loop state
+  exists and is not stale.
+failure_handling: retry
+context:
+- Project root structure
+- Runtime configuration
+- Required files and directories
+- Loop state freshness
+expected_output: 'Project integrity check passed: all systems operational'
+phases:
+  # Two scripts, run in sequence, because they fail for different reasons and a
+  # merged pass/fail would collapse two distinct diagnostics into one red.
+  #
+  # The directory and config checks overlap completely: the infrastructure
+  # check's REQUIRED_DIRS is a strict superset of the health check's, and both
+  # read `.loop-state.json`. Running both would report the same missing
+  # directory twice and fail on the same staleness twice.
+  - name: directories and configs
+    script: scripts/loop_health_check.py
+    args: []
+    timeout_seconds: 300
+    memory_limit_mb: 64
+  - name: scripts tools and layout
+    script: scripts/loop_infrastructure_check.py
+    args: []
+    timeout_seconds: 300
+    memory_limit_mb: 64
+order: 0

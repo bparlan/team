@@ -22,6 +22,16 @@ SA_DIR = Path(__file__).resolve().parent.parent / "tasks" / "system-awareness"
 sys.path.insert(0, str(SA_DIR))
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# How old a recorded health score may be before `health-check` calls it stale.
+#
+# The number is arbitrary — there is no measurement behind it. What is not
+# arbitrary is having one at all: the defect this fixes was a score computed on
+# 2026-09-21 still being reported as a passing measurement on 2026-10-01, with
+# no limit in place to notice. 24h matches `loop_health_check.py`'s staleness
+# threshold so the two checks that both guard loop freshness agree on what
+# "stale" means rather than each inventing its own limit.
+HEALTH_MAX_AGE_SECONDS = 86400
+
 OUTPUT_PATHS = {
     "health_score": PROJECT_ROOT / "health_score.json",
     "team_summary": PROJECT_ROOT / "team_summary.json",
@@ -285,19 +295,32 @@ def _save_state(state):
         print(f"Warning: Could not save loop state: {e}")
         return False
 
-def update_health_score_state(health_score, success):
-    """Update only health score fields in loop state."""
+def update_health_score_state(health_score, success, grade=None):
+    """Update only health score fields in loop state.
+
+    `grade` is taken from the caller rather than recomputed. This function used
+    to carry its own inline ladder (`>= 0.9` A, `>= 0.8` B, …) beside the one in
+    `generate_system_health_score`, and the two disagree: the fresh score of
+    0.554 is graded **D** by the analyzer and **E** here. Two ladders for one
+    value is a second source of truth, and it had already produced one — the
+    stale cache held `grade: "B"` from a 0.70 that the analyzer never wrote.
+
+    So the analyzer's grade is authoritative and simply carried through. When
+    no grade is supplied it is left untouched rather than invented.
+    """
     state = _load_state()
     if state is None:
         return False
 
-    state["health_score"].update({
+    updates = {
         "overall_score": health_score,
-        "grade": "A" if health_score >= 0.9 else "B" if health_score >= 0.8 else "C" if health_score >= 0.7 else "D" if health_score >= 0.6 else "E" if health_score >= 0.5 else "F",
         "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
         "last_run_success": success,
         "consecutive_failures": 0 if success else state["health_score"].get("consecutive_failures", 0) + 1
-    })
+    }
+    if grade is not None:
+        updates["grade"] = grade
+    state["health_score"].update(updates)
 
     return _save_state(state)
 
@@ -334,17 +357,85 @@ def update_circuit_breaker_state(circuit_breaker_state=None):
         else:  # B grade - test recovery
             cb["state"] = "half_open"
 
-    return _save_state(state)
 
-def update_loop_state(health_score, success, circuit_breaker_state=None):
+def update_loop_state(health_score, success, circuit_breaker_state=None, grade=None):
     """Update loop state by delegating to focused sub-functions."""
-    result = update_health_score_state(health_score, success)
+    result = update_health_score_state(health_score, success, grade=grade)
+    result = update_last_execution_state(success)
     result = update_circuit_breaker_state(circuit_breaker_state) or result
     return result
+
+def update_last_execution_state(success):
+    """Stamp `last_execution` on every real run.
+
+    `loop_health_check.py` fails when this field is more than 24h old, but
+    nothing in the live path wrote it — only `loop_reporter.py` and
+    `task_executor.py` read it, and neither is imported by anything. So once
+    the timestamp fell behind, the health check could never pass again no
+    matter how much analysis ran. A staleness check against a field nothing
+    maintains is a permanent red, not a check.
+    """
+    state = _load_state()
+    if state is None:
+        return False
+    state["last_execution"] = datetime.datetime.now(timezone.utc).isoformat()
+    return _save_state(state)
 
 def get_loop_state():
     """Get current loop state for status command."""
     return _load_state()
+
+
+# The outputs `run_analysis` is expected to have written. Each maps to an
+# entry in OUTPUT_PATHS; a check for one that was never produced is the whole
+# point of a self-check, so these are named rather than discovered.
+EXPECTED_OUTPUTS = ("health_score", "team_summary", "architecture_report",
+                    "documentation_report", "infrastructure_report")
+
+def self_check_loop_state() -> Dict[str, Any]:
+    """Check that the last analysis run actually produced its outputs.
+
+    `self-check` and `self-correct` both called this and both died with
+    `NameError: name 'self_check_loop_state' is not defined` — the function was
+    never written, only referenced, and grepping its name returns three call
+    sites and no definition. `self_correct` documents it as the thing that
+    "identifies drift/partial outputs", so that is what it does.
+
+    Returns `{"healthy": bool, "checks": [...]}` because that is the shape
+    every consumer already reads: `_is_healthy` looks for `healthy`, and
+    `_detect_drift`, `_log_issues` and `_evaluate_health_improvement` all
+    iterate `checks` entries with a per-entry `healthy` flag.
+
+    A missing output is unhealthy — that is drift. It is not an error to raise,
+    because "the previous run did not finish" is a legitimate state to report
+    and the caller decides whether to correct it.
+    """
+    checks = []
+    for key in EXPECTED_OUTPUTS:
+        path = OUTPUT_PATHS[key]
+        exists = path.is_file()
+        entry: Dict[str, Any] = {"output": key, "path": str(path), "healthy": exists}
+        if exists:
+            entry["size_bytes"] = path.stat().st_size
+            # A zero-byte report is worse than a missing one: it exists, so a
+            # presence check alone would call it healthy.
+            entry["healthy"] = entry["size_bytes"] > 0
+        checks.append(entry)
+
+    state = get_loop_state()
+    health = (state or {}).get("health_score") or {}
+    run_ok = bool(health.get("last_run_success", False))
+    checks.append({
+        "output": "last_run_success",
+        "path": str(PROJECT_ROOT / ".loop-state.json"),
+        "healthy": run_ok,
+    })
+
+    return {
+        "healthy": all(c["healthy"] for c in checks),
+        "checks": checks,
+    }
+
 
 def _is_healthy(check: Dict[str, Any]) -> bool:
     """Check if a self-check result indicates a healthy state."""
@@ -363,8 +454,16 @@ def _run_correction_cycle(results: Dict[str, Any]) -> None:
     write_team_summary(summary)
     write_architecture_report(results)
     write_documentation_report(results)
-    write_infrastructure_report(results)
     write_optimization_report(health)
+
+    # Refresh `.loop-state.json` too. It is the store `cmd_health_check` and
+    # `cmd_status` read, and `update_loop_state` had no caller anywhere — so the
+    # cached score there was frozen at 0.70 from 2026-09-21 while the analysis
+    # wrote 0.554 to `health_score.json`. Two files, two truths, and the stale
+    # one is the one a health check consults. The grade is carried across
+    # rather than recomputed, so both stores hold the analyzer's value.
+    update_loop_state(health["overall_score"], health["last_run_success"],
+                      grade=health["grade"])
 
 def _perform_analysis() -> Optional[Dict[str, Any]]:
     """Run the analysis engine and return results."""
@@ -580,11 +679,55 @@ def cmd_status():
     print()
 
 def cmd_health_check():
-    """Quick health check with explicit exit code semantics."""
+    """Quick health check with explicit exit code semantics.
+
+    This used to read `overall_score` out of the cached `.loop-state.json` and
+    compare it to a threshold, which meant it could only ever report what the
+    last run recorded — it never checked whether that run happened, or whether
+    it succeeded. It printed "PASSED: overall score 0.70" on 2026-10-01 from a
+    score computed on 2026-09-21 by an analysis engine that could not run at
+    all. A stale cache is not a measurement, so the two things a health check
+    has to establish are now checked separately:
+
+    - that the recorded run actually succeeded (`last_run_success`, which this
+      function previously never read despite seven writers), and
+    - that the record is current, rather than a leftover from a month ago.
+
+    Both were being assumed. Neither is now.
+    """
     state = get_loop_state()
     health = state.get('health_score') if state else get_last_health_score()
     if health is None:
         print("No health score available")
+        sys.exit(1)
+
+    if not health.get("last_run_success", False):
+        print("Health check FAILED: the last analysis run did not succeed")
+        sys.exit(1)
+
+    recorded = health.get("timestamp")
+    if not recorded:
+        print("Health check FAILED: score carries no timestamp")
+        sys.exit(1)
+
+    try:
+        parsed = datetime.datetime.fromisoformat(recorded)
+    except (TypeError, ValueError):
+        print(f"Health check FAILED: unparseable timestamp {recorded!r}")
+        sys.exit(1)
+
+    # A naive timestamp makes the subtraction below raise TypeError, which
+    # would be reported as an unparseable timestamp — true of neither the cause
+    # nor the fix. `.loop-state.json` writes `+00:00`, so this only arises from
+    # hand-written state; assuming UTC is what makes those comparable instead
+    # of crashing on them.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    age = (datetime.datetime.now(timezone.utc) - parsed).total_seconds()
+    if age > HEALTH_MAX_AGE_SECONDS:
+        print(f"Health check FAILED: score is stale ({age:.0f}s old, "
+              f"limit {HEALTH_MAX_AGE_SECONDS}s)")
         sys.exit(1)
 
     overall = health.get("overall_score", health.get("score", 0.0))

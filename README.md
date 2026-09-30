@@ -56,7 +56,7 @@ Eleven subcommands. `--json` works on **either side** of the subcommand for ever
 |---|---|---|
 | `theteam bootstrap [path]` | `--interactive`, `--json` | `{ok, config, state_dir}`. Non-interactive unless asked. |
 | `theteam status` | `--json` | Roster, state directory, task counts, breaker trips, audit-chain state. |
-| `theteam discuss <topic>` | `--json` | The team's verdict, or a named error if you are outside OMP. |
+| `theteam discuss <topic>` | `--json` | The team's verdict, or a named error if you are outside OMP. Members are selected deterministically from the topic; at most 4 speak and a truncated selection is reported. |
 | `theteam serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else `8000`), `--json` | Prometheus endpoint. The only command that starts a server. |
 | `theteam loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. |
 | `theteam tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`. |
@@ -205,7 +205,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 772 tests
+python -m pytest -q                  # 789 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

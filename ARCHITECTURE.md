@@ -260,7 +260,16 @@ The orchestrator picks which roster members speak, capped at **4**, using signal
 
 Selection is deterministic. Zero LLM calls, zero cost, reproducible — the same session state selects the same members, so a test can assert it.
 
-If no signal fires, the **skeptic** speaks alone. A lone skeptic is the correct default; the alternative is a unanimous chorus that is one voice repeated.
+
+> **Wired in M9 Phase 1 (2026-09-30).** This section described selection that
+> existed, was tested, and had **no production caller** — `theteam discuss`
+> spawned every `enabled` member for every topic. `run_discussion` now calls
+> `select_members` with a minimal `SessionSlice` built from the discussion
+> topic, and the intro spawn honours the same selection. No fifth signal was
+> added to the selector: the topic arrives as the latest user message, which
+> is signal 2 above, and a source file named in the topic arrives as
+> `touched_paths`, which is signal 1. The determinism guarantee and the
+> module's tests are untouched.
 
 ## 4.6 Per-turn context budget
 
@@ -847,7 +856,16 @@ A user can check every one of these by running a command.
 4. `grep -rn "parents\[" theteam/` returns nothing.
 5. `grep -rn "\.mp/theteam" theteam/` returns nothing.
 6. `grep -rn "MockAPI" theteam/` returns nothing.
-7. `run_discussion()` in `theteam/__init__.py` is byte-identical after M5.
+7. ~~`run_discussion()` in `theteam/__init__.py` is byte-identical after M5.~~
+   **Broken deliberately in M9 Phase 1.** The invariant existed to prove the
+   commentary controller had not forked the one-shot discussion path. M9 wired
+   the advisory selector into that path — which is the milestone's entire
+   point — so the function is no longer byte-identical. The *intent* of the
+   invariant is still asserted, and is now stronger: selection, prompting,
+   validation and synthesis still have exactly one implementation
+   (`theteam/advisory/selector.py` is imported, not reimplemented).
+   Falsified by `test_m9_selection_wiring.py` and by the smoke check in
+   `CHANGELOG.md`: the same topic selects identically twice.
 8. Layer 3 contains no `subprocess` call without a Layer 4 guard in the same call frame.
 9. `grep -rn "^import rich\|^from rich" theteam/` returns nothing. `rich` is not a declared dependency, so importing it at module scope is green locally and red in CI.
 10. `python3 scripts/check_import_graph.py` exits 0. `import theteam` loads at most 90 modules, at most 8 of them `theteam.core.*`, and none from the PostgreSQL cluster tier. This is the only invariant measured rather than grepped: checks 1-6 all passed while the entry point loaded a database layer that §5.1 does not place in this stack.
@@ -966,3 +984,18 @@ rediscover that.
 > deleted them. The five names above are the ones measured present.
 
 Ten of twelve were stale or invented. `management-candidate.json` was the most dangerous artifact in `diagrams/`: it rendered a task subsystem as wired together, and the two halves of that subsystem do not import each other.
+
+---
+
+# Part 9 — Open Defects, Measured
+
+Defects found on a live path by executing it, which no test and no document had done.
+Each entry names the check that would falsify "this is broken".
+
+| # | Defect | Evidence | Owner |
+|---|---|---|---|
+| 1 | `theteam/core/state_manager.py` calls `self._notify_listeners` from `DiscussionState`, `TaskState` and `SystemAwarenessState`; the method is defined only on `UnifiedStateManager`. `start_discussion` therefore raises `AttributeError`. | `grep -c "_notify_listeners" theteam/core/state_manager.py` → 13 (12 calls, 1 definition, on a different class); running `run_discussion` with a recording provider raises `AttributeError: 'DiscussionState' object has no attribute '_notify_listeners'`. | not M9. A different module; fixing it needs a decision about what a listener is. |
+
+This is recorded rather than fixed because the owner is not this milestone. The
+alternative — a `try/except` around the call in the product — is exactly the §3.3
+defect class: swallowing a real failure so a path looks healthy.

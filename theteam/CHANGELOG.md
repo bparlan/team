@@ -9,6 +9,76 @@ roadmap that was never planned. Those entries were removed rather than carried f
 pre-M0 reports they described are preserved in
 `archive/docs-theteam/pre-m0-reports/`, where they are history rather than documentation.
 
+## M9 Phase 1 — Wire the selector
+
+`theteam/advisory/selector.py` was live, tested, deterministic code with **no production
+caller**. `theteam discuss` spawned every `enabled` member for every topic. This phase
+connects the two, and closes two defects found on the way. Later phases (manager,
+context efficiency, `runner: llm`, diagrams) are not in this entry.
+
+**1.1 — Members are told which tools they may use.** The code read
+`.omp/theteam/tool-manifest.json` and defaulted to the literal string `"N/A"`. That file
+does not exist, so *every* member prompt carried `## Tool Inventory` / `N/A`. A boundary
+the constrained party cannot see is enforced by luck. `spawn_member_task`'s fourth
+argument is now `permitted_skills`, read from the project's own `theteam.config` and
+rendered under the same heading. An empty list renders as
+`none declared by this project's theteam.config` rather than a blank section, because a
+blank boundary is still an invisible one.
+Falsified by: `test_m9_selection_wiring.py::TestToolInventoryIsTheRealBoundary`, and by
+executing the pre-change `spawn_member_task` directly — its prompt contained `N/A` and
+named none of the configured skills.
+
+**1.2 — Selection decides who speaks.** `run_discussion` builds a minimal `SessionSlice`
+from the topic and calls `select_members` unchanged. No fifth signal was added: the topic
+arrives as `last_user_messages` (signal 2 in §4.5) and any source file it names arrives as
+`touched_paths` (signal 1). Adding a topic-scoring heuristic is the dead end
+`selector.py:201-207` records — a gate that cannot fail is not a gate. The intro spawn was
+**also** re-deriving "every enabled member", so a capped discussion would have reported one
+roster and paid for another; it now honours the same selection.
+Measured, on this project's 5-member roster, via a recording provider injected into
+`run_discussion`:
+
+```
+refactor scheduler.py            -> Selector chose 1 member(s): devops
+should we ship or simplify scope -> Selector chose 1 member(s): pragmatist
+the docker deploy pipeline ...   -> Selector chose 1 member(s): devops
+hm                               -> Selector chose 1 member(s): skeptic
+```
+
+Five enabled members; one speaks. That is the observable M9 exists to change.
+
+**1.3 — The cap is enforced and reported.** `select_members` already truncated to
+`MEMBER_CAP = 4` and returned `truncated: True`, but a caller that reports the overflow
+cannot recover the number: re-deriving it from `len(members)` after the slice is zero **by
+construction**, so a "1 suppressed" line is a line that can never fire. The selector now
+returns `suppressed` and the caller prints from it. Falsified by
+`test_advisory.py::test_truncation_reports_how_many_were_suppressed`, and by running the
+selector against a 9-member roster where 4 speak and the rest are counted.
+
+**Two pre-existing defects found and fixed in the path being edited.** Neither was
+introduced by M9; both are why `theteam discuss` had never been observed to work.
+
+- `run_discussion` called `aggregate_project_context` and **it was imported nowhere in the
+  package.** `git log -S` finds no commit that ever added the import. Every discussion that
+  got past `_require_provider` would have died on a `NameError` two lines into the
+  function. No test caught it because no test runs this path with a provider. Imported at
+  point of use, as check 7 requires.
+- `theteam/core/state_manager.py` calls `self._notify_listeners` 12 times; the method is
+  defined on `UnifiedStateManager`, not on `DiscussionState` or its siblings, so
+  `start_discussion` raises `AttributeError`. **Not fixed here** — it is a different module
+  and outside Phase 1's scope. It is recorded in Part 8 below as a real defect, not
+  worked around in the product code.
+
+**Invariant 7 broken deliberately, with the reason, in the same change.** `run_discussion`
+was byte-identical from M5 until now; §7.2 item 7 is updated in place to state what the
+invariant was *for* and what now holds instead.
+
+**Import budget.** A module-scope `from .advisory.selector import ...` pushed `import
+theteam` to 91 modules and failed check 7. The selector is imported at point of use; the
+entry point now loads **88** modules against a budget of 90.
+
+`789 passed` (772 + 17 new), gate 7/7, `import theteam` succeeds.
+
 ## M8 — The docs tell the truth, and one of them is a lie in the code
 
 A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was

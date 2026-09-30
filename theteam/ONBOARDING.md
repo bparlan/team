@@ -72,7 +72,7 @@ theteam/
 │   └── components/           # design tokens and panel widgets
 ├── security/                 # path validation, audit, secrets
 ├── bin/                      # config and report helpers (see CLI.md)
-└── tests/                    # 772 tests
+└── tests/                    # 789 tests
 ```
 
 `theteam/subskills/` no longer exists. The task stack that lived in `subskills/task_stack/` moved

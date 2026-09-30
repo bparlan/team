@@ -68,7 +68,7 @@ def _require_provider():
 
 
 
-def spawn_member_task(member, topic, project_context, tool_manifest):
+def spawn_member_task(member, topic, project_context, permitted_skills):
     """Spawn a member task with proper system prompt and context."""
     member_id = member['id']
     member_role = member['role']
@@ -92,7 +92,7 @@ def spawn_member_task(member, topic, project_context, tool_manifest):
         "\n## Project Architecture Context",
         yaml.dump(project_context, default_flow_style=False) if isinstance(project_context, dict) else str(project_context),
         "\n## Tool Inventory",
-        tool_manifest,
+        _render_skills(permitted_skills),
         "\n## Your Task",
         f"Provide your independent, unbiased review on the topic from your perspective as {member_role}.",
         f"Your output MUST be a JSON object matching the schema: {{'id': '{member_id}', 'role': '{member_role}', 'verdict': '<concise_verdict>', 'note': '<detailed_note>'}}"
@@ -123,6 +123,7 @@ def spawn_member_task(member, topic, project_context, tool_manifest):
         "schemaMode": "strict",
         "isolated": True
     }
+
 def consolidate_notes(notes_dir, config):
     """Consolidate notes from all team members into a synthesis."""
     all_notes = []
@@ -572,6 +573,64 @@ def bootstrap_flow(project_root):
         return False
     finally:
         os.remove(answers_file_path) # Clean up temporary file
+def _permitted_skills(config):
+    """The skills this project's members may use, as the list it declares.
+
+    The config key is the single source: `SKILL.md`'s "Permitted skills"
+    section already declares it a hard boundary, and the member prompt now
+    states the same list the orchestrator enforces. A list read from a file
+    that does not exist is how this heading ended up saying `N/A`.
+    """
+    return list(config.get("permitted_skills") or [])
+
+
+def _render_skills(permitted_skills):
+    """The list as a prompt reads it, under `## Tool Inventory`."""
+    if not permitted_skills:
+        # §3.3: a blank section is a boundary nobody can see. Name the
+        # absence instead of rendering nothing under the heading.
+        return "none declared by this project's theteam.config"
+    return "\n".join(f"- {skill}" for skill in permitted_skills)
+
+
+def _topic_slice(topic):
+    """A minimal `SessionSlice` built from a discussion topic.
+
+    `select_members` takes a `SessionSlice`, not a topic string. M9 Phase 1.2
+    is explicit: build the minimal slice and call the selector unchanged,
+    rather than adding a topic-scoring heuristic as a fifth signal. The topic
+    arrives as the latest user message — which is the signal §4.5 already
+    names — and any dotted word in it is a `touched_paths` entry, which is
+    the other signal §4.5 already names. No new signal is invented, so the
+    selector's determinism guarantee and its tests are untouched.
+    """
+    from theteam.advisory.session_reader import SessionSlice
+
+    return SessionSlice(
+        last_user_messages=[str(topic)],
+        touched_paths=_paths_named_in(str(topic)),
+    )
+
+def _paths_named_in(topic):
+    """File paths a topic names, as the selector's extension signal needs.
+
+    Only a token that looks like a file - it carries a known source
+    extension - is returned. A topic mentioning `api` in prose must not
+    conjure a `.api` path, and a bare `router.py` is a real path signal.
+    """
+    import re
+    exts = {".py", ".rs", ".go", ".ts", ".tsx", ".jsx", ".js", ".css",
+            ".scss", ".sass", ".less", ".sql", ".yaml", ".yml", ".json",
+            ".proto", ".ipynb", ".csv", ".parquet", ".env", ".pem",
+            ".key", ".sh", ".tf", ".md", ".toml", ".ini", ".cfg", ".html"}
+    found = []
+    for token in re.findall(r"[A-Za-z0-9_][A-Za-z0-9_./-]*", topic):
+        lowered = token.lower()
+        if any(lowered.endswith(ext) for ext in exts) and len(lowered) > 2:
+            found.append(lowered)
+    return found
+
+
 def run_discussion(project_root, topic):
     """Run a team discussion on a specific topic with actual task spawning."""
     _require_provider()
@@ -596,26 +655,60 @@ def run_discussion(project_root, topic):
     notes_dir = os.path.join(tempfile.gettempdir(), f"theteam-notes-{conversation_id}")
     os.makedirs(notes_dir, exist_ok=True)
 
-    # Aggregate project context and tool manifest
+    # Aggregate project context. M9 Phase 1.1: the dead
+    # `.omp/theteam/tool-manifest.json` read is gone. That file does not
+    # exist, so every member prompt carried the literal `## Tool Inventory` /
+    # `N/A` — a boundary the constrained party could not see, enforced by
+    # luck. The real list is the project's own `permitted_skills`.
+    # `aggregate_project_context` was called here and imported nowhere in the
+    # package — `git log -S` finds no commit that ever added the import. Every
+    # `theteam discuss` that got past `_require_provider` died on a NameError
+    # here, and no test caught it because no test runs this path with a
+    # provider. Imported at point of use, like the selector below.
+    from theteam.workflow.context_aggregator import aggregate_project_context
+
     project_context = aggregate_project_context(project_root)
-    tool_manifest_path = os.path.join(os.path.dirname(CURRENT_DIR), ".omp", "theteam", "tool-manifest.json") # Assuming tool-manifest.json is in a known location relative to skill
-    tool_manifest = "N/A"
-    if os.path.exists(tool_manifest_path):
-        with open(tool_manifest_path, 'r') as f:
-            tool_manifest = f.read()
+    permitted_skills = _permitted_skills(config)
 
-    # Collect member tasks to spawn
-    member_tasks_to_spawn = []
-    expected_member_ids = []
+    # Imported here, not at module scope: a module-scope import of the
+    # advisory selector pushes `import theteam` to 91 modules and check 7
+    # fails. The budget is the contract, not the import style.
+    from theteam.advisory.selector import MEMBER_CAP, select_members
 
-    for member in config["team"]:
-        if not member.get("enabled", True):
-            continue
-        member_tasks_to_spawn.append(spawn_member_task(member, topic, project_context, tool_manifest))
-        expected_member_ids.append(member['id'])
+    # M9 Phase 1.2: selection is deterministic, not `enabled: True`. The
+    # selector takes a `SessionSlice`, not a topic string, so a minimal slice
+    # is built from the topic and the paths the topic names. No fifth signal
+    # is added to `select_members` — adding one would weaken the determinism
+    # guarantee its docstring names as the entire reason it exists
+    # (`selector.py:201-207` records a gate that collapsed when it was).
+    selection = select_members(
+        _topic_slice(topic),
+        task_type=config.get("discussion", {}).get("task_type"),
+        roster=config,
+    )
+    # The selector has already applied the cap; `suppressed` is its count of
+    # what it dropped. Recomputing it here from `len(members)` would be zero
+    # by construction — a report line that can never fire.
+    selected_ids = selection["members"][:MEMBER_CAP]
+    suppressed = selection.get("suppressed", 0)
+    by_id = {m["id"]: m for m in config["team"]}
+
+    # M9 Phase 1.3: truncation is reported, never silent.
+    print(f"Selector chose {len(selected_ids)} member(s): {', '.join(selected_ids)}")
+    if selection.get("truncated") or suppressed:
+        print(f"  {len(selected_ids) + suppressed} selected, "
+              f"{len(selected_ids)} speak, {suppressed} suppressed (cap {MEMBER_CAP})")
+    if selection.get("signals"):
+        print(f"  signals: {selection['signals']}")
+
+    member_tasks_to_spawn = [
+        spawn_member_task(by_id[mid], topic, project_context, permitted_skills)
+        for mid in selected_ids
+    ]
+    expected_member_ids = list(selected_ids)
 
     if not member_tasks_to_spawn:
-        print("No enabled team members to spawn. Exiting discussion.")
+        print("No team member selected for this topic. Exiting discussion.")
         return False
 
     # Add team members as participants
@@ -626,7 +719,10 @@ def run_discussion(project_root, topic):
     # Use parallel task execution to get intros
     intro_task_configs = []
     for member in config["team"]:
-        if not member.get("enabled", True):
+        # The same selection the discussion spawn uses. Before M9 this loop
+        # re-derived "every enabled member", so `theteam talk --json` would
+        # report a capped roster while silently paying for an uncapped one.
+        if member["id"] not in expected_member_ids:
             continue
         personality = member.get('personality', {})
         intro_task_configs.append({

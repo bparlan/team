@@ -256,16 +256,22 @@ def select_members(
             "members": [SOLO_DEFAULT] if SOLO_DEFAULT in available_set
                         else available[:1],
             "truncated": False,
+            "suppressed": 0,
             "signals": {"default": SOLO_DEFAULT},
         }
 
     truncated = len(selected) > MEMBER_CAP
+    suppressed = len(selected) - MEMBER_CAP if truncated else 0
     if truncated:
         selected = selected[:MEMBER_CAP]
-
 
     return {
         "members": selected,
         "truncated": truncated,
+        # How many were dropped, so a caller can report the truncation
+        # instead of inferring it. A caller that re-derives this from
+        # `len(members)` after the slice sees zero by construction, which is
+        # how a "1 suppressed" report line becomes one that can never fire.
+        "suppressed": suppressed,
         "signals": signals,
     }

@@ -22,7 +22,7 @@ theteam <command> --help
 |---|---|
 | `bootstrap` | Generate a team for this project. |
 | `status` | Roster, state directory, task counts, audit chain. |
-| `discuss <topic>` | One-shot team discussion, this turn only. |
+| `discuss <topic>` | One-shot team discussion, this turn only. Deterministic member selection: at most 4 members speak, and a truncated selection is reported. |
 | `serve` | Prometheus metrics endpoint. The only server. |
 | `loop <task_id>` | Schedule one registered task on an interval. |
 | `tasks` | List every task and its state. |

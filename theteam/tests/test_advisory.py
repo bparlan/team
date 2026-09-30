@@ -391,6 +391,36 @@ def test_selection_is_capped_at_four_and_records_the_truncation():
     assert result["truncated"] is True
 
 
+def test_truncation_reports_how_many_were_suppressed():
+    """The count of what the cap dropped, not an inferrable constant.
+
+    A caller re-deriving this as `len(members) - cap` gets zero, because
+    `members` is already capped by the time it is returned — so the
+    "1 suppressed" line a truncation is supposed to print is a line that can
+    never fire. The selector has to carry the number itself.
+    """
+    everyone = {"team": [
+        {"id": member, "enabled": True} for member in
+        ("architect", "pragmatist", "skeptic", "designer", "api", "data",
+         "devops", "security", "analyst")
+    ]}
+    wide = SessionSlice(
+        last_user_messages=["review the api security deploy schema ui data"],
+        recent_activity=["read"],
+        touched_paths=["a.sql", "b.py", "c.yaml", "d.env", "e.csv", "f.tf"],
+        digest="w",
+    )
+    result = select_members(wide, roster=everyone)
+    assert result["suppressed"] > 0
+    assert len(result["members"]) + result["suppressed"] > MEMBER_CAP
+
+
+def test_nothing_suppressed_when_nothing_was_truncated():
+    quiet = SessionSlice(last_user_messages=["ok"], recent_activity=[],
+                         touched_paths=[], digest="q")
+    assert select_members(quiet, roster=FULL_ROSTER)["suppressed"] == 0
+
+
 def test_a_member_absent_from_the_roster_is_never_selected():
     """The roster decides who exists. A `.sql` file in a project with no data
     reviewer does not conjure one."""

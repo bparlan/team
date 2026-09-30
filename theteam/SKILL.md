@@ -89,7 +89,8 @@ This is what runs every time the user calls the team for comment on a topic.
 
 When the skill is invoked, it must immediately begin a structured round‑robin session:
 
-1. **Member Intros** – each enabled team member posts a short block containing:
+1. **Member Intros** – each **selected** team member (see step 7) posts a short
+   block containing:
    - `name` (from `id`)
    - `responsibility` (their `role`)
    - `personal_insight` – a concise comment on the current situation/topic.
@@ -144,21 +145,32 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    one. Do not read it and do not report its absence as a problem; if a discussion
    needs a tool contract, read the tool's own source. If the aggregator is
    missing or fails, say so and proceed — never invent config values from memory.
-7. **Spawn each enabled member independently**, one `task` call per member
+7. **Select, then spawn.** Selection is deterministic and happens *before*
+   any member is spawned — `theteam.advisory.selector.select_members` decides,
+   and at most **4** members speak. It reads two signals: tokens in the topic
+   matched against each member's declared `expertise`, and any source file the
+   topic names (`.py` → DevOps, `.sql` → data, `.tsx` → Designer). If nothing
+   fires, **the skeptic speaks alone** — a lone skeptic is the correct
+   default; the alternative is a unanimous chorus that is one voice repeated.
+   When the cap truncates, the count is printed: "5 selected, 4 speak, 1
+   suppressed". Do not spawn members the selector did not choose, and do not
+   substitute an LLM for it: the same topic must select identically every
+   time, and a test asserts that.
+8. **Spawn each selected member independently**, one `task` call per member
    (isolated — members must not see each other's output). Each member's
    system prompt should be built from its `role`, `expertise`, and `voice`
-   fields, plus the topic, any shared research context from step 5, and the
-   project context from step 6. Each member's
+   fields, plus the topic, the project's `permitted_skills` under
+   `## Tool Inventory`, and the project context from step 6. Each member's
    `outputSchema` should require exactly:
    `{id, role, verdict, note}` — matching what `theteam_report.py` expects.
    Write each member's returned JSON to its own file under a scratch notes
    directory, e.g. `/tmp/theteam-notes-<timestamp>/<id>.json`.
-8. **You do the synthesis pass** — after all members have reported, read
+9. **You do the synthesis pass** — after all members have reported, read
    every note yourself and write `synthesis.json` with `summary`,
    `agreements`, `disagreements`, `open_questions`, `recommendation`. Be
    honest about disagreement; `"No consensus — see disagreements"` is a
    legitimate recommendation. Do not average away a real split.
-9. **Render the report:**
+10. **Render the report:**
    ```bash
    PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
      --topic "<topic>" \
@@ -173,7 +185,7 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    complete. If it fails, fix the actual gap (missing note file, failed
    task) and rerun; don't drop the missing member from `--expected-ids` just
    to make the command pass.
-10. **Present the report to the user**: link/quote the written file, and
+11. **Present the report to the user**: link/quote the written file, and
    summarize the recommendation and any open questions in your own reply —
    don't just dump the raw markdown unremarked.
 
@@ -181,10 +193,23 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
 
 `theteam` may invoke, via `task` (isolated one-off work) or `hub` (messaging
 an already-running one), **only** the skills listed in this project's
-:`permitted_skills` (default: `ponytail`, `evolve-skills`, `code-search`). If a
+`permitted_skills` (default: `ponytail`, `evolve-skills`, `code-search`). If a
 discussion genuinely needs another skill or external tool, stop and `ask`
 the user rather than reaching for it — this list is a hard boundary, not a
 suggestion.
+
+**This boundary is stated to the members, not just enforced on them.** As of
+M9 Phase 1 (2026-09-30) every member's system prompt carries the list under
+`## Tool Inventory`. Before that, the code read
+`.omp/theteam/tool-manifest.json` — a file that has never existed in this
+tree — and defaulted to the literal string `N/A`, so every member was given a
+tool contract that said nothing. Falsified by
+`test_m9_selection_wiring.py::TestToolInventoryIsTheRealBoundary`.
+
+`ask` is an orchestrator tool, not a member tool. Members are spawned in
+parallel and the parent blocks on each one, so a member calling `ask`
+suspends the parent once per member with no visible provenance. The
+orchestrator asks, once, in the parent session.
 
 ## Notes on stability
 

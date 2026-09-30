@@ -298,6 +298,174 @@ updated to match.
 `859 passed` (836 + 23 new), gate 7/7, `import theteam` loads 88 modules.
 
 
+
+## M10 — One scheduler
+
+Three schedulers existed. One worked. `theteam loop` + `theteam run` schedule and execute
+YAML tasks through `TaskRepository` and `TaskExecutor`; the other two had no reachable
+caller. This milestone collapses them to the one that works and rebuilds `theteam serve`
+on it.
+
+### Phase 0 — Baseline, captured before anything changed
+
+| Datum | Value |
+|---|---|
+| Test suite | 859 passed |
+| `import theteam` | 12 `theteam.*`; +cli 14; +terminal 26 |
+| `serve` startup | binds, publishes 1063 bytes of `/metrics` |
+| `serve` task counters | `tasks_started 0.0`, `tasks_completed 0.0`, `tasks_failed 0.0` |
+
+Those zeros are the evidence the whole milestone rests on. `serve` constructed a
+`UnifiedLoop` and nothing ever called `add_task`, because its only producer,
+`integrated_orchestrator.py`, had no importer. The endpoint published a static snapshot
+of a scheduler with no input.
+
+### Phase 1 — `run_due_tasks()` extracted, behaviour-identical
+
+`cmd_run` carried ~80 lines of inline scheduling: the breaker-state handoff, the
+one-runner-per-phase gate, skip-versus-failed recording, the `ran`/`skipped`/`failures`
+tally. `serve` has to execute identical work or the two paths drift, so it became
+`run_due_tasks(project_root, only)` and `cmd_run` is now a parser and an emitter. The
+`Task not found` named failure stays in `cmd_run` because it is a *command* failure.
+
+Verified byte-identical: same payload keys, same exit codes, `ran: 0` twice for an
+empty project, and a real task executing through docker isolation.
+
+### Phase 2 — 17 unreachable modules deleted
+
+Selected by AST scan for imports at any nesting level, intersected with a runtime
+`sys.modules` check across all three entry points. `integrated_orchestrator`,
+`system_integration`, `state_validator`, `schema_versioning`,
+`workflow/discussion_interface`, `workflow/team_member_manager`,
+`workflow/discussion_manager_refactored`, `core/team_member_manager`,
+`advisory/commentary`, `ui/components/{reflex_renderers,visibility}`,
+`bin/theteam_report`, `bin/utilities`, `skill/SKILL_metadata` and four empty shells.
+
+Three findings worth keeping:
+
+- **`bin/utilities.py` looked dead and was not.** `theteam_config.py` imports it as
+  top-level `bin.utilities`, which the AST scan missed because scripts run with
+  `PYTHONPATH=theteam`. Deleting it broke `import theteam` outright.
+- **`core/__init__.py`'s `_LAZY` map still named `system_integration`.** Left alone it
+  turns `from theteam.core import SystemIntegration` into a `ModuleNotFoundError` from
+  inside `__getattr__` instead of the `AttributeError` the contract promises.
+- **`advisory/commentary.py` was restored, not deleted.** `ARCHITECTURE.md:753` already
+  recorded that `CommentaryController` has no caller outside tests, and an advisory
+  argued it was the M9 deliverable. It is not: M9's six phases are the selector, the
+  manager, context slicing, `runner: llm`, diagrams and docs, and wiring the controller is
+  not among them. But it is designed-and-tested M5 product intent, not scheduler rot, so
+  it is out of this milestone's scope and was put back.
+
+Broadening `test_stability_fixes.py::TestTestIsolation` from one named file to the whole
+suite — and from a substring search to an AST walk, so a module-level insert is
+distinguished from one inside a function — immediately caught a real leak:
+`test_theteam.py` had three unguarded `sys.path.insert` calls. Two were noise; the third
+existed to reach `scripts/test_utils.py`, which moved to `theteam/tests/` and is now
+imported through a single documented insert.
+
+### Phase 3 — `routine-engine/` deleted
+
+276 KB, 18 tracked files. Zero references from `theteam/`, absent from `pyproject.toml`'s
+`packages.find include = ["theteam*"]`, and no test collected it. It duplicated
+`theteam/tasks/` function for function: `should_execute` ≈ `due()`, `execute_phase` ≈
+`execute_phase`, `safety/rollback.py` ≈ breaker + backup.
+
+It also already owned the word *routine*, which is why `theteam loop` was **not** renamed.
+The command schedules one task once and prints `next_run`; it does not iterate, so
+`routine` would promise a repetition it does not perform — and would collide with
+`RoutineScheduler`, `run_routine` and three `routines/*.md` in a subsystem with a
+different data model. If the name ever reads wrong, `schedule` maps 1:1 onto
+`TaskRepository.schedule_task`.
+
+### Phase 4 — `serve` rebuilt as a scheduler
+
+`tasks/scheduler.py` owns a clock and nothing else: `run_due_tasks` is injected so it does
+not import the CLI. `MetricsCollector.collect()` is duck-typed on `.metrics`, `.tasks`,
+`.circuit_breaker` and `.health_monitor`, so the scheduler satisfies it with no change to
+`metrics.py` and no second mapping of metric names to producers.
+
+Proven live, not asserted. A task scheduled at `--interval 1` was picked up unattended by
+`serve --tick-seconds 2`, executed inside container isolation, and recorded:
+
+```
+theteam_tasks_completed 1.0     theteam_tasks_failed 0.0
+theteam_tasks_active 1.0        uptime 90.8s
+history: runs 1, successes 1, success_rate 100.0, breaker closed
+```
+
+Baseline for the same measurement was `0.0` forever.
+
+Two fixture errors surfaced along the way and are worth recording as *my* errors, not the
+product's: the first probe wrote to a host `/tmp` the container cannot see, and the second
+passed a shell script to `python3`. The read-only `/workspace` mount that rejected the
+third attempt is the isolation boundary working correctly.
+
+### Phase 5 — `unified_loop.py` and `task_contract.py` deleted
+
+With `serve` rebuilt, `UnifiedLoop` had no caller. The pair referenced only each other and
+was removed together, with `test_final_validation.py` (188 lines, one collected test, every
+assertion about a deleted class).
+
+`test_audit.py`'s audit-sink regression was **ported, not deleted**: it defends that
+observability failure must not become control flow, and `UnifiedLoop.add_task` was only its
+vehicle. It now drives `TaskScheduler.tick`, and a second test covers a raising
+`run_due_tasks`. Writing it honestly caught a bug in the port — `start()` fires an
+immediate sweep, so the explicit `tick()` double-counted and the assertion read `2.0 == 1.0`.
+
+`test_backup.py` had `SOURCE_FILE = "theteam/core/unified_loop.py"`. The test creates the
+file in a tmp tree so it stayed meaningful, but it now names a real module.
+
+### Three modules that lost their importer, recorded not deleted
+
+Deleting `unified_loop.py` removed the last in-package importer of three modules. They are
+three different situations and are recorded individually in `ARCHITECTURE.md` §5.2.1:
+
+- **`backup.py` is live.** `scripts/backup.py` is an operator CLI over it. Verified by
+  running it: `Backup created: /private/tmp/bk/backups/backup_20260930_194816`. This one
+  nearly got deleted on a wrong reading, and the AST scan had called it orphaned.
+- **`event_bus.py`** is the mechanism §5.1 names, not a file. Deleting it takes
+  `event_log.py` and `rate_limiting.py` with it.
+- **`health_monitor.py`** has no importer, but `health_dashboard.py` reads a health score
+  from whatever it is handed and is currently handed nothing. The fix is wiring.
+
+### Diagrams
+
+The **architecture** diagram is current: `TaskScheduler` added and repinned to
+`ed4dcee1`, `validate` returns `ok: true` from the repo path with 9/9 artifact checks,
+0 errors, 13 references verified, and `visual-check` passes with real Chrome at every
+viewport.
+
+One caveat on that receipt: the validator checks that each source **file** exists at the
+pinned revision. It does not check that the line number names the declared label — a
+deliberately wrong line number produced zero errors. The line was corrected by hand to the
+measured 32.
+
+The **milestone** diagram is frozen at seven milestones. This is a tool defect, not a
+layout problem, and it is measured: `archify validate workflow` fails on the *committed*
+7-node source as-is, with a `viewBox` of 1691×528 that projects node text to 11.9px against
+a 6px floor — a projection that should pass. An 11-milestone source with M7–M10 was built
+and every layout variant tried (9/4/3/2 lanes, widths 190–230px, shortened labels,
+columns reduced to the six the checker seats) either collided or failed the same check; the
+best variant projected 11.92px label and 9.37px sublabel. Both committed files were
+generated by `archify 2.17.0-dev.1` and the installed skill no longer agrees with that
+version. The HTML and JSON are a consistent pair and the gap is recorded in
+`ARCHITECTURE.md` §1.
+
+### Result
+
+| | Before | After |
+|---|---|---|
+| Schedulers | 3 | 1 |
+| Files deleted | — | 45 (≈15,700 lines) |
+| Package modules | 66 | 53 |
+| Tests | 859 passed | 646 passed |
+| `serve` task counters | `0.0` forever | reports executed work |
+| Import budget | 88 / 90 | 88 / 90 |
+
+The test count fell because 213 tests covered code that no production path reached. That
+is deletion, not regression: the suite is green, `check_invariants.sh` passes 7/7, and
+`import theteam` is unchanged at 88 modules.
+
 ## M9 Phase 5 — Diagrams
 
 `diagrams/active-usage-architecture.json` / `.html` re-derived from the M9 source. The three

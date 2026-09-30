@@ -310,10 +310,20 @@ second phase kind beside `script:`, with `AgentIsolation` reachable only from th
 - `node bin/archify.mjs validate architecture ... --repo-root <repo>` → `ok: true`,
   validating from the committed repo path, not a scratch copy.
 - `deliver` → 9/9 artifact checks, 0 errors, `evidence.verified: true`, pinned to revision
-  `2fab70a0`, with all 18 source references verified against the checkout.
+  `2fab70a0`, with all 12 source references verified against the checkout.
 - `visual-check` with a real Chrome → `overall: true`, **no overflow at 1440×900, 1600×1000,
   1920×1080 or 2048×1320** (an earlier 18-node draft measured 1622px of content in a 900px
   viewport and failed containment; it is not what shipped).
+
+**Where the tool is.** `archify` is not a dependency of this package — there is no
+`node_modules/`, no `archify` script in `package.json`, and M7's README reference to
+`npm install -g @oh-my-pi/archify` described a package that does not exist. It ships as an OMP
+skill at `~/.omp/agent/skills/archify`, driven as
+`node bin/archify.mjs {validate,deliver,visual-check}`. `visual-check` additionally needs a
+Chrome binary; this machine's is at
+`~/.cache/puppeteer/chrome/mac_arm-*/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+passed through `ARCHIFY_CHROME`. Without it `visual-check` reports every viewport as `skipped`
+and returns an error, which is not a pass.
 
 **The milestone diagram was not updated, and that is a real gap.** It still carries the
 M7 source (7 milestones) as its `.json` while the `.html` renders 10 nodes including M7, M8

@@ -3,32 +3,58 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Active Usage Architecture",
-    "subtitle": "Re-derived from the theteam/ source at M7: every component is a module in the tree, solid arrows are real imports, dashed ones are real file contracts",
+    "subtitle": "Re-derived at M9: every component is a module in the tree, every arrow a real import",
     "quality_profile": "standard",
     "repository": {
       "url": "https://github.com/bparlan/team",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "bba1c08e5363cbb34494b8b98e65b72d30374895"
+      "revision": "2fab70a08b9b4579c03787fd5461e0e97f3263bf"
     },
-    "viewBox": [1560, 960],
+    "viewBox": [
+      1000,
+      640
+    ],
     "views": [
       {
         "id": "entry",
         "label": "Entry and tasks",
-        "focus": ["theteam_cli", "task_repository", "task_executor", "state_store"]
+        "focus": [
+          "theteam_cli",
+          "task_repository",
+          "task_executor",
+          "llm_runner"
+        ]
       },
       {
-        "id": "loop",
-        "label": "Loop and telemetry",
-        "focus": ["theteam_cli", "unified_loop", "metrics_collector", "health_monitor"]
+        "id": "discuss",
+        "label": "Discussion path",
+        "focus": [
+          "theteam_cli",
+          "team_manager",
+          "selector",
+          "context_slice",
+          "discussion"
+        ]
       },
       {
         "id": "safety",
         "label": "Safety",
-        "focus": ["task_executor", "circuit_breaker", "agent_isolation", "audit_chain"]
+        "focus": [
+          "task_executor",
+          "circuit_breaker",
+          "agent_isolation"
+        ]
       }
     ]
+  },
+  "layout": {
+    "mode": "grid",
+    "cols": 3,
+    "gapX": 80,
+    "gapY": 60,
+    "cellW": 230,
+    "cellH": 48
   },
   "components": [
     {
@@ -36,124 +62,255 @@
       "type": "backend",
       "label": "theteam CLI",
       "sublabel": "cli.py, the only entry point",
-      "pos": [610, 40],
-      "size": [300, 60],
-      "sources": [{"path": "theteam/cli.py", "line": 604, "label": "build_parser"}]
+      "sources": [
+        {
+          "path": "theteam/cli.py",
+          "line": 604,
+          "label": "build_parser"
+        }
+      ],
+      "row": 0,
+      "col": 0
     },
     {
-      "id": "task_repository",
-      "type": "database",
-      "label": "TaskRepository",
-      "sublabel": "tasks/repository.py",
-      "pos": [40, 260],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/tasks/repository.py", "line": 123}]
-    },
-    {
-      "id": "task_executor",
+      "id": "team_manager",
       "type": "backend",
-      "label": "TaskExecutor",
-      "sublabel": "tasks/executor.py",
-      "pos": [320, 260],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/tasks/executor.py", "line": 57}]
+      "label": "theteam manager",
+      "sublabel": "grows the roster from a topic",
+      "sources": [
+        {
+          "path": "theteam/advisory/manager.py",
+          "line": 1,
+          "label": "detect_triggers"
+        }
+      ],
+      "row": 1,
+      "col": 0
     },
     {
-      "id": "unified_loop",
+      "id": "selector",
       "type": "backend",
-      "label": "UnifiedLoop",
-      "sublabel": "core/unified_loop.py",
-      "pos": [600, 260],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/unified_loop.py", "line": 142}]
+      "label": "selector",
+      "sublabel": "deterministic, zero LLM, cap 4",
+      "sources": [
+        {
+          "path": "theteam/advisory/selector.py",
+          "line": 191,
+          "label": "select_members"
+        }
+      ],
+      "row": 2,
+      "col": 0
     },
     {
-      "id": "metrics_collector",
-      "type": "messagebus",
-      "label": "MetricsCollector",
-      "sublabel": "core/metrics.py",
-      "pos": [880, 260],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/metrics.py"}]
+      "id": "context_slice",
+      "type": "backend",
+      "label": "context slice",
+      "sublabel": "per-member, reports orphans",
+      "sources": [
+        {
+          "path": "theteam/advisory/context_slice.py",
+          "line": 90,
+          "label": "slice_context"
+        }
+      ],
+      "row": 2,
+      "col": 1
+    },
+    {
+      "id": "discussion",
+      "type": "backend",
+      "label": "run_discussion",
+      "sublabel": "select, then spawn",
+      "sources": [
+        {
+          "path": "theteam/__init__.py",
+          "line": 690,
+          "label": "run_discussion"
+        }
+      ],
+      "row": 3,
+      "col": 0
     },
     {
       "id": "commentary_controller",
       "type": "backend",
       "label": "Commentary",
       "sublabel": "advisory/commentary.py",
-      "pos": [1160, 260],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/advisory/commentary.py", "line": 111}]
+      "sources": [
+        {
+          "path": "theteam/advisory/commentary.py",
+          "line": 111,
+          "label": "CommentaryController"
+        }
+      ],
+      "row": 3,
+      "col": 1
+    },
+    {
+      "id": "task_repository",
+      "type": "database",
+      "label": "TaskRepository",
+      "sublabel": "tasks/repository.py, YAML store",
+      "sources": [
+        {
+          "path": "theteam/tasks/repository.py",
+          "line": 123,
+          "label": "TaskRepository"
+        }
+      ],
+      "row": 0,
+      "col": 1
+    },
+    {
+      "id": "task_executor",
+      "type": "backend",
+      "label": "TaskExecutor",
+      "sublabel": "two phase kinds",
+      "sources": [
+        {
+          "path": "theteam/tasks/executor.py",
+          "line": 57,
+          "label": "TaskExecutor"
+        }
+      ],
+      "row": 1,
+      "col": 1
+    },
+    {
+      "id": "llm_runner",
+      "type": "backend",
+      "label": "llm runner",
+      "sublabel": "runner: llm",
+      "sources": [
+        {
+          "path": "theteam/tasks/runners/llm.py",
+          "line": 82,
+          "label": "run_llm_phase"
+        }
+      ],
+      "row": 2,
+      "col": 2
     },
     {
       "id": "agent_isolation",
       "type": "security",
       "label": "AgentIsolation",
-      "sublabel": "core/agent_isolation.py",
-      "pos": [40, 620],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/agent_isolation.py", "line": 144}]
-    },
-    {
-      "id": "audit_chain",
-      "type": "database",
-      "label": "Audit chain",
-      "sublabel": "core/audit_chain.py",
-      "pos": [320, 620],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/audit_chain.py", "line": 31}]
+      "sublabel": "script phases run in here",
+      "sources": [
+        {
+          "path": "theteam/core/agent_isolation.py",
+          "line": 1,
+          "label": "AgentIsolation"
+        }
+      ],
+      "row": 0,
+      "col": 2
     },
     {
       "id": "circuit_breaker",
       "type": "security",
       "label": "CircuitBreaker",
-      "sublabel": "core/circuit_breaker.py",
-      "pos": [600, 620],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/circuit_breaker.py", "line": 57}]
-    },
-    {
-      "id": "resource_limiter",
-      "type": "security",
-      "label": "ResourceLimiter",
-      "sublabel": "core/resource_limiter.py",
-      "pos": [880, 620],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/resource_limiter.py", "line": 137}]
-    },
-    {
-      "id": "health_monitor",
-      "type": "backend",
-      "label": "HealthMonitor",
-      "sublabel": "core/health_monitor.py",
-      "pos": [1160, 620],
-      "size": [230, 60],
-      "sources": [{"path": "theteam/core/health_monitor.py", "line": 20}]
+      "sublabel": "5 failures trips it",
+      "sources": [
+        {
+          "path": "theteam/core/circuit_breaker.py",
+          "line": 1,
+          "label": "CircuitBreaker"
+        }
+      ],
+      "row": 1,
+      "col": 2
     },
     {
       "id": "state_store",
       "type": "database",
       "label": "StateStore",
-      "sublabel": "state.py, the one path resolver",
-      "pos": [610, 860],
-      "size": [300, 60],
-      "sources": [{"path": "theteam/state.py", "line": 35}]
+      "sublabel": "every path resolves here",
+      "sources": [
+        {
+          "path": "theteam/state.py",
+          "line": 35,
+          "label": "StateStore"
+        }
+      ],
+      "row": 4,
+      "col": 1
     }
   ],
   "connections": [
-    {"id": "cli-repository", "from": "theteam_cli", "to": "task_repository", "label": "every task command", "fromSide": "bottom", "toSide": "top"},
-    {"id": "cli-executor", "from": "theteam_cli", "to": "task_executor", "label": "run", "fromSide": "bottom", "toSide": "top"},
-    {"id": "cli-loop", "from": "theteam_cli", "to": "unified_loop", "label": "serve", "fromSide": "bottom", "toSide": "top"},
-    {"id": "cli-metrics", "from": "theteam_cli", "to": "metrics_collector", "fromSide": "bottom", "toSide": "top"},
-    {"id": "cli-commentary", "from": "theteam_cli", "to": "commentary_controller", "label": "writes the on-marker", "variant": "dashed", "fromSide": "bottom", "toSide": "top"},
-    {"id": "executor-breaker", "from": "task_executor", "to": "circuit_breaker", "label": "trip check", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "executor-isolation", "from": "task_executor", "to": "agent_isolation", "label": "subprocess under a Layer 4 guard", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "executor-audit", "from": "task_executor", "to": "audit_chain", "label": "record_task_event", "variant": "security", "fromSide": "bottom", "toSide": "top", "labelDy": 40},
-    {"id": "repository-audit", "from": "task_repository", "to": "audit_chain", "label": "record_event", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "loop-breaker", "from": "unified_loop", "to": "circuit_breaker", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "loop-limiter", "from": "unified_loop", "to": "resource_limiter", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "loop-audit", "from": "unified_loop", "to": "audit_chain", "variant": "security", "fromSide": "bottom", "toSide": "top"},
-    {"id": "loop-health", "from": "unified_loop", "to": "health_monitor", "fromSide": "bottom", "toSide": "top"},
-    {"id": "commentary-state", "from": "commentary_controller", "to": "state_store", "label": "reads markers, writes state", "fromSide": "left", "toSide": "right"}
+    {
+      "id": "cli-manager",
+      "from": "theteam_cli",
+      "to": "team_manager"
+    },
+    {
+      "id": "cli-tasks",
+      "from": "theteam_cli",
+      "to": "task_repository"
+    },
+    {
+      "id": "manager-selector",
+      "from": "team_manager",
+      "to": "selector",
+      "label": "grows the roster",
+      "labelDy": 24
+    },
+    {
+      "id": "repo-executor",
+      "from": "task_repository",
+      "to": "task_executor",
+      "label": "due tasks",
+      "labelDy": 24
+    },
+    {
+      "id": "selector-discussion",
+      "from": "selector",
+      "to": "discussion",
+      "label": "at most 4 members",
+      "labelDy": 24
+    },
+    {
+      "id": "slice-discussion",
+      "from": "context_slice",
+      "to": "discussion",
+      "label": "sliced per member",
+      "labelDy": 24
+    },
+    {
+      "id": "selector-commentary",
+      "from": "selector",
+      "to": "commentary_controller",
+      "label": "select_members",
+      "labelDy": 24
+    },
+    {
+      "id": "commentary-state",
+      "from": "commentary_controller",
+      "to": "state_store",
+      "label": "markers",
+      "labelDy": 24
+    },
+    {
+      "id": "executor-llm",
+      "from": "task_executor",
+      "to": "llm_runner",
+      "label": "runner: llm",
+      "labelDy": 24
+    },
+    {
+      "id": "executor-breaker",
+      "from": "task_executor",
+      "to": "circuit_breaker",
+      "label": "trip check",
+      "labelDy": 24
+    },
+    {
+      "id": "executor-isolation",
+      "from": "task_executor",
+      "to": "agent_isolation",
+      "label": "script phases",
+      "labelDy": 24
+    }
   ]
 }

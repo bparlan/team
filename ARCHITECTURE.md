@@ -7,7 +7,14 @@
 | Diagram | Renders | File |
 |---|---|---|
 | System architecture | Part 5 §5.2 package layout, §5.1 layers, the three command entry points | `diagrams/active-usage-architecture.html` |
-| Delivery order | Part 6, all seven milestones and their gates | `diagrams/active-usage-milestones.html` |
+| Delivery order | Part 6, all nine milestones and their gates | `diagrams/active-usage-milestones.html` |
+
+> **Milestone diagram is stale at M9.** `diagrams/active-usage-milestones.html` renders all
+> ten milestones; `diagrams/active-usage-milestones.json` is still the M7 seven-milestone
+> source. They disagree, and this table makes the JSON the shape authority — so the JSON is
+> the defect. The ten-milestone layout did not pass archify validation (projected text 5.86px
+> against a 6px floor, and a `viewBox` capacity minimum wider than the readability ceiling),
+> and the fix was not completed. The architecture diagram is current and its pair is synced.
 
 Sources of truth, in conflict order: this document defines intent; the two HTML diagrams define the rendered shape; the YAML task files define task content. If this document and a diagram disagree, this document wins. If this document and the running code disagree, **the code is the defect** — that is the next milestone's work, not a reason to edit the intent.
 

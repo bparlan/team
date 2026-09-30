@@ -297,6 +297,43 @@ updated to match.
 
 `859 passed` (836 + 23 new), gate 7/7, `import theteam` loads 88 modules.
 
+
+## M9 Phase 5 — Diagrams
+
+`diagrams/active-usage-architecture.json` / `.html` re-derived from the M9 source. The three
+things §M9 says change, all present: the discussion path is **select-then-spawn**, not
+spawn-all; `theteam manager` is a node between the CLI and the roster; and `runner: llm` is a
+second phase kind beside `script:`, with `AgentIsolation` reachable only from the script path.
+
+**Delivered with evidence, not assertion:**
+
+- `node bin/archify.mjs validate architecture ... --repo-root <repo>` → `ok: true`,
+  validating from the committed repo path, not a scratch copy.
+- `deliver` → 9/9 artifact checks, 0 errors, `evidence.verified: true`, pinned to revision
+  `2fab70a0`, with all 18 source references verified against the checkout.
+- `visual-check` with a real Chrome → `overall: true`, **no overflow at 1440×900, 1600×1000,
+  1920×1080 or 2048×1320** (an earlier 18-node draft measured 1622px of content in a 900px
+  viewport and failed containment; it is not what shipped).
+
+**The milestone diagram was not updated, and that is a real gap.** It still carries the
+M7 source (7 milestones) as its `.json` while the `.html` renders 10 nodes including M7, M8
+and M9 — the source and the artifact disagree, and ARCHITECTURE.md:12 makes that a defect. I
+did not resolve it: the ten-milestone layout failed validation repeatedly
+(`desktop-readability` at 5.86px projected against a 6px floor, and a
+`viewBox capacity` minimum of 1269px that conflicts with the readability ceiling of 1240px),
+and the archify skill's stop rule says to report rather than keep tuning. Reconstructing the
+JSON from the rendered HTML got as far as the measured M7/M8 gap — 46 rendered pixels, which
+is not the `yOffset` unit the schema wants — before I stopped.
+
+**What this means for a reader:** the milestones diagram understates the delivery, and its
+JSON is not the source of its HTML. The architecture diagram carries M9's story correctly.
+Fixing the milestone pair is open work, recorded here rather than left as a silent
+inconsistency.
+
+**One process note worth recording.** `deliver` writes only the HTML. The JSON beside it is
+not updated, so shipping a diagram and syncing its source are two steps, and the first is
+easy to mistake for the second. The architecture pair is synced; the milestone pair is not.
+
 ## M8 — The docs tell the truth, and one of them is a lie in the code
 
 A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was

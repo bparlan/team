@@ -496,7 +496,7 @@ Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, *
 
 # Part 6 — Delivery Order
 
-Seven milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real.
+Nine milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real. M7 and M8 shipped before M9 was written and are recorded in `theteam/CHANGELOG.md`; both were documentation audits rather than new capability, so neither has a section here.
 
 The ordering rule: **at every intermediate commit, all four existing tasks still execute.** The switch from the current store to the YAML repository is the one place that can silently break that, and it gets an explicit guard.
 
@@ -637,6 +637,191 @@ The same measurement found a real defect: `theteam/__init__.py:21` imports `yaml
 **Falsification test:** in a project with no audit chain and no run tasks, `watch status --once` shows `absent` and `never run` and never the literal `closed`, `intact`, or `0%`. In a project with a tripped breaker, the trip and its consecutive-failure count are shown. `status --json` is byte-identical before and after.
 
 **Guard:** the audit row is rendered by `audit_chain.chain_line()`, the one function that already states absent/empty/intact/BROKEN honestly, so a fourth spelling cannot grow in the renderer. Every `None` is gated **before** it reaches `circuit_visual()`: `circuit_visual(None)` returns `UNKNOWN_VISUAL`, which is a real-looking state nobody measured.
+
+## M9 — The team that staffs itself
+
+`theteam discuss` spawns every enabled member for every topic. `theteam/advisory/selector.py` already
+decides which members are relevant — and nothing on the discussion path calls it. This milestone
+wires the selector, adds a manager that grows the roster from the topic, and turns prompt-shaped
+work into registered tasks.
+
+**Decisions locked 2026-09-30.** `web_search` joins `permitted_skills` for members and manager.
+`ask` is a manager tool only; members never call it. `theteam manager` is a separate command.
+Nothing integrates into `~/devcode/autonomedia-snapshot/`; bootstrap is tested directly.
+
+### What already exists and is idle
+
+`theteam/advisory/` is live, tested code with no production caller. Measured, not assumed:
+
+| Fact | Evidence |
+|---|---|
+| A deterministic member selector exists | `theteam/advisory/selector.py:191` `select_members()` |
+| It caps at 4, defaults to a lone skeptic | `selector.py:35` `MEMBER_CAP = 4`, `selector.py:42` `SOLO_DEFAULT = "skeptic"` |
+| It selects on four signals | `selector.py:216-237` — touched extensions, message tokens, task type, loop phase |
+| A tick controller with a digest cache exists | `advisory/commentary.py:186` `tick()`, `:223` unchanged digest → zero engine calls |
+| **Nothing instantiates it outside tests** | `grep -rn "CommentaryController" theteam/ --include=*.py` → only `commentary.py` and `test_advisory.py` |
+| **`theteam comment on/off/status` writes markers nothing reads** | `cli.py:558` writes `commentary.on`, `cli.py:584` writes `commentary_stop`; the only reader is `cli.py` reporting status |
+| **`unified_loop.py` never ticks it** | no `commentary` or `tick` reference in the file |
+
+The architecture M9 describes is already designed and already tested. It is switched off at the wall.
+**This milestone wires it. It does not rebuild it.**
+
+### Three dead ends this milestone does not build
+
+1. **The task `prompt` field has zero consumers.** `grep` for `task["prompt"]` across
+   `theteam/tasks/`, `cli.py`, and `__init__.py` returns nothing. The field is in every task YAML
+   and nothing executes it. `cmd_run` (`cli.py:227`) reads only `task["phases"]` and runs `p["script"]`.
+2. **Member selection is `enabled: True` and nothing else.** `__init__.py:611-612`. All five
+   members, every discussion, regardless of topic.
+3. **The roster is frozen at bootstrap.** `generate_team_members_from_context` (`__init__.py:291`)
+   is called once, from `cmd_bootstrap` at `__init__.py:526`. Nothing grows the roster per topic.
+
+### Two live defects found while planning
+
+**Members are told they have no tools.** `__init__.py:601-605` reads
+`.omp/theteam/tool-manifest.json` and defaults to the literal string `"N/A"`. That file does not
+exist — `ls` confirms. Every member prompt therefore carries `## Tool Inventory` / `N/A`. Members
+get role, expertise, voice, topic, and project context, and are never told which tools they may
+use. A boundary the constrained party cannot see is enforced by luck.
+
+**The full project context is dumped into every member prompt.** `__init__.py:93` does
+`yaml.dump(project_context)` per member. For a large project the same tokens are paid N times.
+This is the concrete form of "each member means new context, efficiency is critical".
+
+### Prior art: do not reintroduce this
+
+`selector.py:201-207` records a failed design:
+
+> `context` … was tried as a relevance filter and it collapsed the whole differentiation the gate
+> exists to check — a project with `database_focus` set and one without both fell back to the same
+> member, because the filter ran after selection and overwrote it. A gate that cannot fail is not
+> a gate.
+
+**Selection stays deterministic and assertable. The manager may be an LLM; the selector may not.**
+
+### Phase 1 — Wire the selector (do this one first)
+
+Smallest phase, highest value. **1.1** Replace the dead manifest read with the real
+`permitted_skills` list, passed into `spawn_member_task` and rendered under the existing
+`## Tool Inventory` heading. Signature becomes
+`spawn_member_task(member, topic, project_context, permitted_skills)`. **1.2** Replace the
+`enabled` filter with `select_members`. The selector takes a `SessionSlice`, not a topic string, so
+build a minimal slice from the topic and touched paths rather than adding a fifth signal — adding
+one weakens the determinism guarantee the module's docstring names as its entire reason to exist.
+**1.3** Respect `MEMBER_CAP`. Truncation is reported, never silent: "5 selected, 4 speak, 1
+suppressed". *Gate:* the same topic selects identically twice. If it differs, something LLM-shaped
+leaked in.
+
+### Phase 2 — `theteam manager`
+
+`theteam manager --topic "<topic>" | --status | --reset`, `--json` throughout. Reads context
+(`analyze_project_context`, already exists), reads the topic, **searches the web**, reasons over
+roster + context + results in one LLM call, **asks once** via `ask`, then persists through
+`theteam_config.py` — never by hand-editing.
+
+**Roster growth needs two independent triggers.** `analyze_project_context` derives members from
+*project* flags (`security_focus`, `database_focus`, …) computed from the repository. A topic about
+rate limiting adds nobody; only a project with `infrastructure_focus` does. The requirement is
+topic-driven, so the manager adds a member when **either** the project has an uncovered flag **or**
+the topic has vocabulary no member's `expertise` covers. Project context alone gives the same team
+for every question; topic alone gives a team blind to what the repo contains.
+
+**Do not encode "3 then +4".** The user was explicit that those numbers were an example. A
+hardcoded count is the thing not to build. *Gates:* `--status` states why every member is on the
+roster; an added member names the topic vocabulary that triggered it — "you might want a database
+person" is not a reason.
+
+### Phase 3 — Context efficiency
+
+Slice `project_context` per member by the flag its focus implies. Keep it honest: every fired flag
+must reach at least one member, and a flag delivered to nobody is reported, not dropped. Start with
+a token match against the `expertise` string; add an explicit mapping only if the match proves
+unreliable in testing. **Skipped:** a digest cache for `discuss` — it is a one-shot command with no
+repeat ticks, and `commentary.py:223` already covers the case that needs one.
+
+### Phase 4 — Prompt-derived work as registered tasks
+
+```
+theteam run --only ground-truth-audit
+theteam run --only doc-harmonization
+theteam run --only native-feature-loop --topic "..."
+```
+
+One new schema field. A phase today runs `script:`; these prompts are instructions to a model:
+
+```yaml
+phases:
+  - name: audit
+    runner: llm
+    member: architect
+    prompt_file: prompts/ground-truth-audit.md
+    memory_limit_mb: 64
+```
+
+`runner: llm` and `script:` are mutually exclusive; exactly one must be present. Implementation is
+`theteam/tasks/runners/llm.py` exposing `run_llm_phase(task, phase, project_root)`, branched into
+`TaskExecutor.execute_task` (`theteam/tasks/executor.py:57`) with the same error handling, the same
+`ok`/`failed`/`skipped` outcomes, and the same breaker semantics.
+
+**The missing-script check must not weaken.** `cli.py:243-246` reports a missing script as `skipped`
+with a named reason. A phase with *neither* `script` nor `runner: llm` takes that same path —
+otherwise the new field is a silent-skip hole, the exact shape §3.3 forbids.
+
+**Three tasks:** `ground-truth-audit` (architect, recon only), `doc-harmonization` (pragmatist,
+consumes the audit), `native-feature-loop` (skeptic recon → pragmatist implement → **`script:`
+pytest** → doc sync). Tests stay a subprocess: a test suite is deterministic and must not be judged
+by a model.
+
+**No `depends_on` key.** `repository.py:26` requires only `id`; nothing reads dependencies. Three
+linear tasks a human sequences need no graph. A key nothing reads is the same
+schema-lies-nothing-enforces defect as the retired `option_selection_required`.
+
+### Phase 5 — Diagrams
+
+Draw after Phase 4 passes; a diagram drawn before the code lands is a diagram of an intention.
+Final state only, via `archify`. Three things change: the discussion path is select-then-spawn, not
+spawn-all; `theteam manager` is a new node between context and discussion; `runner: llm` is a second
+phase kind. **`theteam/advisory/` changes from existing-but-unwired to live**, and that distinction
+was never drawn — an unwired subsystem reads as a working one.
+
+### Phase 6 — Documentation, written with each phase
+
+`SKILL.md` (the `web_search` default plus **a note that it was added by user request on 2026-09-30
+and why** — a widened boundary that is not documented as widened is indistinguishable from drift;
+`ask` is manager-only; select-then-spawn in the Discussion steps). `CLI.md` (`manager` table,
+`--topic`). `ONBOARDING.md` (when to run `manager` versus `discuss`). `README.md` /
+`ARCHITECTURE.md` (milestone row; §4.5 now on the live path). `CHANGELOG.md`, one entry per phase in
+the M8 format — each claim names the check that would falsify it.
+
+**Re-run the suite and re-count after every phase.** Stale counts were the most common defect the
+M7/M8 audits found.
+
+### Out of scope
+
+Rebuilding member selection · LLM-based selection (§ prior art) · a task dependency graph · a digest
+cache for `discuss` · integration into `autonomedia-snapshot` · an LLM synthesis engine for tasks ·
+a sixth roster member · web search for *selection* — search informs the **roster**, never the choice
+of **speaker**.
+
+### Open questions — answer in Phase 2, not before
+
+1. Does the manager run automatically before every discussion, or only when asked? Automatic spends
+   an LLM call per discussion; "separate HITL process" reads manual.
+2. Does a roster change persist to `theteam.config` (versioned, every change a diff) or a state file
+   (fast, disposable)?
+3. **What caps roster size?** `select_members` caps *speakers* at 4. Nothing caps the *roster*. A
+   manager that grows every run reaches 30 members, at which point the selector picks 4 from 30 using
+   signals stale by construction. This is the one that will bite.
+4. Does `web_search` belong in `permitted_skills`, or a separate `research_tools` key? Grouping
+   matters once the list holds two kinds of thing.
+
+### Pre-flight harness
+
+`run_discussion` is under §7.2 invariant 7 (byte-identical since M5). Any edit is a deliberate
+invariant break and must update the invariant in the same commit, with the reason, or the gate fails
+and the break is invisible. Before editing: `cp theteam/__init__.py /tmp/pre_change_init.py`, then
+assert the snapshot still contains what it did **and** `import theteam` succeeds. Asserting the
+baseline is what catches a silently-failed copy.
 
 # Part 7 — Invariants
 

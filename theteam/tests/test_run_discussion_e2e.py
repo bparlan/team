@@ -58,13 +58,31 @@ class _StubProvider:
                 "note": f"{name} reviewed the topic."}
 
 
+@pytest.fixture(autouse=True)
+def isolated_singleton():
+    """Keep the process-wide state manager from escaping this file's tests.
+
+    `get_state_manager` caches its result in a module global. Tests here rebind
+    that global to `tmp_path` projects, and pytest deletes those directories
+    when the test ends — so a global left pointing at one is a live hazard for
+    whatever runs next.
+
+    The reset belongs in a fixture rather than at the top of each test because
+    the first version of the rebind test did exactly that and still leaked: a
+    *setup* reset restores the entry state, not the exit state.
+    """
+    previous = state_manager_module._state_manager
+    state_manager_module._state_manager = None
+    try:
+        yield
+    finally:
+        state_manager_module._state_manager = previous
+
+
 @pytest.fixture
 def stub_provider(monkeypatch):
     provider = _StubProvider()
     monkeypatch.setattr(theteam, "default_api", provider, raising=False)
-    # `get_state_manager` is a process-wide singleton; a stale one from another
-    # test would carry a state file this test did not create.
-    monkeypatch.setattr(state_manager_module, "_state_manager", None, raising=False)
     monkeypatch.setattr(theteam, "get_state_manager",
                         state_manager_module.get_state_manager)
     return provider
@@ -273,7 +291,9 @@ def test_get_state_manager_rebinds_over_a_populated_singleton(project, stub_prov
         root.mkdir()
         assert theteam.bootstrap_flow(str(root)), "bootstrap failed"
 
-    state_manager_module._state_manager = None
+    # The entry reset is the autouse `isolated_singleton` fixture's job; adding
+    # it here as well would be the setup-only restore that fixture exists to
+    # replace.
 
     # Project A: a real discussion, which populates the singleton.
     assert theteam.run_discussion(str(project_a), "topic belonging to A")
@@ -285,18 +305,29 @@ def test_get_state_manager_rebinds_over_a_populated_singleton(project, stub_prov
     assert state_manager_module.get_state_manager(path_a) is manager_a, \
         "an unchanged path must reuse the singleton"
 
-    # Project B: a different project, same process. `run_discussion` calls
-    # `get_state_manager` itself, so the rebind happens inside the product
-    # call rather than here.
-    assert theteam.run_discussion(str(project_b), "topic belonging to B")
+    # Project B is seeded on disk and NEVER written to by this test. That is the
+    # point: if B's own discussion had been produced by `run_discussion`, then
+    # under a rebuild-without-reload mutation the manager would still be empty
+    # and the test would pass for the wrong reason. With nothing but a seeded
+    # file, the *only* way `SEEDED` can appear in memory is a real
+    # `load_state` — so the assertion below cannot be satisfied by the product
+    # writing state, nor vacuously by it failing to.
+    #
+    # `save_state` does not create its directory; `StateStore.__init__` does
+    # (state.py:128) and every product path reaches it. Seeding directly skips
+    # that, so the directory is made here. Noted rather than fixed: a
+    # `save_state` into a missing directory raises a raw `FileNotFoundError`
+    # from `open` — a named error, not a silent one, so not a §3.3 defect.
     path_b = str(project_b / ".omp" / "theteam" / "state.json")
+    os.makedirs(os.path.dirname(path_b), exist_ok=True)
+    seeded = state_manager_module.UnifiedStateManager(path_b)
+    seeded.discussion_state.discussion_history.append(
+        {"topic": "SEEDED topic for B", "status": "active"})
+    seeded.task_state.tasks = {"seeded-task": {"title": "SEEDED"}}
+    seeded.save_state()
+    del seeded
 
-    # Now drop the in-memory manager and read B back from disk. Without this
-    # the assertions below would inspect memory that `run_discussion` just
-    # wrote, and would pass even if `get_state_manager` rebound the path but
-    # never reloaded — which is exactly the mutation that first slipped
-    # through this test.
-    state_manager_module._state_manager = None
+    # Rebind while manager_a is live: the production shape.
     manager_b = state_manager_module.get_state_manager(path_b)
 
     assert manager_b is not manager_a, \
@@ -305,7 +336,10 @@ def test_get_state_manager_rebinds_over_a_populated_singleton(project, stub_prov
         "get_state_manager kept the first state file for a second project"
 
     topics_b = [entry.get("topic", "") for entry in manager_b.discussion_state.discussion_history]
-    assert any("B" in topic for topic in topics_b), \
-        f"project B did not load its own discussion from disk; got {topics_b}"
-    assert not any("A" in topic for topic in topics_b), \
-        f"project A's state leaked into project B: {topics_b}"
+    assert topics_b == ["SEEDED topic for B"], \
+        f"B's seeded state was not loaded from disk; got {topics_b}"
+    assert "seeded-task" in manager_b.task_state.tasks, \
+        "B's seeded task was not loaded from disk"
+    assert not any("A" in entry.get("topic", "")
+                   for entry in manager_b.discussion_state.discussion_history), \
+        "project A's state leaked into project B"

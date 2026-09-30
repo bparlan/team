@@ -398,6 +398,36 @@ The fix is to drop the in-memory manager (`_state_manager = None`) and read B ba
 Measured after that, all three mutations fail: rebind-without-reload, no-rebind-at-all, and
 always-rebuild (which would break the cheap path the hot path depends on).
 
+**Then the cold load was hardened once more**, because passing for the right reason still is
+not the same as being able to fail for the right reason. The cold test caught a
+rebind-without-reload mutation only because B's own discussion was missing — had
+`run_discussion` simply failed to write B, the test would have passed vacuously.
+
+B is now seeded on disk and never written by the test, so the only way `SEEDED` can reach
+memory is a real `load_state`. Under that mutation the failure names the value:
+`assert [] == ['SEEDED topic for B']`. Four mutations now fail: rebind-without-reload,
+no-rebind, always-rebuild, and a `load_state` that silently restores nothing.
+
+**A sharp edge found while seeding, recorded not fixed:** `save_state` does not create its
+directory. `StateStore.__init__` does (`state.py:128`), and every product path reaches it,
+so nothing in the product is affected. But a direct `UnifiedStateManager(path).save_state()`
+into a missing directory raises a raw `FileNotFoundError` from `open`. That is a named
+error rather than a silent one, so it is not a §3.3 defect — just worth knowing.
+
+**And the tests were leaking the singleton into the rest of the session.** The rebind test
+pointed the module global at a `tmp_path` project and never put it back, so a later test
+could inherit a manager whose `state_file` no longer existed — the failure then lands
+somewhere unrelated to its cause. The full suite happened to stay green, which is ordering
+luck, not correctness.
+
+The fix is an `autouse` fixture that saves the prior value on entry and restores it in a
+`finally`. A per-test reset at the top of the test body is not equivalent: a setup reset
+restores the *entry* state, never the exit state, which is exactly why the leak survived
+three earlier revisions of the test.
+
+Proven with a probe test that observes the global after the e2e file runs: with the fixture,
+7 pass; with it stripped, the probe fails with a singleton pointing at a deleted directory.
+
 Recorded because the lesson is not specific to this test: *a test that runs the product and
 then inspects the same process's memory has not tested persistence at all.*
 

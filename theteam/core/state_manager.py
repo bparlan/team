@@ -41,7 +41,37 @@ class StateEventType(Enum):
     MEMBER_LEFT = "member_left"
     SYSTEM_HEALTH_UPDATE = "system_health_update"
     USER_INTERACTION = "user_interaction"
-class DiscussionState:
+
+
+class _Notifying:
+    """Mixin giving a sub-state a `_notify_listeners` it can always call.
+
+    `DiscussionState`, `SystemAwarenessState` and `TaskState` all raise events,
+    but only `UnifiedStateManager` owns the listener list. Before M11 each
+    sub-state called `self._notify_listeners` and got
+    `AttributeError: 'DiscussionState' object has no attribute
+    '_notify_listeners'` — which meant `theteam discuss` crashed at
+    `run_discussion` -> `start_discussion` before it spawned a single member.
+
+    The default is a no-op rather than a missing method on purpose: an
+    unobserved state transition is a legitimate state of the world (these
+    classes are constructed standalone in tests), and crashing on it would make
+    the class unusable outside the manager. `UnifiedStateManager.__init__`
+    injects the real notifier, so a listener registered with `add_listener`
+    still fires for events raised by any of its sub-states.
+    """
+    #: Set by `UnifiedStateManager.__init__` to that manager's notifier. None
+    #: means "nobody is listening", which is a normal state and not an error —
+    #: hence the `None` default rather than a missing attribute.
+    _listener_notifier: Optional[Callable[["StateEventType", Dict[str, Any]], None]] = None
+
+    def _notify_listeners(self, event_type: "StateEventType",
+                          data: Dict[str, Any]) -> None:
+        if self._listener_notifier is not None:
+            self._listener_notifier(event_type, data)
+
+
+class DiscussionState(_Notifying):
     def __init__(self):
         self.active_discussions: Dict[str, Dict[str, Any]] = {}
         self.discussion_history: List[Dict[str, Any]] = []
@@ -112,7 +142,7 @@ class DiscussionState:
     def get_active_discussions(self) -> List[Dict[str, Any]]:
         """Get all active discussions."""
         return list(self.active_discussions.values())
-class SystemAwarenessState:
+class SystemAwarenessState(_Notifying):
     def __init__(self):
         self.active_analyses: Dict[str, Dict[str, Any]] = {}
         self.analysis_history: List[Dict[str, Any]] = []
@@ -177,7 +207,7 @@ class SystemAwarenessState:
     def get_recent_health_metrics(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent health metrics."""
         return self.health_history[-limit:] if self.health_history else []
-class TaskState:
+class TaskState(_Notifying):
     def __init__(self):
         self.tasks: Dict[str, Dict[str, Any]] = {}
         self.task_history: List[Dict[str, Any]] = []
@@ -251,6 +281,16 @@ class UnifiedStateManager:
         self.listeners: List[Callable[[StateEventType, Dict[str, Any]], None]] = []
         self.lock = threading.Lock()
 
+        # M11: the sub-states raise events but do not own the listener list, so
+        # they are given this manager's notifier. Without it, `_Notifying`
+        # falls back to a no-op and a listener registered via `add_listener`
+        # would silently never fire for events raised by a sub-state — which is
+        # the same class of defect as the AttributeError it replaces, only
+        # quieter.
+        for sub_state in (self.discussion_state, self.system_awareness_state,
+                          self.task_state):
+            sub_state._listener_notifier = self._notify_listeners
+
     def add_listener(self, listener: Callable[[StateEventType, Dict[str, Any]], None]):
         """Add a listener for state changes."""
         self.listeners.append(listener)
@@ -264,38 +304,59 @@ class UnifiedStateManager:
                 logger.error(f"Error in state listener: {e}")
 
     def save_state(self):
-        """Save state to file."""
-        if self.state_file:
-            try:
-                state_data = {
-                    'discussion_state': {
-                        'active_discussions': self.discussion_state.active_discussions,
-                        'discussion_history': self.discussion_state.discussion_history,
-                        'current_discussion_id': self.discussion_state.current_discussion_id
-                    },
-                    'system_awareness_state': {
-                        'active_analyses': self.system_awareness_state.active_analyses,
-                        'analysis_history': self.system_awareness_state.analysis_history,
-                        'health_metrics': self.system_awareness_state.health_metrics,
-                        'health_history': self.system_awareness_state.health_history
-                    },
-                    'task_state': {
-                        'tasks': self.task_state.tasks,
-                        'task_history': self.task_state.task_history,
-                        'task_assignments': self.task_state.task_assignments
-                    }
-                }
-                
-                # Log to WAL before writing
-                self.wal.log_state_change('save', state_data)
-                
-                # Add checksum for integrity
-                self.checksum.add_checksum(state_data)
-                
-                with open(self.state_file, 'w') as f:
-                    json.dump(state_data, f, indent=2)
-            except Exception as e:
-                logger.error(f"Error saving state: {e}")
+        """Persist state to `self.state_file`, checksummed and WAL-logged.
+
+        M11 fixed three defects here, all of which made this method a no-op that
+        reported success:
+
+        1. It called `self.wal.log_state_change(...)`, which does not exist on
+           `WriteAheadLog`. The real method is `append_entry(operation, data)`.
+        2. It called `self.checksum.add_checksum(state_data)` and discarded the
+           result. `ChecksumManager` exposes `add_checksum_to_state`, which
+           *returns* a new dict with the checksum fields added; it does not
+           mutate in place. So even a working call would have written an
+           unchecksummed file.
+        3. `except Exception: logger.error(...)` swallowed both failures, so
+           `run_discussion` reached the end of a "successful" discussion having
+           written nothing at all. §3.3: a failure that looks like a success is
+           the defect class this product exists to avoid.
+
+        `load_state` is the matching reader, and it was wrong in the same way
+           (`verify_checksum` does not exist; `verify_state_data` does, and it
+            returns `(bool, errors)`). Both sides now use the same
+            `ChecksumManager` API, so a file written here verifies on load.
+        """
+        if not self.state_file:
+            return
+
+        state_data = {
+            'discussion_state': {
+                'active_discussions': self.discussion_state.active_discussions,
+                'discussion_history': self.discussion_state.discussion_history,
+                'current_discussion_id': self.discussion_state.current_discussion_id
+            },
+            'system_awareness_state': {
+                'active_analyses': self.system_awareness_state.active_analyses,
+                'analysis_history': self.system_awareness_state.analysis_history,
+                'health_metrics': self.system_awareness_state.health_metrics,
+                'health_history': self.system_awareness_state.health_history
+            },
+            'task_state': {
+                'tasks': self.task_state.tasks,
+                'task_history': self.task_state.task_history,
+                'task_assignments': self.task_state.task_assignments
+            }
+        }
+
+        # WAL first: the roadmap's state-integrity principle is that a change is
+        # logged before it is applied, so a crash mid-write is recoverable.
+        self.wal.append_entry('save', state_data)
+
+        # The checksum is returned, not applied in place.
+        state_data = self.checksum.add_checksum_to_state(state_data)
+
+        with open(self.state_file, 'w') as f:
+            json.dump(state_data, f, indent=2)
 
     def save_configuration(self):
         """Save configuration without swallowing exceptions."""
@@ -327,33 +388,46 @@ class UnifiedStateManager:
 
 
     def load_state(self):
-        """Load state from file."""
-        if self.state_file and os.path.exists(self.state_file):
-            try:
-                with open(self.state_file, 'r') as f:
-                    state_data = json.load(f)
-                
-                # Verify checksum
-                if not self.checksum.verify_checksum(state_data):
-                    raise ValueError("State file checksum verification failed")
-                
-                # Replay WAL entries for recovery
-                self.wal.replay_entries()
-                
-                self.discussion_state.active_discussions = state_data.get('discussion_state', {}).get('active_discussions', {})
-                self.discussion_state.discussion_history = state_data.get('discussion_state', {}).get('discussion_history', [])
-                self.discussion_state.current_discussion_id = state_data.get('discussion_state', {}).get('current_discussion_id')
+        """Load state from `self.state_file`, verifying its checksum first.
 
-                self.system_awareness_state.active_analyses = state_data.get('system_awareness_state', {}).get('active_analyses', {})
-                self.system_awareness_state.analysis_history = state_data.get('system_awareness_state', {}).get('analysis_history', [])
-                self.system_awareness_state.health_metrics = state_data.get('system_awareness_state', {}).get('health_metrics', {})
-                self.system_awareness_state.health_history = state_data.get('system_awareness_state', {}).get('health_history', [])
+        M11: this called `self.checksum.verify_checksum(state_data)`, which does
+        not exist on `ChecksumManager` — so every load raised inside the `try`
+        and was swallowed, and the function returned having restored nothing.
+        `ChecksumManager.verify_state_data` is the real method and it returns
+        `(is_valid, errors)`, not a bare bool.
 
-                self.task_state.tasks = state_data.get('task_state', {}).get('tasks', {})
-                self.task_state.task_history = state_data.get('task_state', {}).get('task_history', [])
-                self.task_state.task_assignments = state_data.get('task_state', {}).get('task_assignments', {})
-            except Exception as e:
-                logger.error(f"Error loading state: {e}")
+        A checksum mismatch is now a named failure rather than a log line: a
+        corrupt state file that silently loads as empty looks exactly like a
+        fresh project, and the operator has no way to tell the two apart.
+        """
+        if not (self.state_file and os.path.exists(self.state_file)):
+            return
+
+        with open(self.state_file, 'r') as f:
+            state_data = json.load(f)
+
+        is_valid, errors = self.checksum.verify_state_data(state_data)
+        if not is_valid:
+            raise ValueError(
+                f"State file checksum verification failed for {self.state_file}: "
+                + "; ".join(errors)
+            )
+
+        # Replay WAL entries for recovery
+        self.wal.replay_entries()
+
+        self.discussion_state.active_discussions = state_data.get('discussion_state', {}).get('active_discussions', {})
+        self.discussion_state.discussion_history = state_data.get('discussion_state', {}).get('discussion_history', [])
+        self.discussion_state.current_discussion_id = state_data.get('discussion_state', {}).get('current_discussion_id')
+
+        self.system_awareness_state.active_analyses = state_data.get('system_awareness_state', {}).get('active_analyses', {})
+        self.system_awareness_state.analysis_history = state_data.get('system_awareness_state', {}).get('analysis_history', [])
+        self.system_awareness_state.health_metrics = state_data.get('system_awareness_state', {}).get('health_metrics', {})
+        self.system_awareness_state.health_history = state_data.get('system_awareness_state', {}).get('health_history', [])
+
+        self.task_state.tasks = state_data.get('task_state', {}).get('tasks', {})
+        self.task_state.task_history = state_data.get('task_state', {}).get('task_history', [])
+        self.task_state.task_assignments = state_data.get('task_state', {}).get('task_assignments', {})
 
     def start_monitoring(self, interval: int = 60):
         """Start background monitoring for state persistence."""

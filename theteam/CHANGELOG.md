@@ -299,6 +299,94 @@ updated to match.
 
 
 
+## M11 — The headline command could not run
+
+`theteam discuss` is the skill's primary command. It crashed on its third statement, and
+when it did not crash it silently persisted nothing.
+
+### Two hard defects in one function, 653 tests green
+
+`run_discussion` reached `DiscussionState.start_discussion`, which calls
+`self._notify_listeners` — a method defined only on `UnifiedStateManager`, never on
+`DiscussionState`, `SystemAwarenessState` or `TaskState`. Ten call sites, zero definitions:
+
+```
+AttributeError: 'DiscussionState' object has no attribute '_notify_listeners'
+```
+
+Fixed with a `_Notifying` mixin: a no-op default, because an unobserved state transition
+is a legitimate state of the world rather than an error, plus injection of the manager's
+real notifier so a listener registered with `add_listener` still fires. **No `try`/`except`
+was wrapped around the call sites** — that is the §3.3 defect class. All three pre-existing
+Pyright errors on the file are now gone because the call sites were corrected, not
+suppressed.
+
+### `save_state` was reachable, and worse
+
+`run_discussion` calls `save_state` at line 954, at the end of the same function. Not
+latent. It was broken three ways:
+
+| | Defect |
+|---|---|
+| 1 | called `wal.log_state_change`, which does not exist; the real method is `append_entry` |
+| 2 | called `checksum.add_checksum(state_data)` and **discarded the return value** — `add_checksum_to_state` returns a new dict, it does not mutate |
+| 3 | `except Exception: logger.error(...)` swallowed both |
+
+Measured before the fix: `start_discussion` then `save_state` left **no file on disk** and
+returned normally. The command would have printed a synthesis, named a recommendation,
+written its report, and reported success having persisted zero state.
+
+`load_state` had the mirror image — `verify_checksum` does not exist, so every load raised
+inside the same swallowing `try` and restored nothing. A corrupt state file and a fresh
+project were indistinguishable. It now raises a named `ValueError` on mismatch and uses the
+same `ChecksumManager` API the writer uses, so a file written by `save_state` verifies.
+
+### `run_discussion` had never been tested
+
+The cause is structural: `_require_provider()` makes `theteam discuss` refuse cleanly
+outside OMP, so no smoke test outside a session reaches any of this code.
+
+`theteam/tests/test_run_discussion_e2e.py` drives the whole function with a stub
+`default_api` — selection, intros, synthesis, report, save, reload. The fixture bootstraps
+via `bootstrap_flow` instead of hand-writing a config; the hand-written version failed with
+`KeyError: 'behavior'`, which is precisely how a fixture drifts from the schema and starts
+testing something the product never produces.
+
+**Both regressions are proven to bite**: reverting the mixin fails 7 tests, restoring
+`log_state_change` fails 3.
+
+One assertion of mine was wrong and is recorded as such: I first asserted the discussion
+task would be in `task_state.tasks`. It is not, and should not be — `update_task` moves a
+task to `task_history` and deletes it on `completed`, which `run_discussion` does before
+saving. The test now asserts history.
+
+### Roadmap corrected against measurement
+
+`archive/STABILITY_ROADMAP.md` had **nine** boxes marked `[X]` on the strength of a file
+existing rather than a caller existing. The rule now applied: **a box is `[X]` only when a
+named, currently-passing check confirms it.** Final tally: 33 kept, 4 `[~]` qualified
+(exists, wired to something with no production caller), 4 `[ ]` reopened.
+
+The interesting failure was not staleness but **wiring through a dead module**.
+`event_log.py` and `rate_limiting.py` are imported — by `event_bus.py`, which has zero
+production importers. Literally true, operationally false. That is the shape of claim that
+let three schedulers coexist unnoticed for nine milestones.
+
+I made the same mistake while correcting it: marked `resource_limiter.py` `[X]` citing
+`tasks/executor.py`, which names `ResourceLimiter` twice — in **comments** (lines 31, 50),
+not imports. Corrected to `[~]`.
+
+### Result
+
+```
+656 passed in 13.14s
+invariant gate PASSED (7/7)
+import theteam: 88 modules (budget 90)
+```
+
+Up from 653: 7 state-manager tests and 3 end-to-end tests, for a file that had zero
+coverage and a function that had never been called.
+
 ## M10 — One scheduler
 
 Three schedulers existed. One worked. `theteam loop` + `theteam run` schedule and execute

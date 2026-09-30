@@ -223,6 +223,80 @@ because delivering it would make two identical discussions produce two different
 
 `836 passed` (816 + 20 new), gate 7/7, `import theteam` loads 88 modules (budget 90).
 
+
+## M9 Phase 4 — Prompt-shaped work as registered tasks
+
+A second kind of task phase. `script:` runs a Python file; `runner: llm` hands a
+`prompt_file` to a team member. Both share the executor, the breaker, and the
+`ok`/`failed`/`skipped` outcomes, so a run of the two kinds is indistinguishable
+from outside except by what it produced.
+
+**The three commands §M9 names, measured:**
+
+```
+theteam run --only ground-truth-audit
+  -> {"ran": 1, "failures": 1, "results": [{"id": "ground-truth-audit",
+       "result": "failed",
+       "detail": "llm runner requires an OMP session (phase 'audit'). Run this
+                  inside an OMP session, where a task provider is bound."}]}
+     exit 1
+theteam tasks  ->  7 tasks, 7 in YAML
+theteam run     ->  nothing due, exit 0
+```
+
+**A missing provider is a named failure, never a synthesized result** — the M0
+defect in a new place. The prompt is real and the member is not; producing
+something anyway is `MockAPI` with a different signature. Falsified by
+`test_the_llm_phase_outside_omp_*`: the result is a failure, and **no output file
+is written** (asserted, because "no file" is the part a stub would fake).
+
+**Two decisions the spec left open, answered from the code:**
+
+- **`--only <id>` now bypasses the schedule.** It previously filtered the *due*
+  set, so naming an unscheduled task reported `nothing due` — which made every
+  one of these three commands inert on a project where the user had never run
+  `theteam loop`. An explicit id is the request; a schedule is what makes a task
+  due *without* being named. `due()` still advances nothing, so §7.1.4
+  idempotence is untouched.
+- **Outside OMP, exit 1** rather than a skip, because the task did not do its
+  work and a `ran: 0` reads like success-ish.
+
+**Three defects found while building it, all pre-existing:**
+
+1. **The three task files were invisible.** `repository.py:148` only reads
+   names starting with `task-`, so `tasks/ground-truth-audit.yaml` was never
+   loaded — `theteam tasks` showed 4 and `--only ground-truth-audit` resolved to
+   nothing. Renamed to `task-ground-truth-audit.yaml` (id unchanged) rather than
+   weakening the prefix guard, which exists because `tasks/SECURITY_POLICY.yaml`
+   is not parseable YAML.
+2. **A failed run recorded no reason.** `cmd_run` built the failure detail from
+   `returncode`, which an `llm` phase does not have, so the recorded detail was
+   `returncode None` — a reason that explains nothing, on exactly the path §3.3
+   governs. The detail now comes from the phase's own `error` when it has one.
+3. **`theteam run` returned 0 on failure.** A shell could not distinguish a red
+   suite from a green one without parsing JSON. It now returns 1, which §2.1
+   already names. **This is a behaviour change for the pre-existing four tasks**
+   and is called out in §2.
+
+**The missing-script check did not weaken.** A phase naming neither runner is
+refused by name (`phase 'x' names no runner: needs script or runner: llm`)
+rather than becoming a silent skip, which is the hole §3.3 forbids: a check
+that only understood `script` would have turned every llm phase into a
+"missing script" skip.
+
+**`native-feature-loop` keeps its test phase a `script:`** (skeptic recon →
+pragmatist implement → **pytest** → doc sync), through a new
+`scripts/run_pytest.py` that propagates pytest's real exit code. A test suite is
+deterministic and must not be judged by a model; a wrapper returning 0 on
+failure would make the task report success for a red suite.
+
+`execute_phase` gained a `task` parameter rather than reading instance state —
+`self._current_task` would have been undefined, and state outliving one task is
+wrong anyway. Three test stubs that mirrored the old one-arg signature were
+updated to match.
+
+`859 passed` (836 + 23 new), gate 7/7, `import theteam` loads 88 modules.
+
 ## M8 — The docs tell the truth, and one of them is a lie in the code
 
 A follow-up audit, run after the `--monitor` flag landed. The M7 report claimed `--monitor` was

@@ -92,6 +92,20 @@ Eleven subcommands. The list is the whole surface; nothing else is declared.
 | `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. `--monitor` adds a change block; see below. |
 | global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`), `--json` | Applies to every command. |
 
+> **`run` returns 1 when a task failed** (M9 Phase 4). It previously returned 0 with
+> `failures: N` in the payload, so a shell could not distinguish a red suite from a green
+> one without parsing JSON. §2.1 already names this: `1` means "the command exists and
+> failed". Two consecutive `run` calls with nothing due still return 0, so the §7.1.4
+> idempotence check is unaffected.
+>
+> **`run --only <id>` means "run this one now"** and bypasses the schedule (M9 Phase 4).
+> It previously filtered the *due* set, so naming a task that had never been scheduled
+> reported `nothing due` — which made every `runner: llm` task inert on a project where
+> the user had never run `theteam loop`. A schedule is what makes a task due *without*
+> being named. An id matching no task is a named failure (`Task not found: <id>`),
+> matching `theteam loop`, rather than a silent `nothing due` that read like "the
+> scheduler had nothing for you".
+
 `status`, `tasks`, and `history` are the **machine surface**: their output is a contract with agentic consumers (§3.3) and M6 did not change one byte of it. `watch` reads the same payloads through the same `*_payload` functions; it is a renderer, not a second source.
 
 `--json` is accepted on **either side of the subcommand** for every command. Each subparser declares its own copy with `default=argparse.SUPPRESS`, so the subparser value never clobbers one already parsed from the parent. Until M7 `watch` declared it only on the parent, which made `theteam watch status --json` an argparse usage error; the parser now matches every other command and `cmd_watch` gained the branch that prints the payload the view reads.
@@ -479,6 +493,48 @@ outputs:
 ```
 
 `order` replaces `tasks/TASK_ORDER` as a file. `memory_limit_mb` is mandatory per phase — a phase without a bound is rejected at write time, not discovered mid-run.
+
+**Two kinds of phase (M9 Phase 4).** A phase names **exactly one** runner:
+
+```yaml
+phases:
+  - name: audit
+    runner: llm              # a prompt, not a process
+    member: architect
+    prompt_file: prompts/ground-truth-audit.md
+    output: .omp/theteam/reports/ground-truth-audit.md
+    memory_limit_mb: 64
+```
+
+`script:` runs a Python file inside the bounded container. `runner: llm` hands
+`prompt_file` to a named team member and records what it wrote — there is no
+container, because there is no process to bound. Both share the executor, the
+breaker, and the `ok`/`failed`/`skipped` outcomes.
+
+Three rules, each enforced rather than documented:
+
+1. **Exactly one runner per phase.** Both is ambiguous; neither is a phase that
+   reads as "ran, did nothing". `theteam run` refuses either case by name
+   (`cli.py:_phase_problem`) instead of passing it on.
+2. **A missing provider is a named failure, not a synthesized result.** An
+   `llm` phase outside an OMP session fails with
+   `llm runner requires an OMP session`, exactly as `run_discussion` does. The
+   prompt is real and the member is not; producing something anyway is the
+   `MockAPI` defect in a new place. No output file is written.
+3. **A test suite stays a `script:` phase.** `native-feature-loop` runs its
+   tests through `scripts/run_pytest.py`, not a prompt: a test suite is
+   deterministic and must not be judged by a model.
+
+Task **filenames** keep the `task-` prefix the directory already uses
+(`repository.py:148`). `tasks/ground-truth-audit.yaml` is invisible to the
+registry — not an error, just a file nothing reads — so the shipped tasks are
+`tasks/task-ground-truth-audit.yaml` with `id: ground-truth-audit`. The id is
+what the command names; the filename is what the reader globs.
+
+**No `depends_on` key.** Three linear tasks a human sequences need no graph, and
+a key nothing reads is the schema-lies-nothing-enforces defect that retired
+`option_selection_required`.
+
 
 Validation runs on write. `TaskRepository` rejects a phase without
 `memory_limit_mb` at the write that creates it (`tasks/repository.py:72-80`), and

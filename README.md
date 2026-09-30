@@ -57,7 +57,7 @@ Eleven subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam bootstrap [path]` | `--interactive`, `--json` | `{ok, config, state_dir}`. Non-interactive unless asked. |
 | `theteam status` | `--json` | Roster, state directory, task counts, breaker trips, audit-chain state. |
 | `theteam discuss <topic>` | `--json` | The team's verdict, or a named error if you are outside OMP. Members are selected deterministically from the topic; at most 4 speak and a truncated selection is reported. |
-| `theteam serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else `8000`), `--json` | Prometheus endpoint. The only command that starts a server. |
+| `theteam serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else `8000`), `--tick-seconds S` (default `$THETEAM_TICK_SECONDS`, else `60`), `--json` | Runs due tasks on an interval and serves `/metrics` + `/health`. The only command that starts a server. |
 | `theteam loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. |
 | `theteam tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`. |
 | `theteam run` | `--only <id>`, `--json` | `{ran, skipped, failures, results}`. Idempotent. Returns 1 when a task failed. `--only <id>` runs that task now, scheduled or not. |
@@ -178,6 +178,7 @@ end and returns 0.
 |---|---|
 | `THETEAM_PROJECT_ROOT` | Default for `--project-root`. Falls back to `$PWD`. |
 | `THETEAM_METRICS_PORT` | Default for `serve --port`. Falls back to `8000`. |
+| `THETEAM_TICK_SECONDS` | Default for `serve --tick-seconds`. Falls back to `60`. |
 | `THETEAM_STATE_DIR` | Overrides the whole state directory. The test suite and containers use it to point at a scratch tree. |
 
 ## State directory
@@ -206,7 +207,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 859 tests
+python -m pytest -q                  # 646 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

@@ -3,13 +3,13 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "Active Usage Architecture",
-    "subtitle": "Re-derived at M9: every component is a module in the tree, every arrow a real import",
+    "subtitle": "Re-derived at M10: the single scheduler, and every component a module in the tree",
     "quality_profile": "standard",
     "repository": {
       "url": "https://github.com/bparlan/team",
       "provider": "github",
       "link_mode": "local-only",
-      "revision": "2fab70a08b9b4579c03787fd5461e0e97f3263bf"
+      "revision": "ed4dcee13e79a817db37c5784d00f3197be10b33"
     },
     "viewBox": [
       1000,
@@ -21,6 +21,7 @@
         "label": "Entry and tasks",
         "focus": [
           "theteam_cli",
+          "task_scheduler",
           "task_repository",
           "task_executor",
           "llm_runner"
@@ -236,6 +237,21 @@
       ],
       "row": 4,
       "col": 1
+    },
+    {
+      "id": "task_scheduler",
+      "type": "backend",
+      "label": "TaskScheduler",
+      "sublabel": "serve's clock",
+      "sources": [
+        {
+          "path": "theteam/tasks/scheduler.py",
+          "line": 32,
+          "label": "TaskScheduler"
+        }
+      ],
+      "row": 3,
+      "col": 2
     }
   ],
   "connections": [
@@ -310,6 +326,13 @@
       "from": "task_executor",
       "to": "agent_isolation",
       "label": "script phases",
+      "labelDy": 24
+    },
+    {
+      "id": "scheduler-executor",
+      "from": "task_scheduler",
+      "to": "task_executor",
+      "label": "runs what is due",
       "labelDy": 24
     }
   ]

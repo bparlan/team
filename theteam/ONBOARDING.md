@@ -20,8 +20,9 @@ theteam watch status --once       # the same, rendered as one frame
 theteam run                       # execute everything due
 ```
 
-There is no daemon to start and no separate server to launch. `theteam run` is the runner, and
-`theteam serve` is the only command that opens a port.
+There is no daemon to start. `theteam run` executes due tasks once, and
+`theteam serve` is the only command that opens a port — it runs the same due
+tasks on an interval and publishes `/metrics`.
 
 ## For agents
 
@@ -45,35 +46,42 @@ theteam/
 ├── cli.py                    # the only entry point; `theteam` console script
 ├── state.py                  # the single state-directory resolver
 ├── __init__.py               # skill entry: bootstrap, discussion, context analysis
+├── monitor.py                # `--monitor`: what changed between two frames
 ├── tasks/                    # the task surface
 │   ├── repository.py         # YAML store — the ONE store
-│   └── executor.py           # runs one phase, under the safety layer
-├── core/                     # loop, safety, telemetry
-│   ├── unified_loop.py
+│   ├── executor.py           # runs one phase, under the safety layer
+│   ├── scheduler.py          # `serve`'s clock — sweeps due tasks on an interval
+│   └── runners/llm.py        # the second phase kind, beside `script`
+├── core/                     # safety, telemetry, persistence
 │   ├── circuit_breaker.py    # safety
 │   ├── resource_limiter.py   # safety
 │   ├── agent_isolation.py    # safety
 │   ├── audit.py              # safety
 │   ├── audit_chain.py        # hash-chained audit, read by `status`
+│   ├── metrics.py            # `/metrics` and `/health`
+│   ├── backup.py             # reached by scripts/backup.py
 │   ├── health_monitor.py
-│   ├── event_bus.py
-│   ├── metrics.py
-│   └── state_manager.py, system_integration.py, integrated_orchestrator.py,
-│       event_log.py, rate_limiting.py, postgres_cluster.py
+│   ├── event_bus.py, event_log.py, rate_limiting.py
+│   └── state_manager.py, checksum.py, database.py, wal.py,
+│       transactions.py, correlation.py, member.py, postgres_cluster.py
 ├── advisory/                 # commentary layer
-│   ├── session_reader.py, selector.py, commentary.py, roster.py
-├── workflow/                 # discussion and member management
-│   ├── discussion_manager_refactored.py
-│   ├── discussion_interface.py
-│   ├── team_member_manager.py
+│   ├── session_reader.py, selector.py, commentary.py, roster.py,
+│   │   context_slice.py, manager.py
+├── workflow/
 │   └── context_aggregator.py
 ├── ui/
 │   ├── terminal.py           # the trust surface, rendered; `theteam watch`
 │   └── components/           # design tokens and panel widgets
 ├── security/                 # path validation, audit, secrets
-├── bin/                      # config and report helpers (see CLI.md)
-└── tests/                    # 859 tests
+├── bin/                      # config helpers (see CLI.md)
+└── tests/                    # 646 tests
 ```
+
+M10 removed the other two schedulers. `core/unified_loop.py` and
+`core/task_contract.py` are gone, and `workflow/` now holds only the context
+aggregator. `tasks/scheduler.py` is the single scheduler — see
+`ARCHITECTURE.md` §2.3 for why, and for the two modules that lost their importer
+when the loop went and were deliberately kept.
 
 `theteam/subskills/` no longer exists. The task stack that lived in `subskills/task_stack/` moved
 to `theteam/tasks/` in M2; the directory itself was deleted during the M7 review, when the four

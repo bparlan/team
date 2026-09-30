@@ -3,45 +3,45 @@
   "diagram_type": "workflow",
   "meta": {
     "title": "Active Usage Delivery Order",
-    "subtitle": "Seven milestones ordered by user-visible outcome, each a runnable command with a falsification test",
+    "subtitle": "Eleven milestones, each a runnable command with a falsification test",
     "quality_profile": "showcase",
     "views": [
       {
         "id": "full",
-        "label": "Full pipeline",
-        "focus": ["m0", "m1", "m2", "m3", "m4", "m5", "m6"],
-        "note": "M6 is a renderer, not a gate"
+        "label": "All eleven",
+        "focus": [
+          "m0",
+          "m1",
+          "m2",
+          "m3",
+          "m4",
+          "m5",
+          "m6",
+          "m7",
+          "m8",
+          "m9",
+          "m10"
+        ],
+        "note": "M7 and M8 were documentation audits: no new command."
       }
     ]
   },
   "lanes": [
     {
-      "id": "honesty",
-      "label": "Honesty"
-    },
-    {
-      "id": "reach",
-      "label": "Reach"
-    },
-    {
-      "id": "visible",
-      "label": "Visible"
-    },
-    {
-      "id": "crud",
-      "label": "CRUD"
-    },
-    {
-      "id": "safe",
-      "label": "Safe"
-    },
-    {
-      "id": "advisory",
-      "label": "Advisory"
+      "id": "core",
+      "label": "Core"
     },
     {
       "id": "terminal",
       "label": "Terminal"
+    },
+    {
+      "id": "docs",
+      "label": "Docs"
+    },
+    {
+      "id": "staffing",
+      "label": "Staffing"
     }
   ],
   "phases": [
@@ -69,7 +69,7 @@
       "id": "m0",
       "label": "M0: Team cannot lie",
       "sublabel": "Delete MockAPI and dead code",
-      "lane": "honesty",
+      "lane": "core",
       "col": 0,
       "type": "security",
       "width": 200
@@ -78,7 +78,7 @@
       "id": "m1",
       "label": "M1: Reach it from a shell",
       "sublabel": "cli.py, state unification, bootstrap",
-      "lane": "reach",
+      "lane": "core",
       "col": 1,
       "type": "backend",
       "width": 220
@@ -87,7 +87,7 @@
       "id": "m2",
       "label": "M2: Tasks visible and runnable",
       "sublabel": "YAML cutover, guarded switch",
-      "lane": "visible",
+      "lane": "core",
       "col": 2,
       "type": "database",
       "width": 220
@@ -96,7 +96,7 @@
       "id": "m3",
       "label": "M3: Create, edit, delete",
       "sublabel": "Full task CRUD surface",
-      "lane": "crud",
+      "lane": "core",
       "col": 3,
       "type": "backend",
       "width": 200
@@ -105,7 +105,7 @@
       "id": "m4",
       "label": "M4: Loop is safe",
       "sublabel": "Breaker, limiter, isolation, audit",
-      "lane": "safe",
+      "lane": "core",
       "col": 4,
       "type": "security",
       "width": 210
@@ -114,7 +114,7 @@
       "id": "m5",
       "label": "M5: Team comments",
       "sublabel": "Conditional on three gates",
-      "lane": "advisory",
+      "lane": "core",
       "col": 5,
       "type": "messagebus",
       "width": 200
@@ -127,6 +127,42 @@
       "col": 5,
       "type": "backend",
       "width": 230
+    },
+    {
+      "id": "m7",
+      "label": "M7: Docs tell the truth",
+      "sublabel": "audit; one code fix",
+      "lane": "docs",
+      "col": 2,
+      "type": "backend",
+      "width": 220
+    },
+    {
+      "id": "m8",
+      "label": "M8: Docs and one lie",
+      "sublabel": "audit; prompt deleted",
+      "lane": "docs",
+      "col": 4,
+      "type": "backend",
+      "width": 220
+    },
+    {
+      "id": "m9",
+      "label": "M9: The team staffs itself",
+      "sublabel": "selector, manager, runner",
+      "lane": "staffing",
+      "col": 2,
+      "type": "backend",
+      "width": 220
+    },
+    {
+      "id": "m10",
+      "label": "M10: One scheduler",
+      "sublabel": "45 files deleted",
+      "lane": "staffing",
+      "col": 4,
+      "type": "backend",
+      "width": 220
     }
   ],
   "edges": [
@@ -159,6 +195,26 @@
       "from": "m5",
       "to": "m6",
       "label": "team can comment"
+    },
+    {
+      "from": "m6",
+      "to": "m7",
+      "label": "renderer landed"
+    },
+    {
+      "from": "m7",
+      "to": "m8",
+      "label": "same audit, next defect"
+    },
+    {
+      "from": "m8",
+      "to": "m9",
+      "label": "prompts became tasks"
+    },
+    {
+      "from": "m9",
+      "to": "m10",
+      "label": "three schedulers, one working"
     }
   ]
 }

@@ -5,7 +5,7 @@ Pure-stdlib view models for the Phase 5 visibility layer. Every module here
 imports nothing outside the standard library and `theteam.core`, so the whole
 library is unit-testable in CI where Reflex is not installed.
 
-The optional Reflex renderer in `reflex_renderers.py` imports from this
+The optional Reflex renderer (deleted in M10 as unreachable) imported from this
 package; this package never imports Reflex.
 """
 

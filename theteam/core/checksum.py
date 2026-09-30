@@ -5,18 +5,16 @@ Checksum implementation for theteam.
 This module provides checksum functionality for state files,
 ensuring data integrity and corruption detection.
 
-NOTE: there are two checksum validators in the codebase and they are NOT
-interchangeable:
-  * `checksum.DataChecksumValidator` (here) hashes IN-MEMORY data - dicts,
-    JSON, bytes - and raises `ChecksumError`. Algorithm-typed via the
-    `ChecksumAlgorithm` enum. Used by `state_manager` for state payloads.
-  * `state_validator.ChecksumValidator` hashes FILES and returns a
-    `ValidationResult` rather than raising, so a corrupt file surfaces as a
-    reportable error instead of an exception.
+`DataChecksumValidator` (here) hashes IN-MEMORY data - dicts, JSON, bytes -
+and raises `ChecksumError`. It is algorithm-typed via the `ChecksumAlgorithm`
+enum, and `state_manager` uses it for state payloads.
 
-They previously shared the name `ChecksumValidator`, which made either import
-look correct while returning an unrelated type. They were renamed, not merged:
-their failure contracts (raise vs. return) are deliberately different.
+A second validator, `state_validator.ChecksumValidator`, hashed FILES and
+returned a `ValidationResult` rather than raising. The two once shared the
+name `ChecksumValidator`, which made either import look correct while
+returning an unrelated type. M10 deleted the file-hashing one: it had no
+production importer, and its distinguishing behaviour was a report rather
+than a failure. This is now the only checksum validator, and it raises.
 """
 
 import hashlib
@@ -46,9 +44,9 @@ class DataChecksumValidator:
     """
     Computes checksums for in-memory data (dicts, JSON, bytes).
 
-    Distinct from `state_validator.ChecksumValidator`, which hashes files and
-    returns a `ValidationResult`. This one RAISES `ChecksumError`; that one
-    reports. Do not substitute one for the other.
+    RAISES `ChecksumError` on every failure, including a missing or unreadable
+    file. The file-hashing variant that returned a `ValidationResult` instead
+    was deleted in M10 as unreachable from production code.
     """
 
     def __init__(self):

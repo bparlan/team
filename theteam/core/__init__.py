@@ -31,7 +31,10 @@ _LAZY = {
     "SystemAwarenessState": "state_manager",
     "TaskState": "state_manager",
     "StateEventType": "state_manager",
-    "SystemIntegration": "system_integration",
+    # M10 removed `system_integration.py` (no production importer). Leaving the
+    # entry would turn `from theteam.core import SystemIntegration` into a
+    # ModuleNotFoundError from inside `__getattr__` instead of the AttributeError
+    # the contract promises for an unknown name.
     "MetricsCollector": "metrics",
     "MetricsRegistry": "metrics",
     "get_registry": "metrics",
@@ -76,7 +79,6 @@ __all__ = [
     'SystemAwarenessState',
     'TaskState',
     'StateEventType',
-    'SystemIntegration',
     '__version__',
     # Phase 4: productionization
     'MetricsCollector',

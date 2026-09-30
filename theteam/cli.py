@@ -412,22 +412,25 @@ def _phase_problem(task, project_root):
     return None
 
 
-def cmd_run(args: argparse.Namespace) -> int:
-    """Execute everything currently due. Nothing due means nothing happens."""
+def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Execute every due task and return the run payload.
+
+    This is the product's one scheduler. `theteam run` calls it and emits the
+    result; `theteam serve` calls it on an interval. It lives here rather than
+    in `cmd_run` because a tick and a one-shot run must execute identical work
+    — M10 deleted a second, parallel scheduler for exactly that reason.
+
+    The payload is the same shape `cmd_run` returned before the extraction, and
+    the rules are unchanged: a phase with no runner is skipped by name, a
+    tripped breaker is skipped with the literal `breaker_open`, and a failure
+    records the reason that actually explains it.
+    """
     from theteam.tasks.executor import TaskExecutor
     from theteam.tasks.repository import TaskRepository
 
-    project_root = _project_root(args)
     repo = TaskRepository(project_root)
-    due = repo.due(only=args.only)
-    # An id that matches no task is a named failure, not `nothing due`.
-    # `theteam loop` already refuses an unknown id this way (ARCHITECTURE.md
-    # §2: "An unknown task id is a named failure, not a silent no-op"), and
-    # `run --only <typo>` reporting "nothing due" is the same lie: it reads
-    # as "the scheduler had nothing for you" when the truth is "that task
-    # does not exist".
-    if args.only and repo.get(args.only) is None:
-        return _fail(args, "run --only", f"Task not found: {args.only}")
+    due = repo.due(only=only)
     # Breakers outlive the process: a task whose breaker tripped an hour ago
     # must still be tripped now, or the trip only survives as long as the run
     # that observed it. The repository owns the schedule (Layer 2), so it hands
@@ -476,7 +479,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             result["detail"] = detail
         results.append(result)
 
-    payload = {
+    return {
         # `ran` counts what actually executed. A task with a missing script was
         # due but never ran, so counting it would report work that never happened.
         "ran": sum(1 for r in results if r["result"] in ("ok", "failed")),
@@ -484,10 +487,28 @@ def cmd_run(args: argparse.Namespace) -> int:
         "failures": sum(1 for r in results if r["result"] == "failed"),
         "results": results,
     }
-    if not due:
+
+
+def cmd_run(args: argparse.Namespace) -> int:
+    """Execute everything currently due. Nothing due means nothing happens."""
+    from theteam.tasks.repository import TaskRepository
+
+    project_root = _project_root(args)
+    # An id that matches no task is a named failure, not `nothing due`.
+    # `theteam loop` already refuses an unknown id this way (ARCHITECTURE.md
+    # §2: "An unknown task id is a named failure, not a silent no-op"), and
+    # `run --only <typo>` reporting "nothing due" is the same lie: it reads
+    # as "the scheduler had nothing for you" when the truth is "that task
+    # does not exist". The check stays here because it is a *command* failure;
+    # `run_due_tasks` is only told about ids that exist.
+    if args.only and TaskRepository(project_root).get(args.only) is None:
+        return _fail(args, "run --only", f"Task not found: {args.only}")
+
+    payload = run_due_tasks(project_root, only=args.only)
+    if not payload["results"]:
         return _emit(args, payload, "nothing due")
     lines = [f"{r['id']}: {r['result']}" + (f" ({r['detail']})" if r.get("detail") else "")
-             for r in results]
+             for r in payload["results"]]
     lines.append(f"{payload['ran']} ran, {payload['skipped']} skipped, "
                  f"{payload['failures']} failed")
     # §2.1: a command that exists and failed returns 1. `theteam run` used to

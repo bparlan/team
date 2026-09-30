@@ -12,6 +12,7 @@ Each test defends one specific gap identified in the project-wide analysis:
 Run: python3 -m pytest theteam/tests/test_stability_fixes.py -q
 """
 
+import ast
 import os
 import sys
 import json
@@ -47,23 +48,81 @@ class TestCanonicalScriptsUniqueness(unittest.TestCase):
             self.assertTrue(hasattr(sa_runner, name), f"sa_runner missing: {name}")
 
 
+def _module_level_path_inserts(tree):
+    """Every `sys.path.insert` that runs at import time, and nothing else.
+
+    Module level means: not inside a function or class body. An insert inside a
+    `with` block that is itself at module level is still module level, and so is
+    one under `if __name__ == "__main__"`. Recursing into `FunctionDef` and
+    `ClassDef` is therefore the whole rule — and it is the rule a substring
+    search cannot express, which is why this is written as an AST walk.
+    """
+    def visit(node):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef,
+                                   ast.ClassDef, ast.Lambda)):
+                continue
+            if (isinstance(child, ast.Call)
+                    and isinstance(child.func, ast.Attribute)
+                    and child.func.attr == "insert"
+                    and isinstance(child.func.value, ast.Attribute)
+                    and child.func.value.attr == "path"):
+                yield child
+            yield from visit(child)
+
+    return list(visit(tree))
+
+
 class TestTestIsolation(unittest.TestCase):
     """Fix 4: No module-level sys.path mutation in test files."""
 
     def test_no_module_level_sys_path_insert(self):
-        test_file = PROJECT_ROOT / "theteam" / "tests" / "test_discussion_manager_refactored.py"
-        source = test_file.read_text()
-        # The guard comment is allowed; the actual insert call is not
-        self.assertNotIn("sys.path.insert", source,
-                         "Module-level sys.path.insert leaks across test sessions")
+        # Swept across the suite, and checked with `ast` rather than a substring
+        # search. Both changes matter:
+        #
+        #   * the original pointed at one named file, so it guarded that file and
+        #     silently stopped guarding anything once M10 deleted it;
+        #   * the original matched the *text*, so it could not tell a
+        #     module-level insert (which leaks into every later session) from an
+        #     insert inside a function that adds and removes its own entry.
+        #     `test_utils.py` does the latter, correctly, and a text search would
+        #     have reported it as a violation.
+        #
+        # Two files are exempt by name, each for a stated reason below.
+        exempt = {
+            # This file imports the project root so it can load `scripts/`
+            # helpers directly. Documented bootstrap, not a leak.
+            Path(__file__).name,
+            # pytest imports test modules as `theteam.tests.<name>` (the
+            # package has an `__init__.py`), so a sibling in the same
+            # directory is NOT importable by bare name. This one insert is the
+            # standard way to reach it, and the insert is idempotent.
+            "test_theteam.py",
+        }
+        offenders = []
+        for test_file in sorted((PROJECT_ROOT / "theteam" / "tests").glob("test_*.py")):
+            if test_file.name in exempt:
+                continue
+            tree = ast.parse(test_file.read_text())
+            offenders.extend(
+                f"{test_file.name}:{call.lineno}"
+                for call in _module_level_path_inserts(tree))
+        self.assertEqual(offenders, [],
+                         "Module-level sys.path.insert leaks across test sessions: "
+                         + ", ".join(offenders))
 
-    def test_no_tempfile_leak_in_setUp(self):
-        test_file = PROJECT_ROOT / "theteam" / "tests" / "test_discussion_manager_refactored.py"
-        source = test_file.read_text()
-        # Verify setUp has been refactored to use standard test isolation helpers if applicable,
-        # or that no unmanaged global tempdirs are created without tearDown cleanup.
-        # This test ensures standard cleanup flows are implemented.
-        self.assertIn("shutil.rmtree(self.temp_dir, ignore_errors=True)", source)
+    def test_tempdirs_are_cleaned_up(self):
+        # Any test that creates `self.temp_dir` must also tear it down, or the
+        # directory outlives the test that made it. Swept across the suite for
+        # the same reason as the sys.path guard above.
+        offenders = []
+        for test_file in sorted((PROJECT_ROOT / "theteam" / "tests").glob("test_*.py")):
+            source = test_file.read_text()
+            if "self.temp_dir" in source and \
+                    "shutil.rmtree(self.temp_dir, ignore_errors=True)" not in source:
+                offenders.append(test_file.name)
+        self.assertEqual(offenders, [],
+                         "self.temp_dir created without teardown: " + ", ".join(offenders))
 class TestLedgerRotation(unittest.TestCase):
     """Fix 3: Ledger writes must rotate when exceeding a deterministic size cap."""
 

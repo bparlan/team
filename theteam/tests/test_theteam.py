@@ -9,18 +9,29 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# Add scripts directory to test utilities
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "scripts"))
+# M10 removed three module-level `sys.path.insert` calls from this file — the
+# leak `test_stability_fixes.py::TestTestIsolation` exists to prevent, which
+# that guard only caught after it was broadened from one named file to the
+# whole suite.
+#
+# Two of the three were pure noise: `theteam` is installed, so `from theteam
+# import ...` resolves without help.
+#
+# The third was real and is now one line. `test_utils.py` (which M10 moved here
+# from `scripts/`, where only this file imported it) is a sibling module, and
+# pytest imports test files as `theteam.tests.<name>` because the test package
+# has an `__init__.py`. A sibling in that package is not importable by bare
+# name, so the directory has to be on the path explicitly. `test_stability_
+# fixes.py` exempts this file by name for exactly this reason.
+import sys as _sys
+from pathlib import Path as _Path
 
-# Import test utilities
+_sys.path.insert(0, str(_Path(__file__).parent))
+
 from test_utils import isolated_temp_dir
 
-# Add project root and current script directory to path
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-PARENT_DIR = os.path.dirname(PROJECT_ROOT)
-sys.path.insert(0, PARENT_DIR)
-sys.path.insert(0, PROJECT_ROOT)
 
 # Import theteam modules
 from theteam import bootstrap_flow

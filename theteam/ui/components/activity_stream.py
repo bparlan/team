@@ -2,7 +2,8 @@
 ActivityStream - chronological, severity-coded rendering of agency events.
 
 Pure-stdlib view model: no Reflex import, so it is unit-testable in CI where
-reflex is not installed. The Reflex renderer lives in `reflex_renderers.py` and
+reflex is not installed. The Reflex renderer lived in `reflex_renderers.py`,
+which M10 deleted as unreachable, and
 imports this module, never the reverse.
 """
 

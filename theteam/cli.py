@@ -382,6 +382,36 @@ def cmd_tasks(args: argparse.Namespace) -> int:
     return _emit(args, payload, "\n".join(lines))
 
 
+def _phase_problem(task, project_root):
+    """Why this task cannot run, or `None` when it can.
+
+    M9 Phase 4. Two rules, both named rather than inferred:
+
+    1. A phase names **exactly one** runner: `script:` or `runner: llm`.
+       Both is ambiguous — which one runs? Neither is dead weight that
+       would otherwise read as "ran, did nothing".
+    2. A `script:` phase's script must exist on disk, exactly as before.
+
+    A `runner: llm` phase deliberately does **not** need a script: its
+    instructions live in `prompt_file`, and a missing provider is a named
+    failure from the runner, not a skip decided here.
+    """
+    for phase in task.get("phases", []) or []:
+        if not isinstance(phase, dict):
+            continue
+        name = phase.get("name", "?")
+        has_script = bool(phase.get("script"))
+        has_runner = bool(phase.get("runner") == "llm")
+        if has_script and has_runner:
+            return f"phase '{name}' names both script and runner: llm"
+        if not has_script and not has_runner:
+            return f"phase '{name}' names no runner: needs script or runner: llm"
+        if has_script and not os.path.exists(
+                os.path.join(project_root, phase["script"])):
+            return f"missing script: {phase['script']}"
+    return None
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     """Execute everything currently due. Nothing due means nothing happens."""
     from theteam.tasks.executor import TaskExecutor
@@ -398,13 +428,16 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     results = []
     for task in due:
-        # Missing script is reported, never silently skipped as a success.
-        missing = [p["script"] for p in task.get("phases", [])
-                   if not os.path.exists(os.path.join(project_root, p["script"]))]
-        if missing:
-            detail = f"missing script: {', '.join(missing)}"
-            repo.record_run(task["id"], "skipped", detail)
-            results.append({"id": task["id"], "result": "skipped", "detail": detail})
+        # Every phase must name exactly one runner, and the named thing must
+        # exist. A phase with *neither* is refused here rather than passed to
+        # the executor: `runner: llm` is a new kind, and a check that only
+        # understood `script` would turn every llm phase into a
+        # `missing script` skip — a silent-skip hole, the exact shape §3.3
+        # forbids. M9 Phase 4.
+        problem = _phase_problem(task, project_root)
+        if problem:
+            repo.record_run(task["id"], "skipped", problem)
+            results.append({"id": task["id"], "result": "skipped", "detail": problem})
             continue
         outcome = executor.execute_task(task)
         breaker = outcome["breaker"]

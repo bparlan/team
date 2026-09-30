@@ -239,13 +239,27 @@ class TaskRepository:
 
         Pure: it advances nothing. `record_run` is the only writer, so a `run`
         with nothing due touches no state and two consecutive runs are identical.
+
+        `--only <id>` means "run this one now", and **bypasses the schedule**
+        (M9 Phase 4). It previously filtered the due set, so naming a task
+        that was never scheduled reported `nothing due` — which made
+        `theteam run --only ground-truth-audit` inert on a project where the
+        user had never run `theteam loop`. An explicit id is the request;
+        a schedule is what makes a task due *without* being named.
+
+        A named id that matches no task returns empty, not a guess: §3.3.
         """
         now = _now()
+        schedule = self.schedule()["scheduled_tasks"]
         due = []
         for task in self.all_tasks():
             if only and task["id"] != only:
                 continue
-            entry = self.schedule()["scheduled_tasks"].get(task["id"])
+            entry = schedule.get(task["id"])
+            if only:
+                # Named explicitly: due regardless of any schedule entry.
+                due.append(task)
+                continue
             if not entry:
                 continue
             next_run = _parse_next_run(entry.get("next_run"))

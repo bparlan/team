@@ -99,27 +99,47 @@ class TaskExecutor:
             self.breakers[task_id] = breaker
         return self.breakers[task_id]
 
-    def execute_phase(self, phase: Dict) -> Dict:
+    def execute_phase(self, phase: Dict, task: Optional[Dict] = None) -> Dict:
         """
-        Run one phase inside a bounded container (§5.1, §5.4).
+        Run one phase. Two kinds, M9 Phase 4.
 
-        Two refusals, each naming its own reason, and neither falling back to
-        a bare process:
+        `script:` runs a Python file inside a bounded container. `runner: llm`
+        hands a `prompt_file` to a team member; there is no container,
+        because there is no process to bound — the bound that matters is
+        that it refuses by name when no provider is bound.
+
+        Three refusals for a script phase, each naming its own reason, and
+        none falling back to a bare process:
 
           * no `memory_limit_mb` - the bound is mandatory, so a phase whose
             file was hand-edited past the write path is refused rather than
             run under an invented default (§5.4, §3.3).
           * no Docker - isolation is not optional, so the phase is refused
             rather than executed unguarded (§5.1).
+          * no `script` - refused rather than silently treated as an llm
+            phase, which is the silent-skip hole §3.3 forbids.
 
         A container that exceeds its bound is killed, not left running: the
         OOM kill exits 137, and that code is named in the result so the kill
         is observable rather than inferred (§7.1.6).
         """
+        if phase.get("runner") == "llm":
+            from theteam.tasks.runners.llm import run_llm_phase
+            return run_llm_phase(task or {}, phase, str(self.project_root))
+
         script = phase.get("script")
         args = phase.get("args", [])
         timeout = phase.get("timeout_seconds", 300)
         name = phase.get("name", "?")
+
+        if not script:
+            return {
+                "success": False,
+                "error": (
+                    f"Phase '{name}' has no script and no runner: "
+                    f"a phase names exactly one of script or runner: llm"
+                ),
+            }
 
         script_path = self.project_root / script
         if not script_path.exists():
@@ -220,7 +240,7 @@ class TaskExecutor:
 
         results = []
         for phase in task_def.get("phases", []):
-            phase_result = self.execute_phase(phase)
+            phase_result = self.execute_phase(phase, task_def)
             phase_result["phase"] = phase["name"]
             results.append(phase_result)
             if not phase_result["success"]:

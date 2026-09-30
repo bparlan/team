@@ -1,0 +1,25 @@
+id: ground-truth-audit
+name: Ground Truth Audit
+type: analysis
+priority: 9
+description: >-
+  Reconnaissance only. Reads the documents and the code, and reports every
+  place a documented claim is contradicted by the code or cannot be checked.
+  Writes findings; changes nothing.
+failure_handling: retry
+context:
+- Documented claims in README.md, ARCHITECTURE.md, theteam/*.md
+- The code each claim is about
+- scripts/check_invariants.sh and the test suite, as executable claims
+expected_output: >-
+  .omp/theteam/reports/ground-truth-audit.md, one section per finding, each
+  with the verbatim claim, what the code says, the user-visible difference,
+  and whether it was verified.
+phases:
+  - name: audit
+    runner: llm
+    member: architect
+    prompt_file: prompts/ground-truth-audit.md
+    output: .omp/theteam/reports/ground-truth-audit.md
+    memory_limit_mb: 64
+order: 5

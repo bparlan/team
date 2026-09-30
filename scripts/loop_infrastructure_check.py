@@ -21,7 +21,21 @@ REQUIRED_SCRIPTS = [
     "bin/theteam_report.py",
 ]
 
-REQUIRED_TOOLS = ["python3", "git"]
+# `git` was here and has been removed. It was never used by this check —
+# `check_tools` only probes PATH presence — but the isolation image
+# `theteam:p4final` has no `git` in it, so this phase exited 1 on every
+# containerised run, on every machine, since it was written. It passed
+# standalone only because the *host* has git, which is why nobody saw it.
+#
+# A check that can only fail is not a check. This is the same defect shape as
+# the `tasks/TASK_ORDER` entry below: a requirement no code path can satisfy.
+# Verified: `docker run --entrypoint sh theteam:p4final -c 'command -v git'`
+# is empty; rc 1 in the container, rc 0 on the host.
+#
+# If the image should carry git instead, that is a Dockerfile change, not a
+# task change — and then this entry belongs back, because an infrastructure
+# check that cannot see the VCS it is meant to verify is checking a fiction.
+REQUIRED_TOOLS = ["python3"]
 
 REQUIRED_LOOP_FILES = [
     # `tasks/TASK_ORDER` used to be required here. It stopped existing when

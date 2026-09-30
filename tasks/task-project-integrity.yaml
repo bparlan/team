@@ -14,14 +14,19 @@ context:
 - Loop state freshness
 expected_output: 'Project integrity check passed: all systems operational'
 phases:
-  # Two scripts, run in sequence, because they fail for different reasons and a
-  # merged pass/fail would collapse two distinct diagnostics into one red.
+  # Two phases, and they must stay two. The *directory* checks overlap — the
+  # infrastructure check's REQUIRED_DIRS is a superset of the health check's,
+  # and both read `.loop-state.json`, so a single merged phase would report the
+  # same missing directory twice.
   #
-  # The directory and config checks overlap completely: the infrastructure
-  # check's REQUIRED_DIRS is a strict superset of the health check's, and both
-  # read `.loop-state.json`. Running both would report the same missing
-  # directory twice and fail on the same staleness twice.
-  - name: directories and configs
+  # But the overlap is not total, and that is the reason not to collapse these:
+  # `loop_infrastructure_check.py` has no `check_required_configs` at all.
+  # Config existence and JSON-parse validation exist only in
+  # `loop_health_check.py` (`REQUIRED_CONFIGS`, lines 43-56). Dedupe on the
+  # directory observation alone and config validation silently disappears,
+  # leaving a task that passes on a project with an unparseable
+  # `theteam.config`.
+  - name: directories configs and loop state
     script: scripts/loop_health_check.py
     args: []
     timeout_seconds: 300

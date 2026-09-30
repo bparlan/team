@@ -819,3 +819,159 @@ paths, and `theteam bootstrap`. `__main__.py` was deleted here, which is why
 failure path, and the planning documents that described a system that was never built. This is
 the milestone every later one assumes: the product's core failure was not a crash, it was a
 system that returned confident output with nothing behind it.
+
+## M12 — the task that reported success without doing anything
+
+Asked to consolidate the task directory, I ran the tasks before reading them.
+Three of seven could not work, and the one that appeared to work was the
+worst of them.
+
+**`system-awareness` was a no-op dressed as a measurement.** Its phase ran
+`scripts/sa_runner.py` with `args: []`. With no subcommand, `main()` falls
+through every branch to `parser.print_help()` and exits 0. The task reported
+success having analysed nothing — measured, not inferred: bare invocation
+returns exit 0 and prints `usage: sa_runner.py [-h]`. It now passes
+`args: ["self-correct"]`, the subcommand that runs the analysis.
+
+**Behind that, the analysis engine had never run.** `run_analysis` failed three
+times over, each failure hiding the next:
+
+1. `from tasks.system_awareness.analyze_system_awareness import ...` — a
+   dotted path with no `__init__.py` anywhere in the chain.
+   `ModuleNotFoundError` on every call.
+2. `analyzer.analyze()` — no such method. The entrypoint is
+   `run_complete_analysis`, so this raised `AttributeError` next.
+3. The result was returned as-is, but `run_complete_analysis` returns
+   `{"analysis_results": ..., ...}`. Every consumer reads phase keys from the
+   top level, so all of them fell back to their `.get(..., 0.0)` defaults.
+
+That third one is the one that mattered. Because every lookup had a default, a
+total contract mismatch could not raise — it produced a well-formed report
+reading `0.0`, grade `F`. `extract_health_score` also read three keys that
+never existed on this analyzer's output (`health_metrics`,
+`documentation.completeness_score`, `architecture.cohesion_score`); the real
+values live at `health_score.component_scores`.
+
+**And the health check that should have caught it was reading a stale cache.**
+`cmd_health_check` compared a cached `overall_score` from `.loop-state.json`
+against a threshold, printing `PASSED: overall score 0.70` on 2026-10-01 from a
+score computed on 2026-09-21 — by an engine that could not run. It now checks
+that the recorded run succeeded (`last_run_success`, which had seven writers and
+zero readers) and that the record is current.
+
+Verified by running, not by reading: with the repairs, `self-correct` produces
+`score 0.5539, grade D` with distinct component values. Before, it produced
+nothing.
+
+**Three more defects in the same files:**
+
+- `self-check` and `self-correct` both died on
+  `NameError: self_check_loop_state` — referenced three times, defined never.
+  It now checks that the five expected outputs exist and are non-empty, which
+  is what its own docstring said it did ("identifies drift/partial outputs").
+- `update_loop_state` had no caller anywhere, so the cache could never be
+  refreshed — two files holding two different scores, and the stale one is what
+  a health check reads. It is now called from the correction cycle.
+- `last_execution` was read by two orphaned scripts and written by nothing, so
+  `loop_health_check.py`'s 24h staleness check could never pass again. Stamped
+  on every real run now.
+
+**A second grade ladder, which had already produced a wrong answer.**
+`update_health_score_state` computed its own grade inline (`>= 0.9` A, `>= 0.8`
+B, …) beside the analyzer's. They disagree: 0.554 is **D** to the analyzer and
+**E** to `sa_runner`. Wiring the updater in without noticing this reintroduced
+exactly the two-stores-disagree problem it was meant to fix. The analyzer's
+grade is now carried through rather than recomputed.
+
+**And the state write could report a partial success.** `update_loop_state`
+delegated to three sub-functions, each doing its own load-modify-save of
+`.loop-state.json` — three read-modify-writes of one file per run. Worse, the
+results were combined as
+
+```python
+result = update_health_score_state(...)
+result = update_last_execution_state(...)      # discards the line above
+result = update_circuit_breaker_state(...) or result
+```
+
+The second line *overwrites* the first rather than combining with it, so a failed
+health-score write was silently discarded whenever the timestamp write
+succeeded. That is the §3.3 shape again: a return value that reads as success
+and is not. Now one `state`, one mutation pass, one save — and the grade
+rationale moved with it, since the ladder disagreement is why `grade` is
+carried rather than computed. Verified: with `_save_state` stubbed to fail,
+`update_loop_state` returns `False` rather than reporting the partial write.
+
+### Consolidation: 7 tasks → 6, and 3 of the 6 could not run
+
+`health-check` and `infrastructure-check` merged into `project-integrity`. The
+*directory* checks overlap — the infrastructure check's `REQUIRED_DIRS` is a
+superset of the health check's, and both read `.loop-state.json`, so a merged
+phase would report the same missing directory twice.
+
+They stay two phases, and the reason is not that they "fail differently": the
+overlap is not total. `loop_infrastructure_check.py` has no
+`check_required_configs` at all. Config existence and JSON-parse validation live
+only in `loop_health_check.py`. Dedupe on the directory observation and config
+validation disappears silently, leaving a task that passes on a project with an
+unparseable `theteam.config`.
+
+`maintenance` stays separate: `loop_maintenance.py:27` recursively `rmtree`s
+every `__pycache__` under the project. That is not a check, and folding a
+destructive operation into a validation task would be a mistake.
+
+Two checks were guaranteed failures, not incidental ones:
+
+- `infrastructure-check` required `tasks/TASK_ORDER`, which stopped existing
+  when ordering moved onto each task in M1 — and required `docs/`, which has
+  never existed in this repository (no directory, no deletion commit). Both are
+  removed; the directory list is now `REQUIRED_DIRS`, and the summary line
+  counts the list it validates instead of a hardcoded `9` that had stopped
+  matching it.
+
+Dropped the `prompt:` field from the four legacy task files that carried it —
+`health-check`, `infrastructure-check`, `system-awareness` and `maintenance`,
+two of which were gone by the time the field was stripped. It is a rendered
+markdown copy of the fields above it, and the only reader in the repo is a test
+asserting a repository round-trip; no production code reads it.
+
+### The orphaned runner was the only code with a size cap
+
+`tasks/system-awareness/optimized_system_awareness_runner.py` was imported by
+nothing, so it was a deletion candidate. It was also the **only** implementation
+of ledger rotation — `SystemArchitectureAnalyzer.save_ledger` wrote the ledger
+uncapped, which is how `system-awareness-ledger.json` reached **25MB and was
+committed to git**.
+
+So the rotation was ported into the live analyzer first, then the variant was
+deleted. `TestLedgerRotation` was re-pointed at `SystemArchitectureAnalyzer`
+and gained a test that drives `save_ledger` over the cap, because asserting the
+constant exists would also have passed against the class that had no cap at
+all. Measured: reverting `save_ledger` to its original uncapped form fails that
+test (`0 != 1` archives); the old test could not have caught it.
+
+The cap is now load-bearing rather than vestigial — during this work seven
+analysis runs produced 144MB of archived ledgers before I noticed and cleaned
+them.
+
+Untracked from git, each because it is rewritten on every run: the 25MB
+`system-awareness-ledger.json`, `.loop-state.json` (whose staleness is exactly
+what the health check measures — tracking it meant a frozen timestamp no run
+could refresh), and the six analysis reports. Also deleted 12 tracked
+`diagrams/*.visual-check.*` sidecars, which are archify scratch output, not
+deliverables.
+
+### Result
+
+`660 passed`, invariant gate 7/7. All six task scripts exit 0 when run, and
+each was run — `loop_health_check`, `loop_infrastructure_check`,
+`loop_maintenance`, `sa_runner health-check`, `sa_runner self-check`, and the
+full analysis through the task's own phase definition.
+
+**Recorded, not fixed:** `scripts/loop_reporter.py` and
+`scripts/task_executor.py` (265 + 150 lines) remain imported by nothing. They
+are the only other readers of `last_execution`, which is why that field had a
+staleness check with no writer. Deleting them is the same judgement call as the
+variant, and the cap had already been ported out of the one file I deleted —
+these two have no equivalent protection to preserve, but they are operator
+tooling rather than dead weight, so the call is the user's.

@@ -295,90 +295,70 @@ def _save_state(state):
         print(f"Warning: Could not save loop state: {e}")
         return False
 
-def update_health_score_state(health_score, success, grade=None):
-    """Update only health score fields in loop state.
+def _apply_health(health_score, success, grade):
+    """Health-score mutations for one run, as a dict to merge into the state.
 
-    `grade` is taken from the caller rather than recomputed. This function used
-    to carry its own inline ladder (`>= 0.9` A, `>= 0.8` B, …) beside the one in
-    `generate_system_health_score`, and the two disagree: the fresh score of
-    0.554 is graded **D** by the analyzer and **E** here. Two ladders for one
-    value is a second source of truth, and it had already produced one — the
-    stale cache held `grade: "B"` from a 0.70 that the analyzer never wrote.
-
-    So the analyzer's grade is authoritative and simply carried through. When
-    no grade is supplied it is left untouched rather than invented.
+    `grade` is carried through from the caller rather than recomputed here.
+    This function's predecessor carried its own inline ladder (`>= 0.9` A,
+    `>= 0.8` B, …) beside the one in `generate_system_health_score`, and the two
+    disagree: 0.554 is **D** to the analyzer and **E** to that ladder. Two
+    ladders for one value is a second source of truth, and it had already
+    produced one — the stale cache held `grade: "B"` from a 0.70 the analyzer
+    never wrote. When no grade is supplied, the existing one is left alone
+    rather than invented.
     """
-    state = _load_state()
-    if state is None:
-        return False
-
     updates = {
         "overall_score": health_score,
-        "timestamp": datetime.datetime.now(timezone.utc).isoformat(),
+        # `last_execution` is stamped here rather than by a separate call so
+        # one run writes the state file exactly once. It used to be a third
+        # read-modify-write of the same file, and — worse — the previous form
+        # was `result = update_last_execution_state(...)`, which discarded
+        # `update_health_score_state`'s result outright. A failed health-score
+        # write was silently swallowed whenever the timestamp write succeeded.
+        "last_execution": datetime.datetime.now(timezone.utc).isoformat(),
         "last_run_success": success,
-        "consecutive_failures": 0 if success else state["health_score"].get("consecutive_failures", 0) + 1
+        "consecutive_failures": 0 if success else None,  # resolved by caller
     }
     if grade is not None:
         updates["grade"] = grade
-    state["health_score"].update(updates)
+    return updates
 
-    return _save_state(state)
-
-def update_circuit_breaker_state(circuit_breaker_state=None):
-    """Update only circuit breaker fields in loop state."""
-    state = _load_state()
-    if state is None:
-        return False
-
-    cb = state["circuit_breaker"]
-
+def _apply_circuit_breaker(state, circuit_breaker_state):
+    """Circuit-breaker mutations derived from the state being written."""
     if circuit_breaker_state:
-        # Override with explicit values
-        if "state" in circuit_breaker_state:
-            cb["state"] = circuit_breaker_state["state"]
-        if "failure_count" in circuit_breaker_state:
-            cb["failure_count"] = circuit_breaker_state["failure_count"]
-        if "last_failure_time" in circuit_breaker_state:
-            cb["last_failure_time"] = circuit_breaker_state["last_failure_time"]
-        if "last_success_time" in circuit_breaker_state:
-            cb["last_success_time"] = circuit_breaker_state["last_success_time"]
-    else:
-        # Compute state from health_score and success tracking
-        hs = state.get("health_score", {})
-        current_score = hs.get("overall_score", 0.0)
-        consecutive_failures = hs.get("consecutive_failures", 0)
+        return {k: v for k, v in circuit_breaker_state.items()
+                if k in ("state", "failure_count", "last_failure_time", "last_success_time")}
 
-        # Health-driven state transitions
-        if current_score >= 0.7:  # A-C grade
-            cb["state"] = "closed"
-            cb["failure_count"] = 0
-        elif current_score <= 0.4 or consecutive_failures >= 3:  # D-F grade or too many failures
-            cb["state"] = "open"
-        else:  # B grade - test recovery
-            cb["state"] = "half_open"
-
+    current_score = state.get("health_score", {}).get("overall_score", 0.0)
+    consecutive_failures = state.get("health_score", {}).get("consecutive_failures", 0)
+    if current_score >= 0.7:
+        return {"state": "closed", "failure_count": 0}
+    if current_score <= 0.4 or consecutive_failures >= 3:
+        return {"state": "open"}
+    return {"state": "half_open"}
 
 def update_loop_state(health_score, success, circuit_breaker_state=None, grade=None):
-    """Update loop state by delegating to focused sub-functions."""
-    result = update_health_score_state(health_score, success, grade=grade)
-    result = update_last_execution_state(success)
-    result = update_circuit_breaker_state(circuit_breaker_state) or result
-    return result
+    """Write every loop-state change from one load and one save.
 
-def update_last_execution_state(success):
-    """Stamp `last_execution` on every real run.
+    Three sub-functions used to each load, mutate and save `.loop-state.json`
+    independently, so a single run did three read-modify-writes of the same
+    file — and the results were combined with `or`, which discards a failure
+    whenever a later write succeeds. A partial write could report success.
 
-    `loop_health_check.py` fails when this field is more than 24h old, but
-    nothing in the live path wrote it — only `loop_reporter.py` and
-    `task_executor.py` read it, and neither is imported by anything. So once
-    the timestamp fell behind, the health check could never pass again no
-    matter how much analysis ran. A staleness check against a field nothing
-    maintains is a permanent red, not a check.
+    Now there is one `state`, one mutation pass and one save, so the return
+    value means what it says: the file on disk holds all of it or none of it.
     """
     state = _load_state()
     if state is None:
         return False
-    state["last_execution"] = datetime.datetime.now(timezone.utc).isoformat()
+
+    updates = _apply_health(health_score, success, grade)
+    if updates["consecutive_failures"] is None:
+        updates["consecutive_failures"] = (
+            state["health_score"].get("consecutive_failures", 0) + 1)
+    state["health_score"].update(updates)
+    state["circuit_breaker"].update(_apply_circuit_breaker(state, circuit_breaker_state))
+
     return _save_state(state)
 
 def get_loop_state():

@@ -7,8 +7,8 @@ under `tasks/`, and the pre-M2 JSON registry that is still served. The
 observable promises pinned here are the ones a regression would silently break
 while still returning a plausible payload:
 
-  * membership and order come from `tasks/TASK_ORDER`, so the listing does not
-    drift when either source gains an entry;
+  * membership and order come from the `tasks/` YAML itself, so the listing
+    does not drift when a file gains an entry;
   * an id that lost its YAML file is still listed and flagged, never dropped -
     a task quietly disappearing is indistinguishable from "this project has no
     tasks" and means the opposite;
@@ -35,11 +35,14 @@ from theteam.tasks.repository import (
 
 def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=()):
     """
-    Build an isolated project: `tasks/TASK_ORDER`, `tasks/task-*.yaml`, and the
-    state files under `<root>/.omp/theteam/`. Nothing is read from the real repo.
+    Build an isolated project: `tasks/task-*.yaml` and the state files under
+    `<root>/.omp/theteam/`. Nothing is read from the real repo.
+
+    Ordering comes from each task's own `order:` key. It used to come from
+    `tasks/TASK_ORDER`, which no longer exists — `TaskRepository` dropped it
+    when ordering moved onto the tasks themselves, so nothing writes that file
+    and this docstring described a layout the repository stopped reading.
     """
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
     tasks_dir = root / "tasks"
     tasks_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
@@ -82,15 +85,15 @@ def _cli(root, *argv, capsys):
     return code, json.loads(out)
 
 
-# ======= 1. order is TASK_ORDER sequence =======
+# ======= 1. order is the per-task `order:` key =======
 
 
 def test_tasks_are_listed_in_task_order_sequence(tmp_path):
     """
-    The listing order is the sequence in `TASK_ORDER` - not alphabetical and
-    not by priority. Order of execution is the operator's decision, written
-    down once; a reader that re-sorts it produces a different run order than
-    the one the file documents.
+    The listing order is the `order:` key each task carries - not alphabetical
+    and not by priority. Order of execution is the operator's decision, written
+    down once on the task; a reader that re-sorts it produces a different run
+    order than the one the files document.
     """
     root = _project(
         tmp_path,

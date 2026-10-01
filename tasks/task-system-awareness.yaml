@@ -38,4 +38,11 @@ phases:
     # When it outgrows 320, the analysis needs splitting into more phases -- a
     # bigger number here would hide that one process is doing four jobs.
     memory_limit_mb: 320
+    # This phase writes 5 reports and refreshes `.loop-state.json`, and the
+    # executor mounts the project read-only by default. Without this flag the
+    # writes fail inside the container and the phase still exits 0 — observed:
+    # `system-awareness: ok`, zero reports written, `.loop-state.json` stale.
+    # That is a success that did no work, which is the defect this repo exists
+    # to prevent. Same flag, same reason as `maintenance`.
+    writable_project: true
 order: 2

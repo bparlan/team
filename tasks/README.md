@@ -108,12 +108,13 @@ is deterministic and must not be judged by a model.
 
 ## Verified behaviour
 
-Observed on 2026-10-01 by running each task with `theteam run --only <id>`.
+Observed on 2026-10-01 by running each task with `theteam run --only <id>`,
+after the two fixes recorded below.
 
 | id | observed result |
 |---|---|
-| `project-integrity` | **failed (rc 1)** — phase 2, see Defect A |
-| `system-awareness` | **failed (rc 137)** — OOM at its declared bound, see Defect B |
+| `project-integrity` | **ok** |
+| `system-awareness` | **ok** — 40 reports on disk, `.loop-state.json` fresh, grade D |
 | `maintenance` | **ok** |
 | `ground-truth-audit` | refused by name — requires an OMP session |
 | `doc-harmonization` | refused by name — requires an OMP session |
@@ -124,50 +125,64 @@ named error and writes no output file, rather than synthesizing a result.
 
 Per-phase, through `TaskExecutor.execute_phase`: 10 phases, 0 problems from
 `_phase_problem`. `loop_health_check` rc 0, `loop_maintenance` rc 0,
-`run_pytest` rc 0, `loop_infrastructure_check` rc 1, `sa_runner self-correct`
-rc 137.
+`run_pytest` rc 0, `loop_infrastructure_check` rc 0, `sa_runner self-correct`
+rc 0.
 
 **UNKNOWN** — the `llm` phases have never been observed producing output, on
 this machine or any other in this repo. Their descriptions above come from
 their prompt files and are claims, not measurements. They need an OMP session
 with a provider bound to verify.
 
-### Defect A — `project-integrity` phase 2 can never pass
+**Exit code is not evidence on its own.** One of the defects below shipped
+green: a phase reported `ok` while writing nothing. Acceptance for any writing
+phase is *artifact on disk*, checked after the run.
 
-`loop_infrastructure_check.py` requires `git` in `PATH`. The isolation image
-`theteam:p4final` has no `git` (verified with
-`docker run --entrypoint sh theteam:p4final -c 'command -v git'`). Every
-containerised run exits 1 with
-`FAIL: Required tool not found in PATH: git`, so this phase has always failed
-under the executor, on every machine.
+### Fixed A — `git` was required and never used
 
-It passes standalone (rc 0) because the *host* has `git`. That asymmetry is why
-the defect never surfaced outside the executor.
+`loop_infrastructure_check.py` required `git` in `PATH`, but the isolation
+image `theteam:p4final` has no `git`, so phase 2 exited 1 on every
+containerised run, on every machine. It passed standalone only because the
+*host* has `git` — that asymmetry is why it never surfaced outside the
+executor.
 
-`git` is never used by the check beyond its presence test — it appears only in
-`REQUIRED_TOOLS`. It is a decoration, not a dependency.
+`git` appeared nowhere except its own presence test. It has been removed, so
+`REQUIRED_TOOLS` is now `["python3"]`. Verified: `project-integrity: ok`
+through the executor.
 
-Two one-line fixes, deliberately not applied — both change what "project
-integrity" means, which is a product decision:
-- drop `git` from `REQUIRED_TOOLS`, or
-- install `git` into `theteam:p4final`.
+If the image should carry `git` instead, that is a Dockerfile change rather
+than a task change — and the entry belongs back in `REQUIRED_TOOLS` with it,
+because an infrastructure check that cannot see the VCS it is meant to verify
+is checking a fiction.
 
-### Defect B — `system-awareness` is killed at its declared bound
+### Fixed B — `system-awareness` was killed, then shipped a hollow success
 
-`sa_runner.py self-correct` exits 137 under `memory_limit_mb: 64`. Measured
-floor, by exit code under the same isolation policy:
+Two defects, found in that order.
+
+**The bound.** The phase declared `memory_limit_mb: 64` and was OOM-killed at
+exit 137 on every run. Measured floor *through the executor*:
 
 | limit | exit |
 |---|---|
 | 64MB | 137 |
-| 128MB | 137 |
-| 256MB | 0 |
+| 256MB | 137 |
+| 320MB | 0 |
 | 384MB | 0 |
 
-Standalone the same script exits 0 in ~9s, so this only appears under the
-executor. Raising the bound to 256MB would fix it, but that trades away an
-isolation limit set deliberately under §5.4 — whether this task belongs in a
-64MB budget is a product call, not a cleanup.
+320 is the lowest bound measured to survive the executor, and the executor is
+what runs the task. A bare `docker run --memory=256m` succeeds where the
+executor is killed at 256, so this floor has to be measured through the
+executor — a direct invocation understates it.
+
+**The hollow success the memory fix was hiding.** With the bound fixed, the
+phase still reported `ok` while writing **nothing**: zero reports, and
+`.loop-state.json` untouched. It has 7 write sites and never declared
+`writable_project: true`, so the container's writes failed while the script
+still exited 0. `writable_project: true` is now declared, as in
+`maintenance`.
+
+A task reporting success having done nothing is the defect class this repo
+exists to prevent, and it survived one layer above the `print_help` no-op
+found earlier. It is why the acceptance check is the artifact, not rc 0.
 
 Both defects are the same shape: **a check that reports a truth nobody
 verifies.** A check that can only fail is not a check, and a bound that always
@@ -179,8 +194,15 @@ Every phase logs the exact `docker run` it used, at INFO level:
 
 ```
 INFO theteam.core.agent_isolation: isolated agent run: docker run --rm
-  --network none --memory 64m --cpus 1.0 --read-only ... --mount type=bind,...
+  --network none --memory 320m --cpus 1.0 ... --mount type=bind,...
 ```
 
-`--memory 64m` and the `ro` bind mount make both defects legible in plain
-sight, before either check has run.
+`--memory 320m` and the mount mode make both defects legible in plain sight,
+before either check has run.
+
+### Known issue, not fixed
+
+`.loop-state.json` carries two `last_execution` fields — a nested one, fresh
+and correct, and a top-level one frozen at `2026-09-30T22:35`. Both stores
+agree on score `0.5551` and grade `D`. Pre-existing, outside the two fixes
+above.

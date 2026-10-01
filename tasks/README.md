@@ -108,19 +108,28 @@ is deterministic and must not be judged by a model.
 
 ## Verified behaviour
 
-Observed 2026-10-01 by running each task with `theteam run --only <id>`.
+Observed 2026-10-01 by running each task with `theteam run --only <id>`. The
+run count is the final measured sweep, not the history at the time of writing —
+`theteam history` moves as tasks are re-run.
 
-| id | observed result |
-|---|---|
-| `project-integrity` | **ok** |
-| `system-awareness` | **ok** — score **0.5545**, grade **D**, six reports + `.loop-state.json` written |
-| `maintenance` | **ok** |
-| `ground-truth-audit` | refused by name — requires an OMP session |
-| `doc-harmonization` | refused by name — requires an OMP session |
-| `native-feature-loop` | refused by name — requires an OMP session |
+| id | observed result | runs | rate |
+|---|---|---|---|
+| `project-integrity` | **ok** | 10 | 80.0% |
+| `system-awareness` | **ok** — score **0.5545**, grade **D**, six reports + `.loop-state.json` written | 7 | 14.3% |
+| `maintenance` | **ok** | 7 | 100.0% |
+| `ground-truth-audit` | refused by name — requires an OMP session | 2 | 0.0% |
+| `doc-harmonization` | refused by name — requires an OMP session | 2 | 0.0% |
+| `native-feature-loop` | refused by name — requires an OMP session | 2 | 0.0% |
 
-The three `llm` refusals are correct behaviour, not failures: each returns a
-named error and writes no output file, rather than synthesizing a result.
+**The rates are historical, not current.** `project-integrity`'s two failures
+are both from before the M12 fix and neither has recurred in eight consecutive
+passes since. `system-awareness`'s five failures are the breaker deadlock and
+the 300s timeout documented below, both fixed; its current state is one
+consecutive failure and a closed breaker. The three `llm` tasks are 0.0% because
+they have never had the session they require, not because they fail when run.
+
+The three `llm` refusals are correct behaviour: each returns a named error and
+writes no output file, rather than synthesizing a result.
 
 **UNKNOWN** — no `llm` phase has ever been observed producing output, on this
 machine or any other in this repo. Their behaviour comes from their prompt
@@ -158,6 +167,26 @@ second defect: the analysis takes **117s bare on the host and ~360s inside the
 executor container** (single CPU, pid limit, read-only rootfs). `timeout_seconds`
 is now 600, measured. The bare-host number is the trap — it says nothing about
 where the phase actually runs.
+
+### Skips were fabricating state
+
+The same investigation found that both skip paths in `run_due_tasks` called
+`record_run`, which writes `at = now` and writes `breaker`/`consecutive_failures`
+even when the caller never measured them. Two consequences, both reproduced:
+
+1. **The recovery window could be re-anchored forever.** Because the window is
+   anchored to `at`, any retry faster than 60s moved it forward again. Measured
+   before the fix: three consecutive skips each pushed the deadline a further
+   60s out. A `while ! ok; do theteam run --only <id>; done` loop, or a
+   `serve --tick-seconds 30`, could never have recovered.
+2. **A real breaker reading was erased.** The config-problem skip passes no
+   breaker arguments, so `breaker: null` overwrote a genuine `open` with five
+   consecutive failures. Reproduced: a task seeded open ten minutes earlier came
+   back `breaker: null` after one skipped run.
+
+`record_skip` now owns both skip paths. It preserves `at` and preserves the
+breaker fields when they were not measured, so a skip records only that nothing
+ran and why. Defended by `test_record_skip_preserves_at.py`.
 
 ## Project portability, measured
 
@@ -282,17 +311,16 @@ Both are recorded, not fixed — see *Deliberate gaps* below.
 - `.loop-state.json` carries two `last_execution` fields, one nested and
   current, one top-level and frozen. Both stores agree on score and grade.
   Pre-existing, outside the fixes above.
-- `project-integrity` reads 75% over 8 runs. The 2 failures are both from
-  before the M12 fix and neither has recurred in 6 consecutive passes since.
-  Cause read from the execution log, not guessed: phase 2 returned
-  `FAIL: Required tool not found in PATH: git`, because `git` was in
-  `REQUIRED_TOOLS` and is not visible inside the isolation container.
-  `REQUIRED_TOOLS` is now `["python3"]`. Verified by running the task — passes.
+- `project-integrity`'s two failures are both from before the M12 fix, and
+  neither has recurred in eight consecutive passes since. Cause read from the
+  execution log, not guessed: phase 2 returned `FAIL: Required tool not found in
+  PATH: git`, because `git` was in `REQUIRED_TOOLS` and is not visible inside
+  the isolation container. `REQUIRED_TOOLS` is now `["python3"]`. This is
+  resolved, and it is kept here rather than deleted because the historical rate
+  in `theteam history` still shows it until the old runs age out.
 - No command resets a tripped breaker, and `breaker_open` is the only reason
   recorded once a breaker trips — so the *original* failure is lost from the
-  schedule. A single `last_run` entry per task cannot hold both. The 60s
-  recovery window itself does clear on its own, and now clears under repeated
-  invocation: skips go through `record_skip`, which preserves `at`, so a retry
-  loop or a fast `serve` tick can no longer re-anchor the countdown. Both were
-  measured — before, every skip pushed the deadline a further 60s out and the
-  breaker could never recover.
+  schedule. A single `last_run` entry per task cannot hold both. The 60s window
+  itself clears on its own now, including under repeated invocation, because
+  skips go through `record_skip` and do not restamp `at`; see *Skips were
+  fabricating state* for what that cost before.

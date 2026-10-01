@@ -686,7 +686,13 @@ def run_discussion(project_root, topic):
         return False
 
     print(f"🚀 Starting team discussion on: {topic}")
-    conversation_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
+    conversation_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
+    # Microseconds, not seconds. At second resolution two discussions started in
+    # the same second produced the same id, and that id names both the
+    # `theteam-notes-<id>` temp directory and the written report — so the second
+    # run read the first run's notes and overwrote its report. Found by running
+    # the suite concurrently: `run_discussion reported success but wrote no
+    # state`, and a synthesis file left behind by a sibling process.
     print(f"📋 Conversation ID: {conversation_id}")
 
     # Record discussion start in state manager

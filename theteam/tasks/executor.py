@@ -38,6 +38,26 @@ from theteam.core.circuit_breaker import CircuitBreaker, CircuitBreakerConfig
 IMAGE_ENV_VAR = "THETEAM_AGENT_IMAGE"
 DEFAULT_IMAGE = "theteam:p4final"
 
+
+# §7.2: an exit code carries a meaning, and there are three of them here rather
+# than two. `0` is "the phase ran and found nothing", `1` is "the phase ran and
+# found something" — which is a check WORKING, not a phase breaking — and `2` is
+# "the phase could not evaluate at all" (a dependency missing, input unreadable),
+# which is the only non-zero code that means the phase itself is defective.
+#
+# Before this, a check that correctly detected a real problem exited 1, which
+# `execute_task` read as failure and passed to `breaker.record_failure()`. Five
+# genuine detections therefore opened the breaker permanently and the task
+# stopped running — the project's real defect became permanently unmonitored,
+# and the trip only cleared when the problem was fixed by something nobody was
+# watching. Measured: 5 correct detections -> `allow_request() == False`.
+# A monitor that disables itself on success is worse than no monitor, because
+# it looks healthy in `theteam tasks` while checking nothing.
+# 3, not 1: Python exits 1 on an uncaught exception, so a findings code of 1
+# would read a crash as a clean measurement. A crash must never look like a
+# result — that is the defect class this taxonomy exists to close.
+FINDINGS_EXIT_CODE = 3
+CANNOT_EVALUATE_EXIT_CODE = 2
 #: Where the project tree appears inside the container.
 WORKSPACE_MOUNT = "/workspace"
 
@@ -235,6 +255,31 @@ class TaskExecutor:
             )
         elif exit_code == TIMEOUT_EXIT_CODE:
             outcome["error"] = f"Phase '{name}' timed out after {timeout}s"
+        elif exit_code == CANNOT_EVALUATE_EXIT_CODE:
+            # The phase told us it could not measure. That is a defect of the
+            # phase — a missing dependency or unreadable input — so it counts
+            # as failure, named distinctly so a reader can tell "could not
+            # check" from "checked and found a problem".
+            outcome["success"] = False
+            outcome["cannot_evaluate"] = True
+            outcome["error"] = outcome.get("error") or (
+                f"Phase '{name}' could not evaluate (exit code "
+                f"{CANNOT_EVALUATE_EXIT_CODE})"
+            )
+        elif exit_code == FINDINGS_EXIT_CODE:
+            # The phase ran to completion and found something. `success` stays
+            # True because the phase did its job; `findings` records that it
+            # reported something so `execute_task` can persist the fact without
+            # advancing the breaker.
+            #
+            # This code is 3 and not 1 on purpose. Exit 1 is what Python raises
+            # for an uncaught exception, so treating 1 as "findings" would read
+            # a traceback as a clean measurement — the very defect class this
+            # change exists to remove. A findings code has to be one a crash
+            # cannot produce.
+            outcome["success"] = True
+            outcome["findings"] = True
+            outcome["findings_output"] = result["stdout"]
         return outcome
 
     def execute_task(self, task_def: Dict, on_output=None) -> Dict:
@@ -298,7 +343,15 @@ class TaskExecutor:
             }
 
         overall_success = all(r["success"] for r in results)
+        findings = [r for r in results if r.get("findings")]
+
         if overall_success:
+            # A phase that ran and reported findings did its job, so the task
+            # succeeded — and the breaker is advanced exactly as before, because
+            # success is success. The findings are carried in the result and
+            # persisted by `log_execution`, so `theteam history` can show *that*
+            # a check has been reporting something for five runs, which is a
+            # fact the schedule alone cannot express.
             breaker.record_success()
         else:
             breaker.record_failure()
@@ -318,6 +371,11 @@ class TaskExecutor:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "phases": results,
             "overall_success": overall_success,
+            # `overall_success` answers "did the machinery work"; this answers
+            # "did it have something to report". A caller rendering one line
+            # needs both — a green task that keeps finding real problems is not
+            # a green project, and collapsing the two facts hides exactly that.
+            "has_findings": bool(findings),
             "breaker": breaker.stats.state.value,
             "breaker_consecutive_failures": breaker.stats.consecutive_failures,
         }

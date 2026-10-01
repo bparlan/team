@@ -498,6 +498,13 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
                             "elapsed": round(time.monotonic() - phase_started, 2)})
             continue
         ok = outcome["overall_success"]
+        # A check that ran and reported findings is a success with something to
+        # say, so it stays `ok` for the breaker and the exit code, and carries a
+        # `findings` marker the human line renders. Rendering it as `failed`
+        # would be the old defect in a new place; rendering it as a clean `ok`
+        # with no marker would hide a monitor that has been reporting the same
+        # thing for a week.
+        has_findings = bool(outcome.get("has_findings"))
         # The reason a phase failed, whatever kind it was. `returncode` is
         # real for a script phase and absent for an `llm` one, so reading it
         # unconditionally recorded "returncode None" as the last failure —
@@ -507,10 +514,14 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
             failed = outcome["phases"][-1]
             detail = (failed.get("error")
                       or f"returncode {failed.get('returncode')}")
+        elif has_findings:
+            detail = "check reported findings"
         repo.record_run(task["id"], "ok" if ok else "failed", detail,
                         breaker=breaker, consecutive_failures=consecutive)
         result = {"id": task["id"], "result": "ok" if ok else "failed",
                   "elapsed": round(time.monotonic() - phase_started, 2)}
+        if has_findings:
+            result["findings"] = True
         if detail:
             result["detail"] = detail
         results.append(result)
@@ -520,6 +531,11 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         "ran": sum(1 for r in results if r["result"] in ("ok", "failed")),
         "skipped": sum(1 for r in results if r["result"] == "skipped"),
         "failures": sum(1 for r in results if r["result"] == "failed"),
+        # Counted apart from `failures` because the two answer different
+        # questions and collapsing them is what made a working monitor look
+        # broken. A sweep reporting findings is not a red sweep — it is the
+        # check working — but neither is it silently clean.
+        "findings": sum(1 for r in results if r.get("findings")),
         # Measured, not estimated: how long the sweep actually took, and what
         # it purged. A caller that never learns either cannot tell "nothing was
         # due" from "everything was due and finished fast".
@@ -547,9 +563,6 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.dry_run:
         return _dry_run(args, project_root, only=args.only)
 
-    # Announce the bound before waiting for it. A phase that takes six minutes
-    # used to look identical to one that had hung, because nothing was printed
-    # in either case until the end.
     for task in TaskRepository(project_root).due(only=args.only):
         for phase in task.get("phases", []):
             bound = phase.get("timeout_seconds")
@@ -562,10 +575,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     if not payload["results"]:
         return _emit(args, payload, "nothing due")
     lines = [f"{r['id']}: {r['result']} ({r['elapsed']}s)"
+             + (" (findings)" if r.get("findings") else "")
              + (f" ({r['detail']})" if r.get("detail") else "")
              for r in payload["results"]]
+    # Findings are named rather than folded into either total. "0 failed" on a
+    # sweep where a check reported a problem reads as a clean project, and the
+    # point of the taxonomy is that those are two different facts — a check
+    # working is not a check breaking, and neither is it nothing to say.
     lines.append(f"{payload['ran']} ran, {payload['skipped']} skipped, "
-                 f"{payload['failures']} failed in {payload['elapsed']}s")
+                 f"{payload['failures']} failed in {payload['elapsed']}s"
+                 + (f", {payload['findings']} with findings"
+                    if payload.get("findings") else ""))
     if payload["purged_orphans"]:
         lines.append(f"purged {len(payload['purged_orphans'])} schedule entries "
                      f"for tasks that no longer exist: "

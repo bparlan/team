@@ -11,6 +11,15 @@ import sys
 import json
 from pathlib import Path
 
+#: The executor's phase-outcome taxonomy (mirrored from
+#: `theteam.tasks.executor` rather than imported: this script runs inside the
+#: isolation container, where the `theteam` package is importable but adding an
+#: import edge from a check script to the executor it is checked by would make
+#: the exit-code contract circular and untestable). Duplicated deliberately,
+#: and asserted equal in `theteam/tests/test_project_integrity_taxonomy.py` so
+#: the two copies cannot drift apart silently.
+FINDINGS_EXIT_CODE = 3
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_SCRIPTS = [
@@ -132,8 +141,16 @@ def main():
 
     if errors:
         for err in errors:
-            print(f"FAIL: {err}")
-        sys.exit(1)
+            print(f"FINDING: {err}")
+        # 3, not 1. Exit 1 is what an uncaught exception produces, so the
+        # executor cannot tell a check that found a problem from a check that
+        # crashed — and it must. `TaskExecutor.execute_phase` maps 3 to
+        # "ran, found something, did not break", which keeps a working monitor
+        # from tripping its own breaker. Exiting 1 here meant five genuine
+        # detections opened the breaker permanently and the task stopped
+        # running: the project's real defect became permanently unmonitored.
+        print(f"{len(errors)} finding(s); the check itself completed.")
+        sys.exit(FINDINGS_EXIT_CODE)
 
     print("Infrastructure check passed: all systems operational")
     print(f"  Python: {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")

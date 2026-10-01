@@ -12,6 +12,13 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+#: Mirrors `theteam.tasks.executor.FINDINGS_EXIT_CODE`. Duplicated rather than
+#: imported for the same reason as in `loop_infrastructure_check.py`: a check
+#: script must not import the executor that interprets its exit code, or the
+#: contract becomes circular and untestable. Asserted equal in
+#: `theteam/tests/test_project_integrity_taxonomy.py`.
+FINDINGS_EXIT_CODE = 3
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_DIRS = ["tasks", "scripts", "bin", "theteam"]
@@ -94,8 +101,15 @@ def main():
 
     if errors:
         for err in errors:
-            print(f"FAIL: {err}")
-        sys.exit(1)
+            print(f"FINDING: {err}")
+        # 3, not 1. Exit 1 is what an uncaught exception produces, and the
+        # executor must be able to tell a check that found a problem from a
+        # check that crashed — a finding is the monitor working, a crash is the
+        # monitor broken. It maps 3 to "ran, found something, did not break",
+        # so a healthy project with one stale file no longer trips the breaker.
+        # Exiting 1 here meant five genuine detections opened it permanently.
+        print(f"{len(errors)} finding(s); the check itself completed.")
+        sys.exit(FINDINGS_EXIT_CODE)
 
     print(f"Health check passed: {PROJECT_ROOT}")
     print(f"  Dirs checked: {len(REQUIRED_DIRS)}")

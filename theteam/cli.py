@@ -434,6 +434,15 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
 
     repo = TaskRepository(project_root)
     due = repo.due(only=only)
+    # Captured here, at the first read of the schedule, and never re-read
+    # afterwards. `purge_orphaned_schedules` and `repair_schedules` both call
+    # `schedule()` and then `_save_schedule`, so by the end of the sweep the file
+    # on disk is a valid one this run just wrote — which clears the flag and
+    # reports the corruption as nothing. Measured: a zero-byte schedule plus one
+    # repairable entry produced `nothing due` and exit 0, i.e. a lost schedule
+    # reading as a healthy project. §3.3, in the recovery path of a fix for
+    # §3.3.
+    schedule_error = repo.last_schedule_error
     # Breakers outlive the process: a task whose breaker tripped an hour ago
     # must still be tripped now, or the trip only survives as long as the run
     # that observed it. The repository owns the schedule (Layer 2), so it hands
@@ -544,15 +553,13 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         # broken. A sweep reporting findings is not a red sweep — it is the
         # check working — but neither is it silently clean.
         "findings": sum(1 for r in results if r.get("findings")),
-        # Measured, not estimated: how long the sweep actually took, and what
-        # it purged. A caller that never learns either cannot tell "nothing was
-        # due" from "everything was due and finished fast".
+        # The value captured at the first read, not a fresh one: by now the file
+        # has been rewritten by this sweep and reports itself healthy.
+        "schedule_error": schedule_error,
         "elapsed": round(time.monotonic() - sweep_started, 2),
         "purged_orphans": purged,
         "repaired_schedules": repaired,
-        # Read *after* the purge and the repair, so it reflects the last read
-        # actually made rather than the state before this sweep touched it.
-        "schedule_error": repo.last_schedule_error,
+
         "results": results,
         # Every `theteam run` refreshes the state the project-integrity gate
         # reads and writes the context members are handed. This replaced the

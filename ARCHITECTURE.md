@@ -204,6 +204,43 @@ different data model — markdown phases rather than YAML. If the name ever
 reads wrong, `schedule` is the accurate one: it maps 1:1 onto
 `TaskRepository.schedule_task`.
 
+### 2.4 Schedule integrity
+
+`task-schedule.json` is the one file in this product that every command writes and
+no human reads. That makes it the place where a silent corruption is most likely
+and least likely to be noticed, so four properties are enforced rather than assumed.
+
+**Writes are atomic.** `record_run`, `record_skip` and `schedule_task` all funnel
+through `_save_schedule`, which writes a temp file and `os.replace`s it. Before
+this, three call sites each wrote in place, so a Ctrl-C mid-write left a
+truncated JSON file that every later command then refused to parse — the schedule
+was destroyed by the act of recording a successful run.
+
+**A corrupt file is moved aside, not raised.** `schedule()` reads through to a
+capture point: if the JSON is unparseable the file is renamed to
+`task-schedule.json.corrupt-<n>` and an empty schedule is returned with
+`last_schedule_error` set. The refusal is reported in the `run` payload rather
+than raised, because a schedule nobody can parse must not make every task look
+like it is never due.
+
+**An interval shorter than the task is refused.** `schedule_task` refuses an
+interval below the task's total worst-case duration (the sum of its phases'
+`timeout_seconds`). A 5-minute interval on a 600-second task produces a task that
+is permanently overdue: every sweep starts it, the previous one has not finished,
+and it never stops running. The guard compares against the same
+`worst_case_seconds()` predicate `repair_schedules()` uses, so the write path and
+the repair path cannot drift.
+
+**Bad intervals already on disk are repaired.** `repair_schedules()` runs on
+every sweep, is idempotent, and reports what it changed. This exists because the
+write guard was added after some entries had already been written; a guard that
+only applies to future writes leaves the existing damage in place.
+
+**Orphaned schedule entries are purged.** `purge_orphaned_schedules()` removes
+entries whose task YAML no longer exists. A schedule entry pointing at a deleted
+task is otherwise a permanent, invisible failure: the entry is never due because
+the task is gone, and it is never cleaned because nothing reports it missing.
+
 
 ---
 
@@ -653,8 +690,16 @@ All resolution goes through one function in `theteam/state.py`, which takes an e
   event_log.json               # EventBus log
   commentary.stop
   reports/
+  context.md                   # written by every `theteam run`; see §5.6
   proposals/
 ```
+
+`proposals/` has no writer. `StateStore.proposals` resolves the path and
+`run_context._open_proposals()` reads it, but nothing in this product writes a
+proposal, so the reader always returns empty. It is listed here because the
+resolver is real, and marked here because a state entry with no producer is the
+shape a decision channel would take when it lands. Do not read its presence as a
+feature.
 
 Every name above is one `theteam/state.py` resolves. The list is not exhaustive:
 `StateStore` also resolves `tasks_dir`, `events_dir`, `members`, `discussions`,
@@ -670,6 +715,65 @@ resolver and the component's name wins). The execution log is bounded by
 is a counter registry with no file retention path.
 
 Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, **5** of `parents[`, **7** of `.mp/theteam`, **3** of `MockAPI` in `theteam/**/*.py`. The roadmap claimed four paths. It is seven.
+
+## 5.6 Per-run context
+
+`theteam run` writes `.omp/theteam/context.md` on every invocation, via
+`theteam/core/run_context.py`. It is a few KB of markdown: what ran, what
+failed, what needs attention, and the cost of the run.
+
+**Why a file and not more analysis.** The `system-awareness` task already
+produced a health score, but it was a 600-second, 384MB phase on a schedule. A
+measurement that runs less often than the thing it measures goes stale, and a
+stale score is worse than no score because it looks current. Writing a small
+context on every run costs milliseconds and cannot go stale between runs.
+
+**It replaced the only other writer of `.loop-state.json`.** `sa_runner.py` wrote
+that file from the analysis task. Two writers of one derived file is a race with
+a long fuse: the file's contents depend on which task ran last. `run_context.py`
+is now the only writer, and `project-integrity` requires the file to exist and to
+parse — not to be fresh, because freshness is the property that was removed.
+
+
+**Emptiness is checked before the always-delivered shortcut.** `run_context` is in
+`theteam/advisory/context_slice.py`'s `ALWAYS_DELIVERED`
+(`('project_goal', 'project_root', 'run_context')`), so a member receives it even
+when the run found nothing. The check that decides whether a section is worth
+sending has to run first; otherwise the shortcut ships an empty section to every
+member on every tick.
+
+**Delivery is verified, not assumed.** `aggregate_run_context()` reads the file
+or reports its absence honestly (`no run context yet`), and
+`aggregate_project_context()` includes it under the `run_context` key. A read
+failure returns an error section rather than dropping the key, because a silently
+missing context section reads as "there was nothing to say".
+
+## 5.7 Not built, and why
+
+Three items are recorded here rather than left as an undocumented gap. Each was
+scoped and then deferred; none is started, and none has a partial implementation
+to be mistaken for finished work.
+
+**The decision channel (`theteam ask`).** `StateStore.proposals` resolves
+`.omp/theteam/proposals/`, and `run_context._open_proposals()` reads it — but
+nothing writes a proposal, so the reader always returns empty. Building it means
+four coordinated pieces: a `questions` field on the member note schema, a
+`needs_decision` phase outcome, a proposal writer, and the CLI surface. The
+member-note half is the load-bearing one, because a question that reaches the
+parent has to be distinguishable from a member's own reasoning, and the schema
+is what makes that distinction durable. Deferred rather than half-built: a
+`needs_decision` outcome with no proposal store behind it is a phase that reports
+a decision channel exists.
+
+**`write_set` in place of `writable_project`.** Today `writable_project: true`
+mounts the whole project writable into the container
+(`tasks/executor.py:_writable_mount_args`). The stricter form names the paths a
+phase may write and verifies the diff parent-side afterwards. It is the right
+design and it is not built. It stays deferred because the guard is only worth
+its cost once the manifest is enforced as strictly as the mount is today: a
+partial `write_set` that still mounts the tree writable is a second declaration of
+intent next to a first, and two declarations of the same permission is how a
+permission drifts toward the looser one.
 
 ---
 

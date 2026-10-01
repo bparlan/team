@@ -5,10 +5,6 @@ priority: 5
 description: Perform routine maintenance including cache cleaning, log rotation, and
   temporary file cleanup
 failure_handling: retry
-context:
-- Temporary files
-- Log directories
-- Cache directories
 expected_output: 'Routine maintenance complete: cache cleaned, logs rotated'
 phases:
 - name: execute

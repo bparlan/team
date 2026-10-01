@@ -5,13 +5,8 @@ priority: 10
 description: >-
   Verifies the project is intact: required directories, required configs,
   required scripts, required tools, Python version, and that the loop state
-  exists and is not stale.
+  exists and parses.
 failure_handling: retry
-context:
-- Project root structure
-- Runtime configuration
-- Required files and directories
-- Loop state freshness
 expected_output: 'Project integrity check passed: all systems operational'
 phases:
   # Two phases, and they must stay two. The *directory* checks overlap — the

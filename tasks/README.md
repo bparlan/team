@@ -12,7 +12,7 @@ that behaviour exposes.
 
 | id | order | kind | what it does |
 |---|---|---|---|
-| `project-integrity` | 0 | 2 scripts | directories, configs (parsed, not just present), scripts, tools, Python version, loop-state freshness |
+| `project-integrity` | 0 | 2 scripts | directories, configs (parsed, not just present), scripts, tools, Python version, loop-state existence and parseability |
 | `system-awareness` | 2 | script | 4-phase analysis (structure, documentation, architecture, infrastructure) with health scoring |
 | `maintenance` | 3 | script | cache cleaning, log rotation, temp-file cleanup |
 | `ground-truth-audit` | 5 | llm | reports where a documented claim is contradicted by the code |
@@ -34,8 +34,6 @@ priority: 1-10          # 10 = highest
 description: >-
   What this task does, and what it does not.
 failure_handling: retry | skip | stop
-context:
-- Input the task needs
 expected_output: 'What constitutes success'
 phases:
   - name: <phase name>
@@ -53,6 +51,16 @@ order: <n>              # execution position; lower runs first
 
 `order` is the only ordering source. `TASK_ORDER` was removed when ordering
 moved onto each task — nothing reads it, and nothing writes it.
+
+**`context:` was removed from all five tasks.** It looked like a field and was
+not one. The only code that ever read `task["context"]` was
+`scripts/task_executor.py:85`, and that file cannot be imported
+(`ModuleNotFoundError: No module named 'task_archive'`) — it is a 265-line
+orphan, already recorded as one in [Orphan scripts](#orphan-scripts). The `llm`
+runner builds its prompt from `prompt_file` alone (`runners/llm.py:_read_prompt`),
+and each prompt file already names its own inputs. So the key was prose for a
+reader of the YAML that no execution path ever consulted, which is the
+schema-lies-nothing-enforces shape that retired `option_selection_required`.
 
 A phase names **either** `script` or `runner: llm`, never both and never
 neither; the executor refuses a phase that names no runner, by name.

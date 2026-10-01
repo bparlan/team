@@ -3,7 +3,7 @@
 Health check runner for theteam task loop.
 
 Verifies project file integrity, config validity, required directories,
-and that .loop-state.json is not stale.
+and that .loop-state.json exists and parses.
 """
 
 import os

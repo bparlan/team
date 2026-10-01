@@ -7,9 +7,6 @@ description: >-
   edits that makes the documentation true. Skips every finding the audit
   could not verify; passes no guess into a document.
 failure_handling: retry
-context:
-- .omp/theteam/reports/ground-truth-audit.md, the previous phase's output
-- The documents each verified finding names
 expected_output: >-
   Edited documents, each finding recorded with the text it replaced and why
   the replacement is enough.

@@ -108,11 +108,20 @@ def test_the_gate_file_is_created_when_absent(tmp_path):
     assert (tmp_path / ".loop-state.json").exists()
 
 
-def test_a_run_clears_a_stale_finding(tmp_path):
-    """The measured behaviour: 30h stale -> finding -> one run -> clean.
+def test_the_gate_no_longer_measures_how_often_you_run_the_tool(tmp_path):
+    """A 30h-old loop state is no longer a finding, and that is deliberate.
 
-    This is the property that made the deletion safe. Verified against the real
-    check script rather than a reimplementation of its threshold.
+    `loop_health_check.py` used to fail on `last_execution` older than 24h. With
+    scheduling disabled the only thing that refreshes the file is a human
+    running `theteam run`, so the rule measured the operator's cadence and
+    reported it in the same words as a project defect.
+
+    This asserts the rule stays gone. It is a decision with a name, not an
+    oversight: if someone reintroduces the threshold, this fails and the reason
+    is right here rather than being rediscovered from a log.
+
+    Existence and parseability are untouched and covered separately — those
+    name something real, and running the tool once genuinely fixes them.
     """
     for d in ("tasks", "bin", "theteam"):
         (tmp_path / d).mkdir(parents=True, exist_ok=True)
@@ -121,17 +130,39 @@ def test_a_run_clears_a_stale_finding(tmp_path):
     write_run_context(tmp_path, executed=True)
     _age_state(tmp_path, 30)
 
-    stale = "Loop state is stale"
-    assert stale in _health_check_report(tmp_path), (
-        "precondition: a 30h-old loop state must be a staleness finding, "
-        "otherwise this test cannot show the run clearing it")
+    report = _health_check_report(tmp_path)
+    assert "Loop state is stale" not in report, (
+        "the staleness rule is back, so an idle project reports a finding that "
+        "only running the tool can clear")
+    assert "Health check passed" in report
 
-    write_run_context(tmp_path, executed=True)
 
-    assert stale not in _health_check_report(tmp_path), (
-        "a run did not clear the staleness finding, so the gate still reports "
-        "something nothing can resolve. This is the property that made deleting "
-        "the only previous writer of this file safe.")
+def test_a_missing_state_file_is_still_a_finding(tmp_path):
+    """The half of the gate that was kept, and why it earns its place.
+
+    A missing or corrupt `.loop-state.json` means `theteam run` cannot record
+    what it did. That names something real and one run fixes it, which is the
+    difference between this finding and the staleness rule that was removed.
+    """
+    for d in ("tasks", "bin", "theteam"):
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: probe\n  description: a probe project\n")
+
+    assert "Loop state file not found" in _health_check_report(tmp_path), (
+        "a missing state file is no longer reported, so `theteam run` can fail "
+        "silently with nothing noticing")
+
+
+def test_a_corrupt_state_file_is_still_a_finding(tmp_path):
+    """And a truncated one, which an interrupted write used to leave behind."""
+    for d in ("tasks", "bin", "theteam"):
+        (tmp_path / d).mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: probe\n  description: a probe project\n")
+    (tmp_path / ".loop-state.json").write_text("{ truncated")
+
+    assert "Loop state file is invalid" in _health_check_report(tmp_path)
 
 
 def test_a_run_that_executed_nothing_does_not_refresh_the_stamp(tmp_path):

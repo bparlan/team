@@ -159,11 +159,46 @@ class TaskRepository:
         return str(state_dir(self.project_root) / filename)
 
     def schedule(self) -> Dict[str, Any]:
+        """The schedule, or an empty one if the file is missing or unreadable.
+
+        A zero-byte file was unrecoverable here. `json.load` raised,
+        `TaskScheduler.tick` caught it and recorded the same `last_error` on
+        every subsequent run, and nothing in the system could write a schedule
+        again — a permanent outage from one interrupted write, with the fix
+        being "delete the file by hand".
+
+        `_save_schedule` is now atomic so this state should not arise, but a
+        reader that cannot be bricked by its own state file is worth having
+        independently: the file can also be truncated by hand, or by a disk that
+        filled mid-write on some other writer.
+
+        The corrupt file is moved aside rather than overwritten, so whatever it
+        held is still available for a human to look at. Returns an empty
+        schedule: the tasks themselves live in YAML, so nothing is lost that
+        cannot be re-scheduled.
+        """
+        empty = {"scheduled_tasks": {}, "last_run": {}}
         path = self._state_path(SCHEDULE_FILENAME)
         if not os.path.exists(path):
-            return {"scheduled_tasks": {}, "last_run": {}}
-        with open(path, "r", encoding="utf-8") as handle:
-            data = json.load(handle)
+            return empty
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except (json.JSONDecodeError, OSError) as e:
+            try:
+                os.replace(path, f"{path}.corrupt")
+                logger.warning(
+                    "task-schedule.json was unreadable (%s); moved aside to "
+                    "%s.corrupt and continuing with an empty schedule",
+                    e, path)
+            except OSError:
+                # Cannot move it either, so it stays. An empty schedule is
+                # still the right answer to read, and the next successful
+                # write will replace it.
+                pass
+            return empty
+        if not isinstance(data, dict):
+            return empty
         data.setdefault("scheduled_tasks", {})
         data.setdefault("last_run", {})
         return data
@@ -325,9 +360,7 @@ class TaskRepository:
             "breaker": breaker,
             "breaker_consecutive_failures": consecutive_failures,
         }
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(schedule, handle, indent=2)
+        self._save_schedule(schedule)
 
     def record_skip(self, task_id: str, detail: str,
                     breaker: Optional[str] = None,
@@ -358,7 +391,6 @@ class TaskRepository:
         result and detail become the skip, `at` holds, and the breaker fields
         keep whatever was really measured before.
         """
-        path = self._state_path(SCHEDULE_FILENAME)
         schedule = self.schedule()
         previous = schedule["last_run"].get(task_id, {})
         schedule["last_run"][task_id] = {
@@ -371,9 +403,10 @@ class TaskRepository:
                 if consecutive_failures is None else consecutive_failures
             ),
         }
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
-            json.dump(schedule, handle, indent=2)
+        # Through the atomic writer rather than its own bare `open`. Two write
+        # paths for one file means the crash-safety applies to whichever the
+        # author happened to remember.
+        self._save_schedule(schedule)
 
     # ======= write path =======
     #
@@ -384,10 +417,86 @@ class TaskRepository:
     # made the whole project unreadable.
 
     def _save_schedule(self, schedule: Dict[str, Any]) -> None:
+        """Write the schedule atomically.
+
+        Temp file plus `os.replace`, matching `theteam/core/run_context.py` and
+        `theteam/core/wal.py`. A bare `open(path, "w")` truncates before it
+        writes, so a process killed mid-dump leaves zero bytes — and then every
+        later `schedule()` raises `JSONDecodeError`, which `TaskScheduler.tick`
+        catches and records as the same `last_error` forever. One Ctrl-C during
+        a write was a permanent outage with no way back except deleting the
+        file by hand.
+        """
         path = self._state_path(SCHEDULE_FILENAME)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as handle:
+        tmp = f"{path}.tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
+        os.replace(tmp, path)
+
+    @staticmethod
+    def worst_case_seconds(task: Dict[str, Any]) -> int:
+        """Total wall-clock bound across a task's phases.
+
+        One definition, shared by the write guard and the repair sweep. Two
+        copies of this predicate would drift, and the drift would be invisible:
+        one would refuse an interval the other considered fine.
+        """
+        return sum(int(p.get("timeout_seconds", 300))
+                   for p in task.get("phases", []))
+
+    def repair_schedules(self) -> List[Dict[str, Any]]:
+        """Repair schedule entries that can never be satisfied.
+
+        The interval guard lives only on the write path — `schedule_task`
+        refuses a too-short interval for a *new* entry — and `record_run`
+        re-stamps `next_run` from `interval_minutes` without validating it. So
+        an entry written before the guard existed, or hand-edited into the
+        schedule file, is copied forward on every run and never corrects itself:
+        measured, `system-awareness` sat at `interval_minutes: 1` against a 600s
+        bound, 36x overrun, and `due()` was true on every sweep forever.
+
+        A hand edit is a one-time patch against a mechanism that re-infects, so
+        the state is repaired where it is read instead.
+
+        Pure with respect to the returned value and idempotent: a second call
+        finds nothing to do, because the repaired interval already satisfies the
+        predicate. Repairs `next_run` only — the interval itself is raised to
+        the shortest workable value and reported, so the operator sees what
+        changed rather than finding out later.
+        """
+        schedule = self.schedule()
+        repairs: List[Dict[str, Any]] = []
+
+        for task_id, entry in list(schedule["scheduled_tasks"].items()):
+            task = self.get(task_id)
+            if task is None:
+                continue  # a task with no definition; purge handles that
+            worst = self.worst_case_seconds(task)
+            if not worst:
+                continue
+            try:
+                interval = int(entry.get("interval_minutes", 0))
+            except (TypeError, ValueError):
+                interval = 0
+            if interval * 60 >= worst:
+                continue
+
+            repaired = max(1, -(-worst // 60))
+            was_next_run = entry.get("next_run")
+            entry["interval_minutes"] = repaired
+            entry["next_run"] = (_now() + timedelta(minutes=repaired)).isoformat()
+            repairs.append({
+                "task_id": task_id,
+                "was_interval_minutes": interval,
+                "repaired_interval_minutes": repaired,
+                "worst_case_seconds": worst,
+                "was_next_run": was_next_run,
+            })
+
+        if repairs:
+            self._save_schedule(schedule)
+        return repairs
 
     def schedule_task(self, task_id: str, interval_minutes: int) -> str:
         """
@@ -398,6 +507,7 @@ class TaskRepository:
 
         Raises:
             KeyError: the id names no task.
+            ValueError: the interval is shorter than the task can take.
         """
         if self.get(task_id) is None:
             raise KeyError(f"Task '{task_id}' not found")
@@ -408,8 +518,7 @@ class TaskRepository:
         # the number that would work, rather than accepted and left to fight
         # itself.
         task = self.get(task_id)
-        worst = sum(int(p.get("timeout_seconds", 300))
-                    for p in task.get("phases", []))
+        worst = self.worst_case_seconds(task)
         if worst and int(interval_minutes) * 60 < worst:
             raise ValueError(
                 f"interval {interval_minutes}m is shorter than task "

@@ -444,6 +444,13 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
     # report it as scheduled. Purged here because this is the one place every
     # sweep already passes through.
     purged = repo.purge_orphaned_schedules()
+    # Runs beside the purge rather than only on the write path. `schedule_task`
+    # refuses a too-short interval for a *new* entry, but `record_run` re-stamps
+    # `next_run` from `interval_minutes` without validating it — so an entry that
+    # predates the guard, or was hand-edited, is copied forward on every run and
+    # never corrects itself. Measured: an entry at 1 minute against a 600s
+    # bound, 36x overrun, `due()` true on every sweep forever.
+    repaired = repo.repair_schedules()
     # Purge runs before the breaker states are read: `last_run` is kept, so
     # reading it after the purge sees the same history either way.
     executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
@@ -542,6 +549,7 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         # due" from "everything was due and finished fast".
         "elapsed": round(time.monotonic() - sweep_started, 2),
         "purged_orphans": purged,
+        "repaired_schedules": repaired,
         "results": results,
         # Every `theteam run` refreshes the state the project-integrity gate
         # reads and writes the context members are handed. This replaced the
@@ -617,6 +625,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         lines.append(f"purged {len(payload['purged_orphans'])} schedule entries "
                      f"for tasks that no longer exist: "
                      f"{', '.join(payload['purged_orphans'])}")
+    # Reported because a silent repair is a surprise: the operator's schedule
+    # changes without them asking, and the next line says by how much.
+    for repair in payload.get("repaired_schedules", []):
+        lines.append(
+            f"repaired schedule for {repair['task_id']}: interval "
+            f"{repair['was_interval_minutes']}m -> "
+            f"{repair['repaired_interval_minutes']}m, because the task can take "
+            f"{repair['worst_case_seconds']}s and could never finish before it "
+            f"was due again")
     # §2.1: a command that exists and failed returns 1. `theteam run` used to
     # return 0 with `failures: N` in the payload, so a shell could not tell a
     # red suite from a green one without parsing JSON. This is a behaviour

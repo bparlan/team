@@ -37,9 +37,12 @@ fi
 
 # 3. No hardcoded developer paths. Scoped to the task scripts as well as the
 # package: five scripts carried `~/devcode/team/...` while this check scanned
-# `theteam/` only, so nothing tripped. `sa_runner.py` is excluded because its
-# default-state branch is the one place a literal path is not a resolution —
-# it was corrected there, and the string survives in a comment explaining why.
+# `theteam/` only, so nothing tripped. `sa_runner.py` is excluded by line
+# range. It was excluded for a literal in its default-state branch; that branch
+# was corrected, so the only match left is the comment at :236 recording the
+# correction. The carve-out still matches that comment — dropping it would fail
+# this check on the comment alone — so it stays until someone deletes the
+# comment and the exclusion together.
 hardcoded=$(grep -rn "/Users/bparlan\|~/devcode/team" theteam/ scripts/ \
   --include="*.py" 2>/dev/null | grep -v "^scripts/sa_runner.py:2[34][0-9]:")
 if [ -n "$hardcoded" ]; then

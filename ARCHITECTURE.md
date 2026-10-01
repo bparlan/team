@@ -607,7 +607,7 @@ deliberately, so that importing the package does not load a database tier.
 
 | Path | Why it is still here |
 |---|---|
-| `config/routine-engine/` (5 files) | Configuration for the `routine-engine/` M10 deleted. Nothing reads any of the 5 files by name, `pyproject.toml` packages only `theteam*`, and none is a valid task under §5.4 — `routines.yaml` holds `command_triggers` maps, `routines_engine.yaml` a dependency graph (`monthly-evolution` → `weekly-analysis` → `daily-maintenance`), `interactive_config.json` a `run_routine` command. Same shape as the unproduced `proposals/` entry in §5.5: a data file with no producer and no reader. Tracked since M0, which removed the engine and left its config. **Not deleted** — removal is a separate decision. |
+| `config/routine-engine/` (5 files) | Configuration for the `routine-engine/` deleted in M10 Phase 3 (§2.3), which removed the engine and left this directory behind. Nothing reads any of the 5 files by name, `pyproject.toml` packages only `theteam*`, and none is a valid task under §5.4 — `routines.yaml` holds `command_triggers` maps, `routines_engine.yaml` a dependency graph (`monthly-evolution` → `weekly-analysis` → `daily-maintenance`), `interactive_config.json` a `run_routine` command. Same shape as the unproduced `proposals/` entry in §5.5: a data file with no producer and no reader. Note the origin: M0 — the milestone that removed orphaned files — **committed** these 5 files (403 added lines, `71ee8d0`), and they sat unread through M10. **Not deleted** — removal is a separate decision. |
 
 ## 5.4 One task format
 

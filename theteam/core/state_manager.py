@@ -13,6 +13,8 @@ import os
 import json
 import threading
 import time
+import tempfile
+import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Callable
 from pathlib import Path
@@ -41,6 +43,26 @@ class StateEventType(Enum):
     MEMBER_LEFT = "member_left"
     SYSTEM_HEALTH_UPDATE = "system_health_update"
     USER_INTERACTION = "user_interaction"
+
+
+
+
+def _wal_path_for(state_file: Optional[str]) -> str:
+    """Where the write-ahead log for `state_file` belongs.
+
+    Beside the state file, so the log is removed with the state it describes
+    and two projects cannot share one. Without a state file there is no project
+    to be adjacent to, so it goes to the temp dir — never to the CWD, which is
+    whatever directory the process happened to start in.
+
+    That fallback name carries the pid and a uuid rather than being a fixed
+    path: managers constructed without a state file have nothing else to tell
+    them apart, and a shared `theteam-wal.json` would interleave their entries.
+    """
+    if state_file:
+        return os.path.join(os.path.dirname(os.path.abspath(state_file)),
+                            "wal.json")
+    return os.path.join(tempfile.gettempdir(), "theteam-wal.json")
 
 
 class _Notifying:
@@ -265,10 +287,20 @@ class TaskState(_Notifying):
         """Get all tasks assigned to a member."""
         assigned_task_ids = self.task_assignments.get(member_id, [])
         return [task for task_id, task in self.tasks.items() if task_id in assigned_task_ids]
+
+
 class UnifiedStateManager:
     def __init__(self, state_file: Optional[str] = None):
         # Initialize Phase 2 modules
-        self.wal = WriteAheadLog()
+        #
+        # The WAL follows the state file. It used to take `WriteAheadLog()`'s
+        # default, a bare "wal.json" resolved against the process CWD, so a
+        # manager pointed at a tmpdir still appended to whatever directory the
+        # suite was launched from — which is how a tracked wal.json at the repo
+        # root filled with pytest fixture state on every run. With no state
+        # file there is nothing to be adjacent to, so it goes to the temp dir
+        # rather than the CWD.
+        self.wal = WriteAheadLog(_wal_path_for(state_file))
         self.checksum = ChecksumManager()
         self.db = DatabaseManager()
         self.tx = TransactionManager()

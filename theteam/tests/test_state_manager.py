@@ -11,6 +11,8 @@ These tests defend the contract, not the implementation: every state class can
 raise an event when used standalone, and a listener registered on the manager
 still hears events raised by its sub-states.
 """
+import os
+import tempfile
 import pytest
 
 from theteam.core.state_manager import (
@@ -90,3 +92,48 @@ def test_a_raising_listener_does_not_break_the_transition():
 
     assert seen == [True], "the healthy listener must still be called"
     assert manager.discussion_state.current_discussion_id is not None
+
+
+# -- the WAL follows the state file ----------------------------------------
+
+def test_wal_is_written_beside_the_state_file(tmp_path):
+    """The log must not escape the project it describes.
+
+    `WriteAheadLog()` defaulted to a bare "wal.json", resolved against the
+    process CWD. A manager pointed at a tmpdir therefore appended to whatever
+    directory the suite was launched from — which is how the tracked
+    `wal.json` at the repo root filled with pytest fixture state.
+    """
+    state_file = tmp_path / ".omp" / "theteam" / "state.json"
+    state_file.parent.mkdir(parents=True)
+
+    manager = UnifiedStateManager(str(state_file))
+    manager.discussion_state.start_discussion("a topic", str(tmp_path))
+    manager.save_state()
+
+    assert manager.wal.wal_file == str(state_file.parent / "wal.json")
+    assert (state_file.parent / "wal.json").exists()
+
+
+def test_wal_without_a_state_file_never_lands_in_the_cwd():
+    """No state file means no project, so the log must not pick the CWD.
+
+    This is the case that actually leaked: `UnifiedStateManager()` with no
+    argument still constructed a WAL, and a relative default resolved to
+    whichever directory the process happened to start in.
+    """
+    manager = UnifiedStateManager()
+    assert os.path.isabs(manager.wal.wal_file), "a relative WAL path lands in the CWD"
+    assert os.path.commonpath([manager.wal.wal_file, tempfile.gettempdir()]) \
+        == tempfile.gettempdir()
+
+
+def test_wal_without_a_state_file_is_unique_per_manager():
+    """Two stateless managers must not interleave entries in one log.
+
+    A fixed temp path would satisfy "not in the CWD" while still giving every
+    stateless manager the same file — and the suite constructs fourteen of them
+    across two files. `replay_entries` would then read another manager's state.
+    """
+    paths = {UnifiedStateManager().wal.wal_file for _ in range(3)}
+    assert len(paths) == 3, f"stateless managers share a WAL: {paths}"

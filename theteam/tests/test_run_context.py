@@ -28,6 +28,7 @@ replacement's three load-bearing properties:
 """
 
 import json
+import os
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -37,13 +38,28 @@ import pytest
 from theteam.core.run_context import (
     build_context_summary,
     load_loop_state,
-    refresh_loop_state,
-    write_loop_state,
+    _recent_failures,
     write_run_context,
 )
 
 SCRIPTS = Path(__file__).resolve().parent.parent.parent / "scripts"
-sys.path.insert(0, str(SCRIPTS))
+
+
+@pytest.fixture(autouse=True)
+def _scripts_on_path():
+    """Put `scripts/` on the path for this module, then take it off again.
+
+    The health check is invoked as a subprocess, not imported, so nothing here
+    actually needs `scripts/` importable. A module-level insert would leak into
+    every later test in the session, which
+    `test_stability_fixes.py::test_no_module_level_sys_path_insert` enforces
+    with an AST sweep rather than a text search.
+    """
+    sys.path.insert(0, str(SCRIPTS))
+    try:
+        yield
+    finally:
+        sys.path.remove(str(SCRIPTS))
 
 
 def _age_state(root: Path, hours: float) -> None:
@@ -156,6 +172,172 @@ def test_a_corrupt_state_file_is_replaced_not_fatal(tmp_path):
     assert "Loop state is invalid" not in _health_check_report(tmp_path), (
         "the corrupt file was replaced with something the check still cannot "
         "read, so the gate stays broken")
+
+
+def _log_a_failure(root: Path, task_id: str = "real-task") -> None:
+    """Record one failed run for `task_id` in the execution log."""
+    state_dir = root / ".omp" / "theteam"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "task-execution.log").write_text(
+        json.dumps({"task_id": task_id, "success": False,
+                    "error": "returncode 1"}) + "\n")
+
+
+def test_a_malformed_task_file_is_never_reported_as_clean(tmp_path):
+    """A syntax error in a task YAML must not read as a healthy project.
+
+    The first version of the registry read used a bare `except Exception` and
+    returned `[]` on failure — and an absent "what is failing" section reads as
+    "nothing is failing". Measured: `id: [broken` in a task file produced
+    exactly that.
+
+    It also raised `yaml.parser.ParserError`, which descends from `YAMLError` and
+    from neither `ValueError` nor `OSError`, so a handler catching only the
+    latter two let it escape and crashed the summary outright.
+    """
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: p\n  description: d\n")
+    _log_a_failure(tmp_path)
+    (tmp_path / "tasks" / "task-real-task.yaml").write_text("id: [broken\n  : :\n")
+
+    write_run_context(tmp_path, executed=True)
+    summary = build_context_summary(tmp_path)
+
+    assert "failure status unknown" in summary, (
+        "an unreadable task registry produced a summary with no failure "
+        "section, which reads as a clean project")
+    assert "nothing recorded as failing" not in summary
+
+
+def test_an_empty_task_directory_is_never_reported_as_clean(tmp_path):
+    """Recorded failures plus an empty registry means unreadable, not healthy.
+
+    The registry filter drops failures whose task no longer has a definition —
+    correct in the normal case, since a deleted task cannot be failing. But when
+    *every* definition is gone, the filter empties the list and the summary
+    claimed a clean project from a log full of real failures. Measured.
+    """
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: p\n  description: d\n")
+    _log_a_failure(tmp_path)
+    # `tasks/` exists but holds no definitions.
+
+    write_run_context(tmp_path, executed=True)
+    summary = build_context_summary(tmp_path)
+
+    assert "failure status unknown" in summary, (
+        "an empty task registry silently discarded every recorded failure")
+    assert "nothing recorded as failing" not in summary
+
+
+def test_a_genuinely_healthy_project_still_says_so(tmp_path):
+    """The converse, so the unknown branch cannot become a constant."""
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: p\n  description: d\n")
+    (tmp_path / "tasks" / "task-ok.yaml").write_text(
+        "id: ok\nname: Ok\norder: 0\nphases: []\n")
+
+    write_run_context(tmp_path, executed=True)
+    summary = build_context_summary(tmp_path)
+
+    assert "nothing recorded as failing" in summary
+    assert "failure status unknown" not in summary
+
+
+
+def test_the_state_write_is_atomic(tmp_path, monkeypatch):
+    """A kill mid-write must not leave zero bytes the gate calls invalid forever.
+
+    Temp file plus `os.replace`, matching `theteam/core/wal.py:139-150`. Mutating
+    this to a bare `path.write_text` left every other test in this file green,
+    because none of them kill the process mid-write — the property is invisible
+    unless it is asserted directly.
+    """
+    seen = {}
+    real_replace = os.replace
+
+    def spy(src, dst):
+        # The rename is the atomicity: the destination is never opened for
+        # writing, so a reader sees either the old file or the whole new one.
+        seen["replaced"] = (str(src), str(dst))
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", spy)
+    write_run_context(tmp_path, executed=True)
+
+    assert seen.get("replaced"), (
+        "the state file was written in place rather than via a rename, so an "
+        "interrupted write truncates it and every later health check reports it "
+        "invalid with nothing able to repair it")
+
+
+def test_a_deleted_task_is_never_reported_as_failing(tmp_path):
+    """The execution log is history; the registry is the present.
+
+    `task-execution.log` is append-only, so it carries entries for tasks whose
+    YAML was deleted months ago. Measured on this repo: the first version of
+    `_recent_failures` listed `folder-monitoring` and `health-check` under
+    "what is failing", both merged away in M12. Nothing can run a task that has
+    no definition, so that list was fabricated — the same defect class as the
+    unreadable 600s reports this module exists to replace, reintroduced in the
+    replacement.
+    """
+    state_dir = tmp_path / ".omp" / "theteam"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    (state_dir / "task-execution.log").write_text(
+        json.dumps({"task_id": "deleted-task", "success": False,
+                    "error": "returncode 1"}) + "\n"
+        + json.dumps({"task_id": "live-task", "success": False,
+                     "error": "returncode 1"}) + "\n")
+
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "task-live-task.yaml").write_text(
+        "id: live-task\nname: Live\norder: 0\nphases: []\n")
+
+    failures = _recent_failures(tmp_path)
+
+    assert any("live-task" in f for f in failures), (
+        f"a real failing task was dropped: {failures}")
+    assert not any("deleted-task" in f for f in failures), (
+        f"a task with no YAML definition was reported as failing: {failures}")
+
+
+def test_an_unreadable_config_does_not_invent_a_description(tmp_path):
+    """A broken config yields an honest line, not the directory name as prose.
+
+    Falling back to a plausible sentence would be a default that reads like a
+    measurement: a member would treat invented text as the project's stated
+    purpose.
+
+    Two failure modes are checked separately, because they take different
+    branches and a test covering only one passed while the other fallback was
+    replaced with invented prose:
+
+      * a **syntax** error (`project: [not a mapping` never closes the flow
+        sequence), which reaches the `unreadable` branch;
+      * a **shape** error (`project: just-a-string` parses fine but is not a
+        mapping), which reaches the `not a mapping` branch.
+    """
+    (tmp_path / "theteam.config").write_text("project: [not a mapping\n")
+    write_run_context(tmp_path, executed=True)
+    assert "unreadable" in build_context_summary(tmp_path), (
+        "a broken theteam.config produced a summary with no indication that the "
+        "description is missing, so an invented one reads as a real one")
+
+    (tmp_path / "theteam.config").write_text("project: just-a-string\n")
+    assert "not a mapping" in build_context_summary(tmp_path), (
+        "a theteam.config whose project section is a scalar reported neither "
+        "that it was malformed nor what was missing")
+
+    (tmp_path / "theteam.config").write_text("behavior:\n  chat_mode: false\n")
+    assert "no project section" in build_context_summary(tmp_path), (
+        "a config with no project section was reported as if one existed")
+
+    assert "a project" not in build_context_summary(tmp_path)
 
 
 def test_writes_leave_no_temp_file_behind(tmp_path):

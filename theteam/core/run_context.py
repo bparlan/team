@@ -54,6 +54,27 @@ LOOP_STATE_VERSION = 1
 MAX_SUMMARY_BYTES = 8192
 
 
+def _read_failure_types() -> tuple:
+    """Everything reading a project's own files can legitimately raise.
+
+    `YAMLError` is in the tuple rather than caught by name at each site because
+    `yaml.parser.ParserError` and `yaml.scanner.ScannerError` descend from it
+    and from neither `ValueError` nor `OSError` — measured, after a malformed
+    task file escaped a handler that caught only the latter two.
+
+    `TypeError`, `KeyError` and `AttributeError` are here for shape errors: a
+    YAML document that parses to a scalar or a list rather than a mapping
+    raises them on the first `.get`. That is a malformed config, not an unknown
+    one, and it deserves a named message rather than a stack trace.
+    """
+    import yaml
+    return (OSError, ValueError, KeyError, TypeError, AttributeError,
+            yaml.YAMLError)
+
+
+_READ_FAILURES = _read_failure_types()
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -71,7 +92,7 @@ def load_loop_state(project_root: Optional[Path] = None) -> Dict[str, Any]:
         state = json.loads(path.read_text())
         if isinstance(state, dict):
             return state
-    except ValueError:
+    except (json.JSONDecodeError, OSError):
         # A corrupt state file is not a reason to refuse to run. The caller is
         # refreshing it; refusing would leave it corrupt forever. The replacement
         # is written below and the bad file is preserved alongside it.
@@ -151,8 +172,40 @@ def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
     Read from the execution log the repository already writes, rather than by
     opening every schedule. Returns what it can verify and nothing else: a task
     that has never run is absent from this list, not reported as passing.
+
+    Cross-checked against the task registry, and that check is load-bearing.
+    The execution log is append-only history, so it still carries entries for
+    tasks deleted months ago. Measured on this repo: the first version of this
+    function reported `folder-monitoring` and `health-check` as failing, both of
+    which stopped existing when M12 merged them into `project-integrity`. A
+    context file listing two deleted tasks under "what is failing" is a
+    fabricated measurement — the same defect class as the unreadable 600s
+    reports this module replaced, reproduced in the replacement.
+
+    A task with no YAML file cannot be failing, because nothing can run it.
     """
-    log = state_dir(str(project_root) if project_root else None) / "task-execution.log"
+    from theteam.tasks.repository import TaskRepository
+
+    try:
+        known = {t["id"] for t in TaskRepository(project_root).all_tasks()}
+    except _READ_FAILURES as e:
+        # Named failures, not a bare `except Exception`. Swallowing everything
+        # meant one malformed task YAML dropped this section from the summary
+        # entirely, and an absent section reads as "nothing is failing" — the
+        # false-clean defect this phase exists to remove, made reachable by a
+        # syntax error in a file the user may not have touched.
+        #
+        # Measured: a task file with `id: [broken` raises `yaml.parser.
+        # ParserError`, which descends from `YAMLError` and *not* from
+        # `ValueError` or `OSError`, so the first version of this handler let it
+        # escape and crash `build_context_summary` outright.
+        #
+        # The failure is reported as a failure. A reader seeing this knows the
+        # list is unavailable; a reader seeing nothing assumes there is no
+        # problem, which is the opposite of what is known.
+        return [f"could not read the task registry ({type(e).__name__}: {e}) — "
+                f"failure status unknown"]
+    log = state_dir(str(project_root)) / "task-execution.log"
     if not log.exists():
         return []
     failures: Dict[str, str] = {}
@@ -168,11 +221,23 @@ def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
             if entry.get("success"):
                 failures.pop(task_id, None)
             else:
-                failures[task_id] = entry.get("error") or entry.get("skip_reason") or ""
+                failures[task_id] = (entry.get("error")
+                                     or entry.get("skip_reason") or "")
     except OSError:
         return []
-    return [f"{tid}: {reason}" if reason else tid
-            for tid, reason in list(failures.items())[:limit]]
+    live = [(tid, reason) for tid, reason in failures.items() if tid in known]
+    orphans = sorted(set(failures) - known)
+    lines = [f"{tid}: {reason}" if reason else tid
+             for tid, reason in sorted(live)[:limit]]
+    if orphans and not known:
+        # An empty registry with recorded failures is not a clean project — it
+        # is a project whose tasks cannot be read, and the distinction is the
+        # whole point of this function. Measured: emptying `tasks/` produced
+        # "nothing recorded as failing" from a log full of real failures.
+        return [f"no task definitions found, but {len(orphans)} task(s) have "
+                f"recorded failures ({', '.join(orphans[:3])}) — the task "
+                f"registry could not be read, failure status unknown"]
+    return lines
 
 
 def build_context_summary(project_root: Optional[Path] = None) -> str:
@@ -193,6 +258,7 @@ def build_context_summary(project_root: Optional[Path] = None) -> str:
     phase's timeout. Everything is read from state a run produced.
     """
     root = Path(project_root or ".")
+    failures = _recent_failures(root)
     # The header carries the loop state's `last_execution`, not the current
     # time. Stamping "now" made two runs with nothing due differ, which
     # `test_two_runs_with_nothing_due_are_byte_identical` correctly rejects: a
@@ -208,12 +274,22 @@ def build_context_summary(project_root: Optional[Path] = None) -> str:
     lines.append("## what this is")
     lines.append(f"- **{name}**: {description}")
 
-    failures = _recent_failures(root)
     lines.append("")
-    lines.append("## what is failing")
-    if failures:
+    # Both phrasings below mean "not measurable", so they share a heading. Keyed
+    # on a marker rather than an exact sentence so a future reword cannot
+    # silently downgrade "unknown" into a list of failing tasks. Rendering a
+    # "could not read" line as a bullet under "what is failing" would read as a
+    # failing task; rendering nothing would read as clean. Neither is what is
+    # known, so the section says what it could not establish.
+    unknown = any("failure status unknown" in f for f in failures)
+    if unknown:
+        lines.append("## failure status unknown")
+        lines.extend(f"- {item}" for item in failures)
+    elif failures:
+        lines.append("## what is failing")
         lines.extend(f"- {item}" for item in failures)
     else:
+        lines.append("## what is failing")
         lines.append("- nothing recorded as failing")
 
     needs = _open_proposals(root)
@@ -224,25 +300,63 @@ def build_context_summary(project_root: Optional[Path] = None) -> str:
 
     text = "\n".join(lines) + "\n"
     if len(text.encode()) > MAX_SUMMARY_BYTES:
-        # Say so. A silently truncated list reads as a complete one.
+        # Say so. A silently truncated list reads as a complete one, which is
+        # the same defect as a section that vanishes: the reader cannot tell
+        # that what they are missing was cut off rather than never recorded.
         text = (text.encode()[:MAX_SUMMARY_BYTES].decode(errors="ignore")
                 + f"\n\n[truncated at {MAX_SUMMARY_BYTES} bytes]\n")
     return text
 
 
+def _yaml_load(config: Path) -> Optional[Any]:
+    """Parse a YAML file, or raise `OSError` carrying the reason.
+
+    `yaml.YAMLError` does not subclass `ValueError` or `OSError`, so it is named
+    explicitly and re-raised as `OSError` with the original type in the message.
+    Callers then have one failure type to handle, and a `ParserError` from a
+    malformed task file cannot escape a handler that only catches the others.
+    """
+    import yaml
+
+    try:
+        return yaml.safe_load(config.read_text())
+    except (OSError, yaml.YAMLError) as e:
+        raise OSError(f"{type(e).__name__}: {e}") from e
+
+
 def _project_identity(root: Path) -> tuple:
-    """`(name, description)` from `theteam.config`, or honest placeholders."""
+    """`(name, description)` from `theteam.config`, or honest placeholders.
+
+    Every fallback says what is missing rather than filling it with something
+    plausible. A description is prose a member will quote back as the project's
+    stated purpose, and inventing one is the same class of defect as inventing
+    a health score: it reads as a fact and is not one.
+
+    The failure modes are distinguished because they have different fixes: a file
+    that will not parse, a document that is not a mapping, a project section
+    that is a scalar, and a project section that is absent. Measured: a scalar
+    `project:` previously reported "no project section", which is a different
+    defect from the one present and sends a reader to the wrong place.
+    """
     config = root / "theteam.config"
     try:
-        import yaml
-        data = yaml.safe_load(config.read_text()) or {}
-        project = data.get("project") or {}
-        return (project.get("name") or root.name,
-                project.get("description") or "no description recorded")
-    except Exception:
-        # A missing or unparseable config is reported as such rather than
-        # papered over with the directory name presented as a description.
-        return (root.name, "no description recorded (theteam.config unreadable)")
+        data = _yaml_load(config)
+    except OSError as e:
+        return (root.name, f"no description recorded (theteam.config "
+                           f"unreadable: {e})")
+    if data is None:
+        return (root.name, "no description recorded (theteam.config empty)")
+    if not isinstance(data, dict):
+        return (root.name, "no description recorded (theteam.config is not a "
+                           "mapping)")
+    project = data.get("project")
+    if project is None:
+        return (root.name, "no description recorded (no project section)")
+    if not isinstance(project, dict):
+        return (root.name, "no description recorded (theteam.config project "
+                           f"section is a {type(project).__name__}, not a mapping)")
+    return (project.get("name") or root.name,
+            project.get("description") or "no description recorded")
 
 
 def _open_proposals(root: Path, limit: int = 5) -> List[str]:

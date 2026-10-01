@@ -105,6 +105,11 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
     if not hasattr(theteam, PROVIDER):
         return {
             "success": False,
+            # `skip_reason`, not just `error`: the task did not fail, it never
+            # got to run. The executor reads this and declines to count the
+            # attempt, so a machine with no OMP session does not walk three
+            # tasks into a breaker trip that can never be cleared.
+            "skip_reason": "no_task_provider",
             "error": (f"{NO_PROVIDER} (phase '{name}'). Run this inside an OMP "
                       f"session, where a task provider is bound."),
         }

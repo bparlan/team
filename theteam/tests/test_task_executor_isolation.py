@@ -280,7 +280,10 @@ def test_a_read_only_project_mount_blocks_a_write_and_the_writable_flag_allows_i
 
     read_only = executor.execute_phase(dict(phase))
     assert read_only["success"] is False
-    assert "Read-only file system" in read_only["stderr"]
+    # The phase's stderr is merged into stdout so one pipe can carry both in
+    # order, so the kernel's own message arrives there rather than in
+    # `stderr`. What matters is that the reason is present, not which pipe.
+    assert "Read-only file system" in read_only["stdout"]
     assert not marker.exists(), "the read-only mount let a write through"
 
     writable = executor.execute_phase(dict(phase, writable_project=True))

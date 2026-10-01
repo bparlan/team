@@ -176,7 +176,10 @@ def test_five_failures_across_five_runs_then_a_sixth_is_skipped_breaker_open(tmp
         # carries `breaker_open`. M9 Phase 4: an `llm` phase has no
         # returncode, so a failure without a detail recorded "returncode
         # None" — a reason that explained nothing.
-        assert payload["results"] == [
+        # `elapsed` is a measured wall-clock value, so the row is compared on
+        # the fields that are not a timing reading.
+        assert [{k: v for k, v in r.items() if k != "elapsed"}
+                for r in payload["results"]] == [
             {"id": "crasher", "result": "failed", "detail": "returncode 3"}
         ], attempt
         assert _last(root, "crasher")["breaker_consecutive_failures"] == attempt
@@ -188,7 +191,8 @@ def test_five_failures_across_five_runs_then_a_sixth_is_skipped_breaker_open(tmp
     assert payload["ran"] == 0
     assert payload["skipped"] == 1
     assert payload["failures"] == 0
-    assert payload["results"] == [
+    assert [{k: v for k, v in r.items() if k != "elapsed"}
+            for r in payload["results"]] == [
         {"id": "crasher", "result": "skipped", "detail": "breaker_open"}
     ]
     # The reason survives into a later read, not just into this payload.
@@ -285,7 +289,9 @@ def test_a_success_resets_the_consecutive_failure_count(tmp_path, capsys):
     code, payload = _run(root, capsys)
 
     assert code == 0
-    assert payload["results"] == [{"id": "crasher", "result": "ok"}]
+    # `elapsed` is measured, so the row is checked on the fields that are not
+    # a wall-clock reading rather than compared whole.
+    assert [(r["id"], r["result"]) for r in payload["results"]] == [("crasher", "ok")]
     assert _last(root, "crasher")["breaker_consecutive_failures"] == 0
     assert _last(root, "crasher")["breaker"] == "closed"
 
@@ -319,7 +325,7 @@ def test_execute_task_reports_the_breaker_state_and_the_failure_count(tmp_path, 
     `CircuitState.value` and `stats.consecutive_failures`.
     """
     executor = TaskExecutor(str(tmp_path))
-    executor.execute_phase = lambda phase, task=None: {"success": False, "returncode": 3}
+    executor.execute_phase = lambda phase, task=None, on_output=None: {"success": False, "returncode": 3}
     task = {"id": "solo", "phases": [{"name": "boom", "script": "phases/boom.py"}]}
 
     first = executor.execute_task(task)
@@ -340,7 +346,7 @@ def test_execute_task_does_not_run_a_tripped_breaker(tmp_path):
     """
     executor = TaskExecutor(str(tmp_path))
     calls = []
-    executor.execute_phase = lambda phase, task=None: calls.append(phase["name"]) or {
+    executor.execute_phase = lambda phase, task=None, on_output=None: calls.append(phase["name"]) or {
         "success": False, "returncode": 3
     }
     task = {"id": "solo", "phases": [{"name": "boom", "script": "phases/boom.py"}]}

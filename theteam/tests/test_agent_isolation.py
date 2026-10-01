@@ -8,6 +8,7 @@ cannot leak a parent's secrets, and a project mount that is read-only unless a
 caller deliberately asks for writes.
 """
 
+import io
 import subprocess
 
 import pytest
@@ -21,10 +22,19 @@ from theteam.core.agent_isolation import (
 
 
 class _Proc:
-    def __init__(self, returncode=0, stdout="", stderr=""):
+    """A Popen stand-in: a pipe that yields `lines`, then ends."""
+
+    def __init__(self, returncode=0, lines=()):
         self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
+        self.stdout = io.StringIO("".join(lines))
+        self.killed = False
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        self.killed = True
+        self.returncode = -9
 
 
 def test_default_policy_denies_network():
@@ -112,28 +122,101 @@ def test_run_returns_a_result_dict_instead_of_raising():
 
     def runner(argv, **kwargs):
         seen["argv"] = argv
-        return _Proc(returncode=3, stdout="out", stderr="boom")
+        return _Proc(returncode=3, lines=["out\n"])
 
-    iso = AgentIsolation(runner=runner)
-    result = iso.run(["false"], container_name="c1")
+    result = AgentIsolation(runner=runner).run(["false"], container_name="c1")
 
     assert result["success"] is False
     assert result["exit_code"] == 3
-    assert result["stdout"] == "out"
-    assert result["stderr"] == "boom"
+    assert result["stdout"] == "out\n"
     assert result["isolated"] is True
     assert "--rm" in seen["argv"]
 
 
+def test_a_nonzero_exit_keeps_what_the_agent_printed():
+    """stderr is merged into stdout, so a failure still carries its message.
+
+    The merge exists so one pipe can carry both streams in order. It must not
+    cost the caller the text: the log is the only record of why a phase
+    failed, and an empty message reads as "failed for no reason".
+    """
+    def runner(argv, **kwargs):
+        return _Proc(returncode=1, lines=["Traceback (most recent call last):\n",
+                                          "ValueError: boom\n"])
+
+    result = AgentIsolation(runner=runner).run(["false"])
+    assert "ValueError: boom" in result["stdout"]
+
+
 def test_timeout_is_reported_not_propagated():
     """A hung agent must surface as a failure, not hang the orchestrator."""
+    class _Hanging(_Proc):
+        def wait(self, timeout=None):
+            raise subprocess.TimeoutExpired(["sleep", "999"], timeout or 1)
+
     def runner(argv, **kwargs):
-        raise subprocess.TimeoutExpired(argv, 1)
+        return _Hanging(returncode=0, lines=[])
 
     result = AgentIsolation(runner=runner).run(["sleep", "999"])
     assert result["success"] is False
     assert result["exit_code"] == 124
     assert "timeout" in result["stderr"]
+
+
+def test_output_arrives_before_the_process_exits():
+    """The run must be observable while it happens, not only at the end.
+
+    This is the contract the whole change exists for: a long phase used to
+    print nothing at all until it finished, which is indistinguishable from a
+    hang to whoever is waiting. The stub writes to its pipe from a thread with
+    a gap between lines, and the test asserts a line was delivered while the
+    process was still running — a `subprocess.run(capture_output=True)`
+    implementation would deliver everything only after `wait()` returned, and
+    fail this.
+    """
+    import threading
+    import time
+
+    class _Slow(_Proc):
+        def __init__(self):
+            self.returncode = 0
+            self.killed = False
+            self.exited = threading.Event()
+            self.stdout = self
+            self._lines = iter(["first\n", "second\n"])
+
+        def readline(self, *a):
+            try:
+                line = next(self._lines)
+            except StopIteration:
+                return ""
+            time.sleep(0.15)
+            return line
+
+        def close(self):
+            pass
+
+        def wait(self, timeout=None):
+            # The process is still "running" until every line is drained.
+            time.sleep(0.5)
+            self.exited.set()
+            return self.returncode
+
+        def kill(self):
+            self.killed = True
+
+    proc = _Slow()
+    seen_before_exit = []
+    result = AgentIsolation(runner=lambda *a, **k: proc).run(
+        ["slow"], on_output=lambda line: (
+            seen_before_exit.append(line) if not proc.exited.is_set() else None))
+
+    assert result["success"] is True
+    assert "".join(seen_before_exit) == "first\nsecond\n"
+    # Every line was delivered while the process was still running. A
+    # buffered implementation delivers all of them after `wait()` returns and
+    # fails this line, which is what makes the test worth having.
+    assert proc.exited.is_set(), "test is not exercising a real ordering"
 
 
 def test_inherited_env_only_contains_allowlisted_keys(monkeypatch):

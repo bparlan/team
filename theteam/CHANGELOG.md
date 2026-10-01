@@ -9,6 +9,62 @@ roadmap that was never planned. Those entries were removed rather than carried f
 pre-M0 reports they described are preserved in
 `archive/docs-theteam/pre-m0-reports/`, where they are history rather than documentation.
 
+## Task feedback — a run you can watch, and results that mean what they say
+
+Six weeks of `task-execution.log` were read to find why long runs felt like
+hangs. The cause was mechanical: `AgentIsolation.run` used
+`subprocess.run(capture_output=True)`, so a phase's output was buffered in
+full until exit. A 360-second task printed nothing for 360 seconds, which is
+indistinguishable from a hang. Three honesty defects were in the same log.
+
+**Feedback.** `run` now spawns with `Popen` and reads the merged pipe on a
+thread, forwarding each line to a caller-supplied `on_output` as it arrives.
+The thread is load-bearing rather than decorative: reading inline would block
+in `readline`, so the deadline would only be checked between lines and a
+*silent* process would never time out — the exact failure this removes. The
+timeout stays enforced on the main thread via `wait(timeout=...)`; a silent
+process still returns 124 in 1.01s against a 1s bound. Output is bounded by a
+2000-line deque while it grows, and `_truncate` still caps the returned string
+at `MAX_OUTPUT_BYTES`, so the memory guard survives the rewrite.
+
+stderr is now merged into stdout, so `result["stderr"]` is empty unless the run
+timed out. One test asserted the kernel's read-only-mount message in `stderr`;
+it now reads `stdout`. Nothing in production parsed `stderr` to find an error —
+only to forward it — so no message is lost.
+
+`theteam run` now prints each phase's bound *before* starting it, streams its
+output live, reports a measured `elapsed` per task and for the sweep, and
+gains `--dry-run` for the worst-case time without waiting. Live output goes to
+stderr and is suppressed under `--json`, since a machine reading one document
+cannot parse a progress stream mixed into it. `AgentIsolation` no longer logs
+the full `docker run` argv: every `-e` in it is an inherited environment
+value, so the log carried all of them on every run.
+
+**Honesty.** `health-check` was merged into `project-integrity` in M12, but its
+schedule entry survived and fired hourly forever against a task that no longer
+exists. `TaskRepository.purge_orphaned_schedules` now drops such entries on
+every sweep and reports what it purged; `last_run` history is kept, because a
+deleted task still really ran. `orphaned_schedules()` already existed with a
+test and no production caller — this is that caller.
+
+The three `llm` tasks were counted as *failing* when refused for want of an OMP
+session. All three sat at 2–3 consecutive failures, and a trip is permanent
+until something runs green, so a machine with no provider was walking them
+toward a dead breaker. A refusal is now `skip_reason: no_task_provider`:
+reported as skipped, breaker neither advanced nor reset. Verified —
+`ground-truth-audit` stayed at 3 across a fresh skip rather than reaching 4.
+
+`schedule_task` now refuses an interval shorter than the task's own worst-case
+time, naming the value that would work. `system-awareness` was scheduled at
+`interval_minutes: 1` against a 600s bound — 36x overrun, permanently overdue,
+every sweep re-running it. That was self-inflicted and invisible.
+
+Defended by `test_output_arrives_before_the_process_exits`, which fails against
+a buffered implementation because the stub's lines arrive while its `wait()`
+has not returned, and by the existing breaker and history suites, which caught
+two real regressions during the change: the breaker recording was dropped along
+with a duplicated phase loop, and the refusal branch had to move ahead of it.
+
 ## Task survey — five defects found by running things
 
 Evaluating the six registered tasks by executing them, rather than by reading

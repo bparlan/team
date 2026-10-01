@@ -17,6 +17,7 @@ import functools
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import yaml
@@ -411,10 +412,11 @@ def _phase_problem(task, project_root):
             return f"missing script: {phase['script']}"
     return None
 
-
-def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, Any]:
+def run_due_tasks(project_root: str, only: Optional[str] = None,
+                  on_output=None) -> Dict[str, Any]:
     """
     Execute every due task and return the run payload.
+
 
     This is the product's one scheduler. `theteam run` calls it and emits the
     result; `theteam serve` calls it on an interval. It lives here rather than
@@ -435,10 +437,20 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
     # must still be tripped now, or the trip only survives as long as the run
     # that observed it. The repository owns the schedule (Layer 2), so it hands
     # the measured state to the executor (Layer 3) rather than the reverse.
+    # A schedule entry naming a task that no longer exists is never fired —
+    # `due()` walks real tasks — so leaving it is not a correctness bug, it is
+    # a lie in the file: `theteam tasks` and `theteam serve`'s payload both
+    # report it as scheduled. Purged here because this is the one place every
+    # sweep already passes through.
+    purged = repo.purge_orphaned_schedules()
+    # Purge runs before the breaker states are read: `last_run` is kept, so
+    # reading it after the purge sees the same history either way.
     executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
 
+    sweep_started = time.monotonic()
     results = []
     for task in due:
+        phase_started = time.monotonic()
         # Every phase must name exactly one runner, and the named thing must
         # exist. A phase with *neither* is refused here rather than passed to
         # the executor: `runner: llm` is a new kind, and a check that only
@@ -456,9 +468,10 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
             # ago came back `breaker: null` after one skipped run, discarding the
             # five consecutive failures that had opened it.
             repo.record_skip(task["id"], problem)
-            results.append({"id": task["id"], "result": "skipped", "detail": problem})
+            results.append({"id": task["id"], "result": "skipped", "detail": problem,
+                            "elapsed": round(time.monotonic() - phase_started, 2)})
             continue
-        outcome = executor.execute_task(task)
+        outcome = executor.execute_task(task, on_output=on_output)
         breaker = outcome["breaker"]
         consecutive = outcome["breaker_consecutive_failures"]
         if outcome.get("skipped"):
@@ -481,7 +494,8 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
             reason = outcome["skip_reason"]
             repo.record_skip(task["id"], reason, breaker=breaker,
                              consecutive_failures=consecutive)
-            results.append({"id": task["id"], "result": "skipped", "detail": reason})
+            results.append({"id": task["id"], "result": "skipped", "detail": reason,
+                            "elapsed": round(time.monotonic() - phase_started, 2)})
             continue
         ok = outcome["overall_success"]
         # The reason a phase failed, whatever kind it was. `returncode` is
@@ -495,17 +509,22 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
                       or f"returncode {failed.get('returncode')}")
         repo.record_run(task["id"], "ok" if ok else "failed", detail,
                         breaker=breaker, consecutive_failures=consecutive)
-        result = {"id": task["id"], "result": "ok" if ok else "failed"}
+        result = {"id": task["id"], "result": "ok" if ok else "failed",
+                  "elapsed": round(time.monotonic() - phase_started, 2)}
         if detail:
             result["detail"] = detail
         results.append(result)
-
     return {
         # `ran` counts what actually executed. A task with a missing script was
         # due but never ran, so counting it would report work that never happened.
         "ran": sum(1 for r in results if r["result"] in ("ok", "failed")),
         "skipped": sum(1 for r in results if r["result"] == "skipped"),
         "failures": sum(1 for r in results if r["result"] == "failed"),
+        # Measured, not estimated: how long the sweep actually took, and what
+        # it purged. A caller that never learns either cannot tell "nothing was
+        # due" from "everything was due and finished fast".
+        "elapsed": round(time.monotonic() - sweep_started, 2),
+        "purged_orphans": purged,
         "results": results,
     }
 
@@ -525,19 +544,89 @@ def cmd_run(args: argparse.Namespace) -> int:
     if args.only and TaskRepository(project_root).get(args.only) is None:
         return _fail(args, "run --only", f"Task not found: {args.only}")
 
-    payload = run_due_tasks(project_root, only=args.only)
+    if args.dry_run:
+        return _dry_run(args, project_root, only=args.only)
+
+    # Announce the bound before waiting for it. A phase that takes six minutes
+    # used to look identical to one that had hung, because nothing was printed
+    # in either case until the end.
+    for task in TaskRepository(project_root).due(only=args.only):
+        for phase in task.get("phases", []):
+            bound = phase.get("timeout_seconds")
+            if bound and not getattr(args, "json", False):
+                print(f"  {task['id']}/{phase['name']}: up to {bound}s",
+                      file=sys.stderr, flush=True)
+
+    payload = run_due_tasks(project_root, only=args.only,
+                            on_output=_live_reporter(args))
     if not payload["results"]:
         return _emit(args, payload, "nothing due")
-    lines = [f"{r['id']}: {r['result']}" + (f" ({r['detail']})" if r.get("detail") else "")
+    lines = [f"{r['id']}: {r['result']} ({r['elapsed']}s)"
+             + (f" ({r['detail']})" if r.get("detail") else "")
              for r in payload["results"]]
     lines.append(f"{payload['ran']} ran, {payload['skipped']} skipped, "
-                 f"{payload['failures']} failed")
+                 f"{payload['failures']} failed in {payload['elapsed']}s")
+    if payload["purged_orphans"]:
+        lines.append(f"purged {len(payload['purged_orphans'])} schedule entries "
+                     f"for tasks that no longer exist: "
+                     f"{', '.join(payload['purged_orphans'])}")
     # §2.1: a command that exists and failed returns 1. `theteam run` used to
     # return 0 with `failures: N` in the payload, so a shell could not tell a
     # red suite from a green one without parsing JSON. This is a behaviour
     # change for the pre-existing four tasks, and it is the documented one.
     _emit(args, payload, "\n".join(lines))
     return EXIT_ERROR if payload["failures"] else EXIT_OK
+
+
+def _live_reporter(args):
+    """A callback that shows each line as it arrives, or `None` when quiet.
+
+    `None` for `--json`, because a machine reading one document cannot parse a
+    progress stream mixed into it. That is the whole reason this is a
+    callback: the caller decides whether a run is watched or captured.
+    """
+    if getattr(args, "json", False):
+        return None
+
+    def report(line: str) -> None:
+        print(f"    {line.rstrip()}", file=sys.stderr, flush=True)
+
+    return report
+
+
+def _dry_run(args, project_root: str, only=None) -> int:
+    """
+    What would run, and for how long — without running it.
+
+    The bound a task declares is the only duration figure that exists before
+    it runs, so that is what is shown. It is an upper bound, not a prediction,
+    and is labelled as one; a measured average would be a number nobody
+    measured (§3.3).
+    """
+    from theteam.tasks.repository import TaskRepository
+
+    repo = TaskRepository(project_root)
+    due = repo.due(only=only)
+    if not due:
+        return _emit(args, {"dry_run": True, "tasks": []}, "nothing due")
+    tasks = []
+    for task in due:
+        phases = [
+            {
+                "name": p.get("name", "?"),
+                "runner": p.get("runner") or "script",
+                "timeout_seconds": p.get("timeout_seconds", 300),
+            }
+            for p in task.get("phases", [])
+        ]
+        tasks.append({"id": task["id"], "phases": phases,
+                      "worst_case_seconds": sum(p["timeout_seconds"] for p in phases)})
+    lines = [f"{t['id']}: up to {t['worst_case_seconds']}s  —  "
+             + ", ".join(f"{p['name']}({p['runner']},{p['timeout_seconds']}s)"
+                         for p in t["phases"])
+             for t in tasks]
+    lines.append(f"{len(tasks)} task(s) would run; nothing was executed")
+    return _emit(args, {"dry_run": True, "tasks": tasks}, "\n".join(lines))
 
 
 def history_payload(project_root: str, task_id: Optional[str] = None):
@@ -977,6 +1066,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run", help="Execute everything currently due.")
     run.add_argument("--only", help="Run one task id, ignoring the rest.")
+    run.add_argument("--dry-run", action="store_true",
+                     help="Show what would run and its worst-case time; run nothing.")
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
     run.set_defaults(func=cmd_run)

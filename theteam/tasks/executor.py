@@ -126,7 +126,8 @@ class TaskExecutor:
             self.breakers[task_id] = breaker
         return self.breakers[task_id]
 
-    def execute_phase(self, phase: Dict, task: Optional[Dict] = None) -> Dict:
+    def execute_phase(self, phase: Dict, task: Optional[Dict] = None,
+                      on_output=None) -> Dict:
         """
         Run one phase. Two kinds, M9 Phase 4.
 
@@ -214,6 +215,7 @@ class TaskExecutor:
                 # When we supply the writable mount ourselves, passing it too
                 # would mount /workspace twice and Docker rejects the argv.
                 project_root=None if writable else str(self.project_root),
+                on_output=on_output,
             )
         except IsolationError as e:
             return {"success": False, "error": f"Isolation failed: {e}"}
@@ -235,7 +237,7 @@ class TaskExecutor:
             outcome["error"] = f"Phase '{name}' timed out after {timeout}s"
         return outcome
 
-    def execute_task(self, task_def: Dict) -> Dict:
+    def execute_task(self, task_def: Dict, on_output=None) -> Dict:
         task_id = task_def["id"]
         breaker = self._breaker(task_id)
 
@@ -266,12 +268,34 @@ class TaskExecutor:
             }
 
         results = []
+        refusal: Optional[str] = None
         for phase in task_def.get("phases", []):
-            phase_result = self.execute_phase(phase, task_def)
+            phase_result = self.execute_phase(phase, task_def, on_output=on_output)
             phase_result["phase"] = phase["name"]
             results.append(phase_result)
+            if phase_result.get("skip_reason"):
+                refusal = phase_result["skip_reason"]
+                break
             if not phase_result["success"]:
                 break
+
+        if refusal:
+            # The task did not fail — it never got to run. Counting a refusal
+            # against the task meant three `llm` tasks climbed to the breaker
+            # threshold on a machine where they are structurally unrunnable, and
+            # a trip is permanent until something runs green. So the breaker is
+            # neither advanced nor reset: nothing was attempted, so nothing is
+            # counted, and the counter stays where the last real run left it.
+            return {
+                "task_id": task_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "phases": results,
+                "overall_success": False,
+                "skipped": True,
+                "skip_reason": refusal,
+                "breaker": breaker.stats.state.value,
+                "breaker_consecutive_failures": breaker.stats.consecutive_failures,
+            }
 
         overall_success = all(r["success"] for r in results)
         if overall_success:

@@ -274,6 +274,31 @@ class TaskRepository:
             if self.get(task_id) is None
         )
 
+    def purge_orphaned_schedules(self) -> List[str]:
+        """
+        Drop schedule entries whose task no longer exists. Returns what went.
+
+        A renamed or deleted task leaves its schedule entry behind, and an
+        entry that names nothing is worse than no entry: it looks scheduled,
+        so `theteam tasks` reports it and a reader concludes something is
+        running. Nothing fires it — `due()` walks real tasks — so it just
+        accumulates, silently, until someone reads the file.
+
+        `last_run` history is kept. A task that was deleted still ran, and
+        `theteam history` reads that history; dropping it would erase evidence
+        of runs that really happened.
+        """
+        orphans = self.orphaned_schedules()
+        if not orphans:
+            return []
+        schedule = self.schedule()
+        for task_id in orphans:
+            schedule["scheduled_tasks"].pop(task_id, None)
+        self._save_schedule(schedule)
+        _audit(self.project_root, "orphan_schedules_purged", count=len(orphans),
+               ids=orphans)
+        return orphans
+
     def record_run(self, task_id: str, result: str, detail: str,
                    breaker: Optional[str] = None,
                    consecutive_failures: Optional[int] = None) -> None:
@@ -376,6 +401,21 @@ class TaskRepository:
         """
         if self.get(task_id) is None:
             raise KeyError(f"Task '{task_id}' not found")
+        # A task scheduled faster than its own worst-case time can never
+        # finish before it is due again, so the schedule is permanently
+        # overdue and every sweep re-runs it. `system-awareness` was scheduled
+        # at 1 minute against a 600s bound: 36x overrun, silently. Refused with
+        # the number that would work, rather than accepted and left to fight
+        # itself.
+        task = self.get(task_id)
+        worst = sum(int(p.get("timeout_seconds", 300))
+                    for p in task.get("phases", []))
+        if worst and int(interval_minutes) * 60 < worst:
+            raise ValueError(
+                f"interval {interval_minutes}m is shorter than task "
+                f"'{task_id}' can take ({worst}s worst case). Use "
+                f"--interval {max(1, -(-worst // 60))} or more."
+            )
         next_run = _now() + timedelta(minutes=int(interval_minutes))
         schedule = self.schedule()
         schedule["scheduled_tasks"][task_id] = {

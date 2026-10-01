@@ -272,7 +272,7 @@ def test_run_executes_a_due_task_and_advances_its_schedule(tmp_path, capsys):
     assert code == 0
     assert payload["ran"] == 1
     assert payload["failures"] == 0
-    assert payload["results"] == [{"id": "probe", "result": "ok"}]
+    assert [(r["id"], r["result"]) for r in payload["results"]] == [("probe", "ok")]
     # The script really executed, in the container, and its write landed on
     # the host through the writable mount.
     assert (root / "probe-ran.txt").read_text(encoding="utf-8") == "ran"

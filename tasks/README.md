@@ -63,7 +63,8 @@ neither; the executor refuses a phase that names no runner, by name.
 theteam tasks                     # list every task and its state
 theteam run                       # execute everything currently due
 theteam run --only <task-id>      # one task, ignoring the rest (bypasses the schedule)
-theteam loop <id> --interval <s>  # schedule one task to run on an interval
+theteam run --dry-run             # what would run and its worst-case time; runs nothing
+theteam loop <id> --interval <m>  # schedule one task to run on an interval
 theteam serve                     # run due tasks on a tick, publishing /metrics
 theteam history                   # success rate, last run, last failure
 ```
@@ -72,11 +73,52 @@ There is no `theteam --loop start`. The scheduler is `theteam loop` for one
 task and `theteam serve` to run whatever is due.
 
 A task is `not scheduled` until you schedule it, so `theteam run` on a fresh
-clone runs nothing:
+clone runs nothing. `--only <id>` runs a task whether or not it was ever
+scheduled: naming it *is* the request.
+
+### Routine vs on-call
+
+| kind | tasks | how they run |
+|---|---|---|
+| **Routine** | `project-integrity`, `system-awareness`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
+| **On-call** | `ground-truth-audit`, `doc-harmonization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
+
+The three on-call tasks are `runner: llm`. Outside an OMP session they report
+`skipped (no_task_provider)` — a **skip, not a failure**, so they never count
+against the breaker and cannot trip it. Previously each refusal counted, and
+all three were one bad run from a permanent trip they could never clear.
+
+### Watch it run
+
+Phase output is streamed as it arrives, so a long run is no longer a silent
+wait:
 
 ```bash
-theteam loop project-integrity --interval 3600
+theteam run --only system-awareness
+#   system-awareness/analyse and correct: up to 600s      <- the bound, before starting
+#     🔍 STARTING SYSTEM ARCHITECTURE ANALYSIS             <- live, as printed
+#     Phase 1: Project Structure Analysis
+#   ...
+#   system-awareness: ok (362.4s)
+#   1 ran, 0 skipped, 0 failed in 362.4s
 ```
+
+Every result carries a measured `elapsed`. Use `--dry-run` first if you want
+the worst-case time without waiting for it.
+
+### Scheduling guard
+
+An interval shorter than the task's own worst-case time is refused:
+
+```bash
+$ theteam loop system-awareness --interval 1
+theteam loop: interval 1m is shorter than task 'system-awareness' can take
+(600s worst case). Use --interval 10 or more.
+```
+
+Such a task is permanently overdue — it is still running when it comes due
+again — and every sweep re-runs it. That is not a slow schedule; it is a
+schedule that cannot be kept.
 
 ### Running a phase's script directly
 
@@ -115,15 +157,15 @@ Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 | `project-integrity` | **ok** | both phases reported, `rc=0` |
 | `system-awareness` | **ok** — score **0.5545**, grade **D**; five reports + `.loop-state.json` written | artifacts on disk with fresh mtimes; its own `self-check` reports one output missing (below) |
 | `maintenance` | **ok** | single phase, `rc=0` |
-| `ground-truth-audit` | refused by name — requires an OMP session | named refusal, no output written |
-| `doc-harmonization` | refused by name — requires an OMP session | named refusal, no output written |
-| `native-feature-loop` | refused by name — requires an OMP session | named refusal, no output written |
+| `ground-truth-audit` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
+| `doc-harmonization` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
+| `native-feature-loop` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
 
 Run counts and success rates are deliberately absent. They are not stable: every
-re-run changes them, and an earlier draft of this table carried a rate that was
-wrong within the hour — worse than carrying none, because a stale number reads
-as a measurement. `theteam history` reports the live figures; rates there move as
-tasks re-run.
+rerun changes them, and a rate that has not been refreshed reads as current
+when it can be wrong within the hour — worse than carrying none, because a stale
+number looks like a measurement. `theteam history` reports the live figures;
+rates there move as tasks re-run.
 
 **One declared output is never written, and the task reports `ok` anyway.**
 `sa_runner.py` lists five expected outputs in `EXPECTED_OUTPUTS`, one of them

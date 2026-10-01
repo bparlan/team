@@ -29,9 +29,12 @@ import os
 import shlex
 import shutil
 import subprocess
+import threading
+import time
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Callable, Deque, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,12 @@ DEFAULT_ENV_ALLOWLIST = ("PATH", "HOME", "LANG", "LC_ALL", "TZ", "PYTHONPATH")
 # Cap on captured output. An agent that prints in a loop must not exhaust the
 # orchestrator's memory through a captured pipe.
 MAX_OUTPUT_BYTES = 1_000_000
+
+#: Lines kept from a run. `_truncate` still caps the returned string at
+#: `MAX_OUTPUT_BYTES`; this bounds the collection *while* it grows, so a
+#: long-running agent that prints steadily is trimmed from the front rather
+#: than being held whole in memory until exit.
+_OUTPUT_LINES = 2000
 
 
 class IsolationError(RuntimeError):
@@ -151,8 +160,11 @@ class AgentIsolation:
 
     def __init__(self, policy: Optional[IsolationPolicy] = None, runner=None) -> None:
         self.policy = policy or IsolationPolicy()
-        # Injectable so the contract is testable without a daemon.
-        self._run = runner or subprocess.run
+        # Injectable so the contract is testable without a daemon. `runner` is
+        # the *spawner*, not `subprocess.run`: it takes the argv and returns a
+        # Popen-like object with `.stdout`, `.wait()`, `.kill()` and
+        # `.returncode`.
+        self._spawn = runner or subprocess.Popen
 
     @staticmethod
     def available() -> bool:
@@ -177,6 +189,7 @@ class AgentIsolation:
         project_root: Optional[str] = None,
         env: Optional[Dict[str, str]] = None,
         cwd: Optional[str] = None,
+        on_output: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
         """
         Execute `command` in an isolated container.
@@ -184,6 +197,13 @@ class AgentIsolation:
         Returns a result dict rather than raising on a non-zero exit: a failing
         agent is a normal outcome the orchestrator records, not an exception
         that unwinds the loop.
+
+        `on_output` receives each line as it arrives, so a caller can show
+        progress during a run instead of after it. Without it the behaviour is
+        exactly what it always was. The pipe is drained while the process runs:
+        the previous `subprocess.run(capture_output=True)` held every byte in
+        memory until exit, which meant a six-minute task printed nothing for
+        six minutes and looked hung.
         """
         mounts: Dict[str, Dict[str, str]] = {}
         if project_root:
@@ -199,29 +219,100 @@ class AgentIsolation:
             mounts=mounts,
             env=env or self._inherited_env(),
         )
-        logger.info(f"isolated agent run: {shlex.join(argv)}")
+        # The image and the command, not the whole argv: every `-e` in it is an
+        # inherited environment value, and the full line put all of them in
+        # the log on every single run.
+        logger.info(f"isolated agent run: {shlex.join(argv[:1])} ... "
+                    f"{shlex.join(argv[-len(command):])}")
 
+
+        return self._spawn_and_collect(argv, on_output)
+
+    def _spawn_and_collect(
+        self,
+        argv: Sequence[str],
+        on_output: Optional[Callable[[str], None]],
+    ) -> Dict[str, Any]:
+        """
+        Start the container, stream what it prints, and return the result.
+
+        `Popen` rather than `subprocess.run` because the run must be observed
+        while it happens. stdout and stderr are merged onto one pipe and read
+        line by line: two reader threads and two pipes buy an ordering nobody
+        downstream needs, and a merged stream is what a person reading live
+        output wants anyway.
+
+        The reading happens on a thread because the timeout has to keep working
+        when a process says nothing. Reading inline would block in `readline`
+        for the whole run, and the deadline is only ever checked between lines —
+        so a silent hang would never time out, which is the exact failure this
+        change exists to remove.
+
+
+        `MAX_OUTPUT_BYTES` is still a cap, and still the same number. It now
+        bounds a deque of recent lines rather than a string being appended to,
+        so an agent printing in a loop cannot grow the parent's memory — but
+        the tail is kept whole, because the end of a run is the part that
+        explains the run.
+        """
         try:
-            completed = self._run(
-                argv,
-                capture_output=True,
+            process = self._spawn(
+                list(argv),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
                 text=True,
-                timeout=self.policy.timeout_seconds,
+                bufsize=1,
             )
-        except subprocess.TimeoutExpired:
-            # A container that ignores its timeout is killed by `docker run`
-            # only on SIGINT; --rm plus the timeout leaves no artifact behind
-            # either way, but the caller must not hang.
-            logger.error(f"isolated run timed out after {self.policy.timeout_seconds}s")
-            return self._result(124, "", f"timeout after {self.policy.timeout_seconds}s")
         except OSError as e:
             raise IsolationError(f"could not start isolated container: {e}") from e
 
-        return self._result(
-            completed.returncode,
-            _truncate(completed.stdout),
-            _truncate(completed.stderr),
-        )
+        collected: Deque[str] = deque(maxlen=_OUTPUT_LINES)
+
+        def pump() -> None:
+            for line in iter(process.stdout.readline, ""):
+                collected.append(line)
+                if on_output is None:
+                    continue
+                try:
+                    on_output(line)
+                except Exception:
+                    # A broken reporter must not kill the run it is watching.
+                    # The line is still recorded below.
+                    logger.debug("output callback failed", exc_info=True)
+
+        reader = threading.Thread(target=pump, daemon=True)
+        reader.start()
+
+        timed_out = False
+        try:
+            process.wait(timeout=self.policy.timeout_seconds)
+        except subprocess.TimeoutExpired:
+            timed_out = True
+            process.kill()
+            try:
+                # Bounded, because the whole point of this branch is that the
+                # process stopped cooperating. An unbounded wait here would
+                # trade a timeout we can report for a hang we cannot.
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.error("isolated process did not exit after kill")
+        finally:
+            # The pipe closes when the process dies, which ends `readline`, so
+            # joining cannot hang even for a task that never printed a line.
+            reader.join(timeout=5)
+            process.stdout.close()
+
+        output = _truncate("".join(collected))
+        if timed_out:
+            logger.error(f"isolated run timed out after {self.policy.timeout_seconds}s")
+            return self._result(124, output,
+                                f"timeout after {self.policy.timeout_seconds}s")
+        # stderr is deliberately empty. Both streams are merged onto one pipe
+        # so ordering is preserved and only one reader is needed, which means
+        # there is no separate stderr to report. Every line the process wrote
+        # is in `output` — and nothing downstream parsed `stderr` to find an
+        # error, so this reports what happened rather than hiding a message.
+        return self._result(process.returncode, output, "")
 
     def _inherited_env(self) -> Dict[str, str]:
         """Only the allowlisted variables, so secrets are not handed down."""

@@ -77,6 +77,71 @@ curl -s localhost:8080/metrics | head -4   # theteam_tasks_* counters
 kill %1
 ```
 
+## Running the tasks themselves
+
+`smoke_cli.py` proves the commands answer. It does not prove a task *ran* — those are different
+claims, and the second one needs Docker. Run these from the repo root, against this project:
+
+```bash
+# The two containerized script tasks. Both should report result "ok".
+python3 -m theteam.cli --json run --only project-integrity
+python3 -m theteam.cli --json run --only maintenance
+
+# The three LLM tasks. Outside an OMP session each is *skipped*, not failed.
+python3 -m theteam.cli --json run --only ground-truth-audit
+python3 -m theteam.cli --json run --only doc-harmonization
+python3 -m theteam.cli --json run --only native-feature-loop
+```
+
+**`smoke_cli.py` reports which tasks can actually run on your machine.** It reads the two gates
+directly — `AgentIsolation.available()` for Docker, `hasattr(theteam, "default_api")` for the OMP
+provider — and prints a readiness line per task. An unrunnable task is a *named refusal*
+(`refused: needs Docker (no daemon answering)` / `needs a bound OMP provider`), never reported as
+though it ran:
+
+```
+environment: docker=True omp_provider=False
+task                     phases  kinds                      worst   readiness
+project-integrity        2       scr,scr                    600     runnable: runnable here
+maintenance              1       scr                        300     runnable: runnable here
+ground-truth-audit       1       llm                        300     refused: needs a bound OMP provider
+doc-harmonization        1       llm                        300     refused: needs a bound OMP provider
+native-feature-loop      4       llm,llm,scr,llm            1800    refused: needs a bound OMP provider
+```
+
+Read this first. It tells you what the rest of the table can and cannot demonstrate on your box.
+
+Measured on this machine, Docker 28.1.1:
+
+| task | phases | kind | worst case | result |
+|---|---|---|---|---|
+| `project-integrity` | 2 | script ×2 | 600s | `ok` in 0.97s |
+| `maintenance` | 1 | script | 300s | `ok` in 1.53s |
+| `ground-truth-audit` | 1 | llm | 300s | `skipped: no_task_provider` |
+| `doc-harmonization` | 1 | llm | 300s | `skipped: no_task_provider` |
+| `native-feature-loop` | 4 | llm ×3 + script | 1800s | `skipped: no_task_provider` |
+
+**A skip is not a failure.** Outside an OMP session an `llm` task reports
+`skipped` with `detail: no_task_provider`, and the breaker neither advances nor
+resets. That is the M0 rule applied to tasks: no provider is a named absence, not
+a synthesized result. Inside an OMP session the same command runs the member.
+
+**Check `context` in every payload.** Each run reports
+`context: {written: true, context_bytes: N}` — the per-run context file (§5.6). A
+missing `written` means the run happened without leaving the record it is supposed
+to leave, which is the failure mode this whole product is built against.
+
+**A script task needs Docker, and says so by name.** With no daemon,
+`AgentIsolation.available()` returns False and `execute_phase` refuses with
+`container isolation unavailable (no Docker daemon), and an unguarded run is not
+permitted` (`tasks/executor.py:209-212`). It does not fall back to running the
+script on the host. Not reproducible on a Docker-equipped machine — read the
+source, or run the suite, which covers it.
+
+**`worst_case_seconds` is what the schedule guard compares against.** A task whose
+interval is shorter than its worst case is refused at `theteam loop` time
+(see [Schedule integrity](#24-schedule-integrity) in ARCHITECTURE.md).
+
 ## The helper scripts in `theteam/bin/`
 
 Two scripts remain. They are helpers for the skill's config and report generation, not part of

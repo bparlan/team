@@ -750,7 +750,7 @@ missing context section reads as "there was nothing to say".
 
 ## 5.7 Not built, and why
 
-Three items are recorded here rather than left as an undocumented gap. Each was
+Two items are recorded here rather than left as an undocumented gap. Each was
 scoped and then deferred; none is started, and none has a partial implementation
 to be mistaken for finished work.
 

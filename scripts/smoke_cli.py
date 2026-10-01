@@ -23,8 +23,56 @@ import sys
 import tempfile
 from pathlib import Path
 
+from theteam.tasks.repository import TaskRepository
+
 REPO = Path(__file__).resolve().parent.parent
 CLI = [sys.executable, "-m", "theteam.cli"]
+
+
+def task_readiness():
+    """Per-task readiness, and whether it can run on this machine.
+
+    Two independent gates decide it, and neither is inferred:
+
+      * a `script` phase needs Docker (`AgentIsolation.available()`);
+      * an `llm` phase needs a bound OMP provider (`theteam.default_api`).
+
+    A task that cannot run here is reported as a named refusal, which is the
+    same pass condition the command checks use — §3.3. What is NOT done is
+    reporting an unrunnable task as though it had run.
+    """
+    from theteam.core.agent_isolation import AgentIsolation
+    import theteam
+
+    docker = AgentIsolation.available()
+    omp = hasattr(theteam, "default_api")
+    repo = TaskRepository(str(REPO))
+
+    rows = []
+    for task in repo.all_tasks():
+        phases = task.get("phases", [])
+        needs_docker = any(p.get("runner") != "llm" for p in phases)
+        needs_omp = any(p.get("runner") == "llm" for p in phases)
+
+        if not phases:
+            ready, why = False, "no phases"
+        elif needs_docker and not docker:
+            ready, why = False, "needs Docker (no daemon answering)"
+        elif needs_omp and not omp:
+            ready, why = False, "needs a bound OMP provider"
+        else:
+            ready, why = True, "runnable here"
+
+        rows.append({
+            "task": task.get("id"),
+            "phases": len(phases),
+            "kinds": ["llm" if p.get("runner") == "llm" else "script" for p in phases],
+            "worst_case_seconds": repo.worst_case_seconds(task),
+            "runnable_here": ready,
+            "reason": why,
+        })
+    return rows, docker, omp
+
 
 def run(root, *args, expect_json=False):
     """Run one CLI invocation. Returns (ok, detail).
@@ -121,16 +169,27 @@ def main():
                 print(f"{'PASS' if ok else 'FAIL'}  {label:<28} {detail}")
 
         failed = [r for r in results if not r["ok"]]
+
+        rows, docker, omp = task_readiness()
         if args.json:
             print(json.dumps({
                 "passed": len(results) - len(failed),
                 "failed": len(failed),
+                "environment": {"docker": docker, "omp_provider": omp},
+                "task_readiness": rows,
                 "results": results,
             }, indent=2))
         else:
             print(f"\n{len(results) - len(failed)}/{len(results)} passed")
             if failed:
                 print("failed: " + ", ".join(r["check"] for r in failed))
+            print(f"\nenvironment: docker={docker} omp_provider={omp}")
+            print(f"{'task':<24} {'phases':<7} {'kinds':<26} {'worst':<7} readiness")
+            for row in rows:
+                kinds = ",".join(k[:3] for k in row["kinds"])
+                mark = "runnable" if row["runnable_here"] else "refused"
+                print(f"{row['task']:<24} {row['phases']:<7} {kinds:<26} "
+                      f"{row['worst_case_seconds']:<7} {mark}: {row['reason']}")
 
         return 1 if failed else 0
     finally:

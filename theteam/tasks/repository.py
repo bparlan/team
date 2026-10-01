@@ -11,12 +11,17 @@ Tasks are owned by a specific project root.
 """
 
 import json
+import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 import yaml
+
+#: Named after the module rather than the root logger, so a project's log
+#: configuration captures this and nothing else claims it.
+logger = logging.getLogger(__name__)
 
 TASKS_DIRNAME = "tasks"
 SCHEDULE_FILENAME = "task-schedule.json"
@@ -134,6 +139,22 @@ class TaskRepository:
         # `read_task_order` and `_write_task_order` are removed; they read/write
         # the `TASK_ORDER` file, which is now obsolete.
 
+        # Why the last `schedule()` read could not use what was on disk, or
+        # None. Read by the sweep so a lost schedule is reported rather than
+        # showing up as "nothing due" — which reads as a healthy project.
+        self._last_schedule_error: Optional[str] = None
+
+    @property
+    def last_schedule_error(self) -> Optional[str]:
+        """Why the last `schedule()` read discarded what was on disk, or None.
+
+        A caller rendering "nothing due" has to distinguish "nothing is
+        scheduled" from "the schedule could not be read". Without this they are
+        the same string, and the second one means the scheduler has lost
+        everything it knew about.
+        """
+        return self._last_schedule_error
+
     # -- sources -----------------------------------------------------------
 
     def _read_yaml(self) -> Dict[str, Dict[str, Any]]:
@@ -173,9 +194,20 @@ class TaskRepository:
         filled mid-write on some other writer.
 
         The corrupt file is moved aside rather than overwritten, so whatever it
-        held is still available for a human to look at. Returns an empty
-        schedule: the tasks themselves live in YAML, so nothing is lost that
-        cannot be re-scheduled.
+        held is still available for a human to look at.
+
+        Returns an empty schedule *and records that it did*, because returning
+        empty silently is the defect this replaced. Measured: with two overdue
+        tasks on disk, a zero-byte schedule made `theteam run` report `nothing
+        due` — which reads as a healthy project with nothing pending, when in
+        fact the scheduler had lost every task it knew about. §3.3: a result
+        that looks like a measurement of the project's state, and is a
+        measurement of nothing.
+
+        So the caller can see it. `last_schedule_error` carries the reason, and
+        `run_due_tasks` puts it in the payload so the human line names it.
+        Recovery still proceeds rather than raising — a corrupt file must not
+        stop the tool working — but it is never silent.
         """
         empty = {"scheduled_tasks": {}, "last_run": {}}
         path = self._state_path(SCHEDULE_FILENAME)
@@ -185,19 +217,27 @@ class TaskRepository:
             with open(path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
         except (json.JSONDecodeError, OSError) as e:
+            self._last_schedule_error = (
+                f"task-schedule.json was unreadable ({type(e).__name__}: {e}); "
+                f"the schedule is treated as empty until it is rewritten, so no "
+                f"task is due and nothing will run"
+            )
+            logger.warning("%s", self._last_schedule_error)
             try:
                 os.replace(path, f"{path}.corrupt")
-                logger.warning(
-                    "task-schedule.json was unreadable (%s); moved aside to "
-                    "%s.corrupt and continuing with an empty schedule",
-                    e, path)
             except OSError:
-                # Cannot move it either, so it stays. An empty schedule is
-                # still the right answer to read, and the next successful
-                # write will replace it.
+                # Cannot move it aside, so it stays. An empty schedule is still
+                # the right answer to read, and the next successful write
+                # replaces it. The error above is already reported either way.
                 pass
             return empty
+        self._last_schedule_error = None
         if not isinstance(data, dict):
+            self._last_schedule_error = (
+                "task-schedule.json is not a mapping "
+                f"(got {type(data).__name__}); treated as empty, so nothing is due"
+            )
+            logger.warning("%s", self._last_schedule_error)
             return empty
         data.setdefault("scheduled_tasks", {})
         data.setdefault("last_run", {})

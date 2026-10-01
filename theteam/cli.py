@@ -550,6 +550,9 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         "elapsed": round(time.monotonic() - sweep_started, 2),
         "purged_orphans": purged,
         "repaired_schedules": repaired,
+        # Read *after* the purge and the repair, so it reflects the last read
+        # actually made rather than the state before this sweep touched it.
+        "schedule_error": repo.last_schedule_error,
         "results": results,
         # Every `theteam run` refreshes the state the project-integrity gate
         # reads and writes the context members are handed. This replaced the
@@ -608,6 +611,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     payload = run_due_tasks(project_root, only=args.only,
                             on_output=_live_reporter(args))
     if not payload["results"]:
+        # "nothing due" and "the schedule could not be read" are the same
+        # string unless something distinguishes them. Measured: two overdue
+        # tasks on disk, a zero-byte schedule, and `theteam run` reported
+        # `nothing due` — reading as a healthy project when in fact the
+        # scheduler had lost everything it knew. §3.3, in the recovery path of
+        # a fix for §3.3.
+        schedule_error = payload.get("schedule_error")
+        if schedule_error:
+            return _fail(args, "run", schedule_error)
         return _emit(args, payload, "nothing due")
     lines = [f"{r['id']}: {r['result']} ({r['elapsed']}s)"
              + (" (findings)" if r.get("findings") else "")

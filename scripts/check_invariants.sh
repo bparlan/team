@@ -60,11 +60,18 @@ else
 fi
 
 # 5. No .mp/theteam references outside the DEAD_DIR guard and its test.
+#
+# Matched on the *text after the line number*, not on `file:line:text`. Pinning
+# the line number meant that adding one import above the guard broke the gate —
+# measured, adding `import logging` moved it from 29 to 34 and check 5 failed
+# with nothing wrong in the code it guards. A guard that fires on unrelated
+# edits trains the reader to ignore it.
 hits=$(grep -rn "\.mp/theteam" theteam/ --include="*.py" 2>/dev/null)
-allowed="theteam/tasks/repository.py:29:DEAD_DIR = \".mp/theteam\""
-allowed2="theteam/tasks/repository.py:53:    # Reject paths that reference the deleted .mp/theteam directory,"
-allowed3="theteam/tests/test_task_repository.py"
-unwanted=$(echo "$hits" | grep -vF "$allowed" | grep -vF "$allowed2" | grep -vF "$allowed3")
+allowed_guard='DEAD_DIR = ".mp/theteam"'
+allowed_comment='# Reject paths that reference the deleted .mp/theteam directory,'
+allowed_test="theteam/tests/test_task_repository.py"
+unwanted=$(echo "$hits" | grep -vF "$allowed_test" | sed 's/^[^:]*:[0-9]*://' \
+  | grep -vF "$allowed_guard" | grep -vF "$allowed_comment")
 if [ -z "$unwanted" ]; then
   echo "check 5 PASS: .mp/theteam only in the DEAD_DIR guard and its test"
 else

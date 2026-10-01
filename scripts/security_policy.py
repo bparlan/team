@@ -12,13 +12,18 @@ import yaml
 import sys
 from pathlib import Path
 
+# Resolved from this file, not from $PWD: a task script can be invoked
+# from anywhere, and the hardcoded developer-home path this replaced
+# resolved to a home directory on every machine that was not that one.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 class SecurityPolicy:
     """Validates tasks against security policy rules."""
     
     def __init__(self, policy_file=None):
         if policy_file is None:
             # Look for policy file in task archive
-            archive_dir = os.path.expanduser("~/devcode/team/tasks")
+            archive_dir = os.path.join(PROJECT_ROOT, "tasks")
             policy_file = os.path.join(archive_dir, "SECURITY_POLICY.yaml")
         
         self.policy_file = policy_file
@@ -156,7 +161,7 @@ def main():
             sys.exit(1)
         
         task_name = sys.argv[2]
-        task_file = os.path.expanduser(f"~/devcode/team/tasks/task-{task_name}.md")
+        task_file = os.path.join(PROJECT_ROOT, "tasks", f"task-{task_name}.md")
         
         if not os.path.exists(task_file):
             print(f"Task file not found: {task_file}")

@@ -11,6 +11,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
 class LoopState:
     """Manages loop execution state."""
     
@@ -42,7 +44,7 @@ class LoopState:
             "failed_tasks": [],
             "blocked_tasks": [],
             "last_execution": None,
-            "task_archive": "~/devcode/team/tasks",
+            "task_archive": "tasks",
             "total_tasks": 0,
             "next_activation": None,
             "created_at": datetime.now(timezone.utc).isoformat(),

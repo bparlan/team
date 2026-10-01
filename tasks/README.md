@@ -131,21 +131,68 @@ provider bound to verify.
 phase reported `ok` while writing nothing. Acceptance for a writing phase is
 *artifact on disk*, checked after the run.
 
-## Is each task project agnostic?
+## Project portability, measured
 
-No. Measured, not assumed:
+Two questions, answered by grep and by running the code rather than by reading
+the table above.
 
-| task | project agnostic? | why |
+### Hardcoded developer paths
+
+Five scripts carried `~/devcode/team/...`. `check_invariants.sh` check 3 scanned
+`theteam/` only, so none of them tripped it — the guard existed and pointed at
+the wrong tree.
+
+| site | was | now |
 |---|---|---|
-| `project-integrity` | **partly** | `REQUIRED_DIRS`/`SCRIPTS`/`CONFIGS` name *this* repo's layout. Portable only to a repo shaped like this one. |
-| `system-awareness` | **yes, after this change** | detected `theteam/core` by name, and wrote into `<root>/theteam/reports`, which existed only here. Both fixed and tested. |
-| `maintenance` | **yes** | operates on `__pycache__`, `*.pyc`, `.loop-log` — conventions, not this project. |
-| `ground-truth-audit` | **no** | its prompt names `README.md`, `ARCHITECTURE.md`, `theteam/*.md`, `scripts/check_invariants.sh` explicitly. |
-| `doc-harmonization` | **yes** | consumes the audit's output path only. |
-| `native-feature-loop` | **yes** | the prompt asks what exists and names no path of this project's. |
+| `sa_runner.py:236` | `"~/devcode/team/tasks"` default state value | `"tasks"` |
+| `security_policy.py:26,164` | `os.path.expanduser("~/devcode/team/tasks")` | `os.path.join(PROJECT_ROOT, "tasks")` |
+| `task_executor.py:31` | `os.path.expanduser(...)` | `os.path.join(project_root, "tasks")` |
+| `loop_state.py:45` | `"~/devcode/team/tasks"` default state value | `"tasks"` |
 
-Every script resolves `PROJECT_ROOT` from `Path(__file__).resolve().parent.parent`,
-so no absolute path is baked in. The coupling is in *what they check*, not *where they run*.
+The two default-state values were a different defect from the two resolution
+sites. A resolution site *uses* the path, so on any other machine it pointed at
+a developer's home directory. A default state value is only written when
+`.loop-state.json` is absent, and nothing reads the field — so it was a latent
+wrong value rather than a live one. Both are recorded as project-relative now.
+
+Check 3 now scans `theteam/` **and** `scripts/`. Verified by mutation: adding
+one hardcoded path to `scripts/loop_health_check.py` turns the gate red.
+
+**Scope of that fix, stated honestly.** Every script that a *task actually runs*
+now resolves its own root from `__file__`. Two of the four fixed sites are in
+`security_policy.py` and `task_executor.py`, which nothing imports — so those
+two were unreachable rather than live, and correcting them changed no
+execution path. `loop_state.py` and `loop_reporter.py` still use
+`os.getcwd()` and are still orphans. The gate now covers `scripts/`, so a new
+hardcoded path fails the build; it does not prove the orphan scripts are
+reachable, and they are not.
+
+### Orphan scripts
+
+1003 lines across four scripts that no task invokes and nothing in `theteam/`
+imports:
+
+| script | lines | real importers | state |
+|---|---|---|---|
+| `sa_runner.py` | — | 2, both **tests** | live — a task runs it |
+| `security_policy.py` | 187 | 0 | orphan |
+| `task_executor.py` | 265 | 0 | orphan, **and broken** |
+| `loop_state.py` | 401 | 0 | orphan |
+| `loop_reporter.py` | 150 | 0 | orphan |
+
+`task_executor.py` cannot even be imported: it does `from task_archive import
+TaskArchive`, and `task_archive.py` was deleted in M0. Confirmed by stashing my
+edit — it failed identically before it.
+
+`CHANGELOG.md:971` recorded `loop_reporter.py` and `task_executor.py` as
+imported-by-nothing. **That still holds** — and the check it records was
+correct. What the entry did not know is that `loop_state.py` and
+`security_policy.py` are in the same state: 588 more lines, also imported by
+nothing.
+
+Left in place. They are operator tooling, and the one protection worth keeping
+was already ported out of the deleted variant. But the honest count is four
+orphans, not two.
 
 ## Are they self-sufficient?
 
@@ -199,9 +246,11 @@ Both are recorded, not fixed — see *Deliberate gaps* below.
 
 - No `depends_on:` field. Exactly one handoff exists between `llm` phases; a
   general mechanism for one case is the abstraction this repo keeps rejecting.
-- `scripts/loop_reporter.py` and `scripts/loop_state.py` have zero task
-  importers and use `os.getcwd()` rather than `__file__`. Operator tooling, not
-  tasks — left in place.
+- Four orphan scripts totalling 1003 lines — `security_policy.py`,
+  `task_executor.py`, `loop_state.py`, `loop_reporter.py` — imported by nothing,
+  one of them unable to import at all. `loop_state.py` and `loop_reporter.py`
+  still resolve from `os.getcwd()` rather than `__file__`. Operator tooling,
+  left in place; see *Orphan scripts*.
 - `.loop-state.json` carries two `last_execution` fields, one nested and
   current, one top-level and frozen. Both stores agree on score and grade.
   Pre-existing, outside the fixes above.

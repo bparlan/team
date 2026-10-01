@@ -95,7 +95,7 @@ def session_slug(project_root: str) -> str:
     except ValueError:
         relative = root.as_posix()
     # OMP prefixes the home-relative path with a leading dash. Measured on
-    # this machine: a project at ~/devcode/team lands in `-devcode-team`,
+    # this machine: a project under the developer home lands in `-devcode-team`,
     # not `devcode-team`. Without the dash the reader looks in a directory
     # that does not exist and reports no_session against a live session.
     return "-" + relative.replace("/", "-")

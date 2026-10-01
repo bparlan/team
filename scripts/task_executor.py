@@ -12,6 +12,11 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
+
+# Resolved from this file, not from $PWD: a task script can be invoked
+# from anywhere, and the hardcoded developer-home path this replaced
+# resolved to a home directory on every machine that was not that one.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from datetime import datetime, timezone
 
 # Add current directory to path for imports
@@ -28,7 +33,7 @@ class TaskExecutor:
         if project_root is None:
             project_root = os.getcwd()
         self.project_root = project_root
-        self.archive = TaskArchive(os.path.expanduser("~/devcode/team/tasks"))
+        self.archive = TaskArchive(os.path.join(project_root, "tasks"))
         self.state = LoopState(os.path.join(project_root, ".loop-state.json"))
     
     def execute_task(self, task_name):

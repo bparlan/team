@@ -17,7 +17,7 @@ degrades to no guard is not a guard.
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -90,12 +90,39 @@ class TaskExecutor:
                 task_id,
                 CircuitBreakerConfig(failure_threshold=5),
             )
-            measured = self.breaker_states.get(task_id, {}).get(
-                "breaker_consecutive_failures"
-            )
+            stored = self.breaker_states.get(task_id, {})
+            measured = stored.get("breaker_consecutive_failures")
             if isinstance(measured, int) and not isinstance(measured, bool):
                 for _ in range(max(0, measured)):
                     breaker.record_failure()
+                # Replaying the failures re-derives the count and the state, but
+                # `record_failure` also stamps `recovery_deadline = now + 60s` --
+                # so the deadline is measured from *this process*, every time.
+                # Since a CLI invocation lives milliseconds and `serve` rebuilds
+                # the executor on every tick, the window could never elapse: the
+                # breaker reopened on each attempt and the task was permanently
+                # unrunnable. Observed: `system-awareness` at 0.0% over 5 runs,
+                # skipped `breaker_open` on every attempt, including a 140s
+                # `serve` with a 20s tick.
+                #
+                # `at` is the moment the failures were actually recorded and is
+                # already persisted, so the deadline is restored from it rather
+                # than recomputed. Once the real window has passed,
+                # `_evaluate_state` admits a probe exactly as it would have for
+                # an in-process breaker.
+                tripped_at = stored.get("at")
+                if breaker.stats.state.value == "open" and tripped_at:
+                    try:
+                        when = datetime.fromisoformat(str(tripped_at))
+                    except (TypeError, ValueError):
+                        when = None
+                    if when is not None:
+                        if when.tzinfo is None:
+                            when = when.replace(tzinfo=timezone.utc)
+                        breaker.stats.recovery_deadline = when + timedelta(
+                            seconds=breaker.config.recovery_timeout
+                        )
+                        breaker._evaluate_state()
             self.breakers[task_id] = breaker
         return self.breakers[task_id]
 

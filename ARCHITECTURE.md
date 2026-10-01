@@ -692,7 +692,7 @@ mid-loop named imports, not validation; that pointer was stale.
 
 One directory: `.omp/theteam/` under the project root. `.mp/theteam/` is migrated and deleted.
 
-All resolution goes through one function in `theteam/state.py`, which takes an explicit `project_root`. There is no default and no module-level constant — the current hardcoded paths are absolute literals and `parents[N]` expressions that resolve correctly in this repo and point at the `theteam` checkout everywhere else.
+All resolution goes through one function in `theteam/state.py`, which takes an explicit `project_root`. There is no default and no module-level constant. The earlier layout's hardcoded absolute literals and `parents[N]` expressions are gone, and §7.2 invariants 3 and 4 now gate their absence (`scripts/check_invariants.sh` checks 3 and 4, both passing).
 
 ```
 .omp/theteam/
@@ -716,10 +716,13 @@ resolver is real, and marked here because a state entry with no producer is the
 shape a decision channel would take when it lands. Do not read its presence as a
 feature.
 
-Every name above but one is one `theteam/state.py` resolves. The exception is
+Every name above but two is one `theteam/state.py` resolves. The exceptions:
 `wal.json`, which `UnifiedStateManager` places beside `state.json`
 (`state_manager._wal_path_for`) because it is written through `WriteAheadLog`
-(`core/wal.py`), not through `StateStore`. The list is not exhaustive:
+(`core/wal.py`); and `context.md`, which `run_context.write_run_context()` builds
+from `state_dir()` (`core/run_context.py:433`) rather than from a `StateStore`
+property — `theteam/state.py` defines no `context` name at all. The list is not
+exhaustive:
 `StateStore` also resolves `tasks_dir`, `events_dir`, `members`, `discussions`,
 `task_stack`, `task_daemon_status`, `task_daemon_pid` and `tool_manifest`, and
 those are omitted here because this section is about the core layout, not a
@@ -743,7 +746,7 @@ resolver and the component's name wins). The execution log is bounded by
 `EXECUTION_LOG_MAX_LINES` in `tasks/executor.py`, not by `ResourceLimiter`, which
 is a counter registry with no file retention path.
 
-Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, **5** of `parents[`, **7** of `.mp/theteam`, **3** of `MockAPI` in `theteam/**/*.py`. The roadmap claimed four paths. It is seven.
+Measured baseline before the removal work: **7** occurrences of `/Users/bparlan`, **5** of `parents[`, **7** of `.mp/theteam`, **3** of `MockAPI` in `theteam/**/*.py`. The roadmap claimed four paths; it was seven. Measured now, in `theteam/**/*.py`: **0**, **0**, **4**, **3**. The `.mp/theteam` and `MockAPI` hits are the `DEAD_DIR` guard (§7.2 invariant 5) and three docstring mentions respectively; the first two are zero and are gated by §7.2 invariants 3 and 4.
 
 ## 5.6 Per-run context
 

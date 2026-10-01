@@ -67,16 +67,22 @@ all four, where the same load previously produced failures every run.
 
 A fifth, found while checking the table's own claims rather than by looking for
 one: `system-awareness` reports `ok` while never writing one of the five outputs
-it declares. `EXPECTED_OUTPUTS` lists `infrastructure_report`, and
-`write_infrastructure_report` is called — but only under
-`_update_state_with_improvement`'s `improvement > 0` branch
-(`scripts/sa_runner.py:574`). A run with `improvement == 0` takes the `pass`
-branch next to it and the writer is never reached. Confirmed by two runs: the
-other five reports land with fresh mtimes, `infrastructure_report.json` is absent
-both times, exit 0, task `ok`. The script's own `self-check` reports the missing
-output as `"healthy": false` while the exit code the executor reads says
-success — the in-script checks are more honest than the result. Recorded, not
-fixed.
+it declares. `EXPECTED_OUTPUTS` names `infrastructure_report`;
+`write_infrastructure_report` (`scripts/sa_runner.py:201`) has exactly one call
+site, line 574, inside `_update_state_with_improvement`. The self-correct write
+path is `_run_correction_cycle` (lines 437-443), which writes five reports and
+never calls it. The `improvement` branches are not the cause — an earlier note
+here blamed `improvement == 0`, which is wrong: `_evaluate_health_improvement`
+returns `1` for a non-empty result set, so that function is reached in
+principle. The writer is simply not on the path that runs.
+
+Confirmed by two runs: the five reports the cycle does write land with fresh
+mtimes, `infrastructure_report.json` is absent both times, exit 0, task `ok`.
+Calling the writer directly produces the file, so it is uncalled rather than
+broken. The script's own `self-check` reports the missing output as
+`"healthy": false` while the exit code the executor reads says success — the
+in-script checks are more honest than the result. Recorded, not fixed; the fix
+is one line in `_run_correction_cycle`.
 
 ## M9 Phase 1 — Wire the selector
 

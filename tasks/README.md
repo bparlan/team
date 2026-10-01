@@ -127,18 +127,30 @@ tasks re-run.
 
 **One declared output is never written, and the task reports `ok` anyway.**
 `sa_runner.py` lists five expected outputs in `EXPECTED_OUTPUTS`, one of them
-`infrastructure_report`. `write_infrastructure_report` exists and *is* called —
-but only inside `_update_state_with_improvement`'s `improvement > 0` branch
-(`scripts/sa_runner.py:574`). A run whose improvement is `0` takes the `pass`
-branch beside it, so the writer is never reached. Confirmed by running it twice:
-the other five reports land with fresh mtimes, `infrastructure_report.json` is
-absent both times, the phase exits 0 and the task reports `ok`.
+`infrastructure_report`. The writer exists (`scripts/sa_runner.py:201`) and has
+exactly one call site — line 574, the last statement of
+`_update_state_with_improvement`. But the self-correct write path is
+`_run_correction_cycle` (lines 437-443), which writes health, team summary,
+architecture, documentation and optimization and simply never calls
+`write_infrastructure_report`. So `EXPECTED_OUTPUTS` names an output the cycle
+does not produce. The `improvement` branches are not the cause: an earlier draft
+of this note blamed the `improvement == 0` branch, which is wrong —
+`_evaluate_health_improvement` returns `1` for a non-empty result set, so
+`_update_state_with_improvement` is reached in principle. The writer is simply
+not on the path that runs.
+
+Confirmed by running it twice: the five reports `_run_correction_cycle` does
+write land with fresh mtimes, `infrastructure_report.json` is absent both times,
+the phase exits 0, and the task reports `ok`. Calling
+`write_infrastructure_report` directly produces the file, so the writer is not
+broken — it is uncalled.
 
 This is the §3.3 shape again, one level up: the checks *inside* the script are
-more honest than the exit code the executor reads. Recorded, not fixed — the fix
-is to write the reports on the `improvement == 0` path too, or to drop
+more honest than the exit code the executor reads — `self-check` reports the
+missing output as `"healthy": false` while the phase returns success. The
+minimal fix is to add one line to `_run_correction_cycle` (or drop
 `infrastructure_report` from `EXPECTED_OUTPUTS` so the self-check stops
-reporting an output nothing produces on this path.
+reporting an output this path never produces). Recorded, not fixed.
 
 What is worth recording is which failures were *real*, because a rate cannot
 distinguish "this task is broken" from "this task has never been run since it

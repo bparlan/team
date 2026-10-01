@@ -10,7 +10,8 @@
 | Delivery order | Part 6, the seven milestones this diagram can render | `diagrams/active-usage-milestones.html` |
 
 > **The milestone diagram cannot currently be regenerated, and the reason is the tool, not
-> the content.** The committed `.html` and `.json` are a consistent pair of seven milestones,
+> the content.** The committed `.json` carries eleven milestones (`m0`–`m10`); the committed
+> `.html` renders seven (`m0`–`m6`), so the pair is out of sync, and `archify validate workflow`
 > and `archify validate workflow` now **fails on that committed source as-is**:
 > `composition/desktop-readability`, with a `viewBox` of 1691×528 that projects node text to
 > 11.9px against a 6px floor — a projection that should pass, which is why this is treated as
@@ -789,11 +790,11 @@ permission drifts toward the looser one.
 
 # Part 6 — Delivery Order
 
-Nine milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real. M7 and M8 shipped before M9 was written and are recorded in `theteam/CHANGELOG.md`; both were documentation audits rather than new capability, so neither has a section here.
+Eight milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real. M7 and M8 shipped before M9 was written and are recorded in `theteam/CHANGELOG.md`; both were documentation audits rather than new capability, so neither has a section here. M10, M11 and M12 are recorded in `theteam/CHANGELOG.md` and have no section here either.
 
 The ordering rule: **at every intermediate commit, all registered tasks still execute.** It was
 originally written as "all four existing tasks", counting the pre-M2 registry; the YAML repository
-carries six, so the count is now taken from `TaskRepository` rather than asserted here.
+carries five, so the count is now taken from `TaskRepository` rather than asserted here.
 
 **The rule was never met, and the recorded history says so.** `task-execution.log` shows
 `project-integrity` 0/2 and `health-check` 0/3 across every run it holds — two tasks failing on

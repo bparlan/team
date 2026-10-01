@@ -13,7 +13,6 @@ that behaviour exposes.
 | id | order | kind | what it does |
 |---|---|---|---|
 | `project-integrity` | 0 | 2 scripts | directories, configs (parsed, not just present), scripts, tools, Python version, loop-state existence and parseability |
-| `system-awareness` | 2 | script | 4-phase analysis (structure, documentation, architecture, infrastructure) with health scoring |
 | `maintenance` | 3 | script | cache cleaning, log rotation, temp-file cleanup |
 | `ground-truth-audit` | 5 | llm | reports where a documented claim is contradicted by the code |
 | `doc-harmonization` | 6 | llm | consumes the audit, makes the documents true |
@@ -21,7 +20,7 @@ that behaviour exposes.
 
 `order` is the task's own `order:` field, and the gaps are deliberate — an
 order is a position, not a rank, so removing a task does not renumber the rest.
-`theteam tasks` displays the *sequence position* (0-5 here) rather than the
+`theteam tasks` displays the *sequence position* (0-4 here) rather than the
 field, which is why the two differ.
 
 ## Task format
@@ -88,8 +87,7 @@ scheduled: naming it *is* the request.
 
 | kind | tasks | how they run |
 |---|---|---|
-| **Routine** | `project-integrity`, `system-awareness`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
-| **On-call** | `ground-truth-audit`, `doc-harmonization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
+| **Routine** | `project-integrity`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
 
 The three on-call tasks are `runner: llm`. Outside an OMP session they report
 `skipped (no_task_provider)` — a **skip, not a failure**, so they never count

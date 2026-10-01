@@ -113,7 +113,7 @@ Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 | id | observed result |
 |---|---|
 | `project-integrity` | **ok** |
-| `system-awareness` | **ok** — reports written, `.loop-state.json` fresh, grade computed |
+| `system-awareness` | **ok** — score **0.5545**, grade **D**, six reports + `.loop-state.json` written |
 | `maintenance` | **ok** |
 | `ground-truth-audit` | refused by name — requires an OMP session |
 | `doc-harmonization` | refused by name — requires an OMP session |
@@ -130,6 +130,34 @@ provider bound to verify.
 **Exit code is not evidence on its own.** One defect below shipped green: a
 phase reported `ok` while writing nothing. Acceptance for a writing phase is
 *artifact on disk*, checked after the run.
+
+### The circuit breaker, and a bug it was hiding
+
+Each task has a breaker that opens after **5 consecutive failures**. While open,
+the task is skipped with the literal `breaker_open` and is **not** counted
+against itself — so the trip persists until something actually runs green.
+State lives in `.omp/theteam/task-schedule.json` and outlives the process.
+
+`system-awareness` was found at 0.0% over 5 runs, skipping `breaker_open` every
+time — permanently unrunnable. Root cause: `TaskExecutor._breaker` reconstructs
+the breaker per process and replays `record_failure()` N times, and replaying
+re-stamps `recovery_deadline = now + 60s`. The window was therefore measured
+from **process start**, not from the original failure. A CLI invocation lives
+milliseconds and `serve` rebuilds the executor every tick, so neither could ever
+hold the window open. Proved by measurement: a 140-second
+`serve --tick-seconds 20` logged `closed -> open` on every tick and ran the task
+zero times.
+
+Fixed by restoring the deadline from `last_run[task_id].at` — already persisted
+— rather than recomputing it. Defended by `test_breaker_recovery_window.py`.
+
+**What the breaker had been hiding:** with it admitting the task again,
+`system-awareness` still failed — `timed out after 300s`. The remembered
+failures were OOM-kills from before the 384MB bound landed, but under them was a
+second defect: the analysis takes **117s bare on the host and ~360s inside the
+executor container** (single CPU, pid limit, read-only rootfs). `timeout_seconds`
+is now 600, measured. The bare-host number is the trap — it says nothing about
+where the phase actually runs.
 
 ## Project portability, measured
 
@@ -254,3 +282,17 @@ Both are recorded, not fixed — see *Deliberate gaps* below.
 - `.loop-state.json` carries two `last_execution` fields, one nested and
   current, one top-level and frozen. Both stores agree on score and grade.
   Pre-existing, outside the fixes above.
+- `project-integrity` reads 75% over 8 runs. The 2 failures are both from
+  before the M12 fix and neither has recurred in 6 consecutive passes since.
+  Cause read from the execution log, not guessed: phase 2 returned
+  `FAIL: Required tool not found in PATH: git`, because `git` was in
+  `REQUIRED_TOOLS` and is not visible inside the isolation container.
+  `REQUIRED_TOOLS` is now `["python3"]`. Verified by running the task — passes.
+- No command resets a tripped breaker, and `breaker_open` is the only reason
+  recorded once a breaker trips — so the *original* failure is lost from the
+  schedule. A single `last_run` entry per task cannot hold both. The 60s
+  recovery window itself does clear on its own, and now clears under repeated
+  invocation: skips go through `record_skip`, which preserves `at`, so a retry
+  loop or a fast `serve` tick can no longer re-anchor the countdown. Both were
+  measured — before, every skip pushed the deadline a further 60s out and the
+  breaker could never recover.

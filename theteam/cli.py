@@ -447,7 +447,15 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
         # forbids. M9 Phase 4.
         problem = _phase_problem(task, project_root)
         if problem:
-            repo.record_run(task["id"], "skipped", problem)
+            # Also a skip, and the same rule applies: `at` is not restamped and
+            # the breaker reading is not invented. This branch used to call
+            # `record_run` with no breaker arguments, which wrote `at = now` and
+            # `breaker: null` — so a task that was genuinely open went from
+            # "tripped at T, recovering" to "never measured" the first time it
+            # was also misconfigured. Reproduced: a task seeded open 10 minutes
+            # ago came back `breaker: null` after one skipped run, discarding the
+            # five consecutive failures that had opened it.
+            repo.record_skip(task["id"], problem)
             results.append({"id": task["id"], "result": "skipped", "detail": problem})
             continue
         outcome = executor.execute_task(task)
@@ -457,9 +465,22 @@ def run_due_tasks(project_root: str, only: Optional[str] = None) -> Dict[str, An
             # §3.2: the reason is the literal `breaker_open`, and it is
             # persisted so `theteam tasks` and `theteam history` still show it
             # in a later process.
+            #
+            # `at` is deliberately NOT refreshed here. A skip is not a failure —
+            # the code above says so and does not count it against the task — so
+            # it must not restamp the moment the failures were recorded. It did:
+            # `record_run` writes `at = now`, and the breaker anchors its recovery
+            # window to `at`, so any retry faster than the 60s window re-stamped
+            # it and re-anchored the countdown. A `while ! ok; do theteam run
+            # --only <id>; done` loop, or a `serve --tick-seconds 30`, would have
+            # kept an open breaker open forever. The window is anchored to the
+            # failure that opened it and to nothing else.
+            #
+            # Only the reason and the breaker reading change, and both are what a
+            # later process needs to explain why nothing ran.
             reason = outcome["skip_reason"]
-            repo.record_run(task["id"], "skipped", reason, breaker=breaker,
-                            consecutive_failures=consecutive)
+            repo.record_skip(task["id"], reason, breaker=breaker,
+                             consecutive_failures=consecutive)
             results.append({"id": task["id"], "result": "skipped", "detail": reason})
             continue
         ok = outcome["overall_success"]

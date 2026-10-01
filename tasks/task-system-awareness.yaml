@@ -25,7 +25,17 @@ phases:
   - name: analyse and correct
     script: scripts/sa_runner.py
     args: ["self-correct"]
-    timeout_seconds: 300
+    # Was 300, which this phase cannot finish in. Measured: 117s bare on the
+    # host, ~360s through the executor's container (single CPU, pids-limit 256,
+    # read-only rootfs) — the same analysis, slower because it is bounded. The
+    # 300s ceiling therefore killed it every time, and the five OOM-kills the
+    # breaker remembers were this same phase before the memory bound was fixed.
+    #
+    # 600 is the measured cost rounded up to a bound a human would not have to
+    # think about. Raise it only with a new measurement: a bare `python3
+    # scripts/sa_runner.py self-correct` under ~120s says nothing about the
+    # container, which is where this actually runs.
+    timeout_seconds: 600
     # Was 64, which this phase cannot run in: OOM-killed at exit 137 on
     # every run. Measured floor through the executor, by exit code:
     # 256->137, 320->137, 384->0, 512->0.

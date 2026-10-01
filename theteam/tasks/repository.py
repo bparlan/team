@@ -304,6 +304,52 @@ class TaskRepository:
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(schedule, handle, indent=2)
 
+    def record_skip(self, task_id: str, detail: str,
+                    breaker: Optional[str] = None,
+                    consecutive_failures: Optional[int] = None) -> None:
+        """Record a skip without restamping when the last real outcome was.
+
+        A skip is not an outcome of the task: a tripped breaker means nothing
+        ran, so there is no new result to date. `record_run` writes `at = now`
+        because a run genuinely happened then. Here that would be a lie in the
+        other direction — it would date the *skip*, and the breaker's recovery
+        window is anchored to `at`, so a retry loop faster than the window would
+        re-anchor it and keep an open breaker open forever. Measured before the
+        fix: every skip moved the deadline forward by a full 60s.
+
+        So `at` is preserved when one exists, and only written when there is
+        nothing to preserve. That keeps `theteam history`'s "last run" meaning
+        the last time the task actually ran, and lets the recovery window elapse
+        exactly as the breaker measured it.
+
+        The breaker reading follows the same rule. `None` means "not measured"
+        and is preserved rather than written, for the same reason: a skip that
+        never consulted a breaker has no breaker reading to report, and writing
+        `null` over a real one discards the trip. Reproduced before this fix — a
+        task seeded open with five consecutive failures came back
+        `breaker: null` after one skipped run.
+
+        So every field is preserved unless the caller passed a replacement:
+        result and detail become the skip, `at` holds, and the breaker fields
+        keep whatever was really measured before.
+        """
+        path = self._state_path(SCHEDULE_FILENAME)
+        schedule = self.schedule()
+        previous = schedule["last_run"].get(task_id, {})
+        schedule["last_run"][task_id] = {
+            "result": "skipped",
+            "detail": detail,
+            "at": previous.get("at") or _now().isoformat(),
+            "breaker": previous.get("breaker") if breaker is None else breaker,
+            "breaker_consecutive_failures": (
+                previous.get("breaker_consecutive_failures")
+                if consecutive_failures is None else consecutive_failures
+            ),
+        }
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(schedule, handle, indent=2)
+
     # ======= write path =======
     #
     # Every write goes through `_check_writable` on the *merged* mapping before

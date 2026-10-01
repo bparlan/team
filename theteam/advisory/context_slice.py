@@ -46,7 +46,18 @@ import yaml
 
 # §4.6: every member gets these regardless of focus. They are small, and a
 # member with no project root cannot place its own advice.
-ALWAYS_DELIVERED = ("project_goal", "project_root")
+ALWAYS_DELIVERED = ("project_goal", "project_root", "run_context")
+
+# `run_context` is here for the same reason `project_goal` is: it is
+# project-wide state that every member needs, not a section a focus token
+# should route. Without it, delivery depended on a member's focus tokens
+# happening to share a word with the summary — measured: the section reached
+# 1 of 5 members on this repository, which is the §M9 "a section reaching
+# nobody is reported, not dropped" case in its worse form, where nobody is
+# told and four members reason without it.
+#
+# It is bounded by `MAX_SUMMARY_BYTES` in `theteam/core/run_context.py`, so
+# delivering it to everyone costs at most a few hundred tokens per member.
 
 # `timestamp` changes on every call and carries no information a member can
 # act on. Delivering it would make two identical discussions produce two

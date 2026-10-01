@@ -75,6 +75,23 @@ def _read_failure_types() -> tuple:
 _READ_FAILURES = _read_failure_types()
 
 
+
+
+def _one_line_error(e: BaseException, limit: int = 160) -> str:
+    """`TypeName: first line of the message`, bounded.
+
+    Multi-line exception text — a YAML `ParserError` prints a four-line
+    pseudo-traceback — is noise in a file that is injected into every member
+    prompt. The type carries the category and the first line carries the
+    reason; the rest is formatting.
+    """
+    first = str(e).strip().splitlines()[0] if str(e).strip() else ""
+    text = f"{type(e).__name__}: {first}" if first else type(e).__name__
+    if len(text) > limit:
+        text = text[:limit].rstrip() + "..."
+    return text
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -203,8 +220,14 @@ def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
         # The failure is reported as a failure. A reader seeing this knows the
         # list is unavailable; a reader seeing nothing assumes there is no
         # problem, which is the opposite of what is known.
-        return [f"could not read the task registry ({type(e).__name__}: {e}) — "
-                f"failure status unknown"]
+        # Collapsed to a single line. `yaml.parser.ParserError` renders as a
+        # four-line traceback naming the file, the line and the column, and this
+        # string is injected into every member prompt on every discussion —
+        # so a verbose one spends context on stack-trace formatting instead of
+        # the fact. The first line carries the type and the reason; that is
+        # what a member needs, and the file and line are one `cat` away.
+        return [f"could not read the task registry "
+                f"({_one_line_error(e)}) — failure status unknown"]
     log = state_dir(str(project_root)) / "task-execution.log"
     if not log.exists():
         return []

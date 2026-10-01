@@ -36,9 +36,10 @@ from pathlib import Path
 import pytest
 
 from theteam.core.run_context import (
+    _one_line_error,
+    _recent_failures,
     build_context_summary,
     load_loop_state,
-    _recent_failures,
     write_run_context,
 )
 
@@ -230,6 +231,63 @@ def test_an_empty_task_directory_is_never_reported_as_clean(tmp_path):
     assert "failure status unknown" in summary, (
         "an empty task registry silently discarded every recorded failure")
     assert "nothing recorded as failing" not in summary
+
+
+def test_a_registry_error_is_one_line_not_a_traceback(tmp_path):
+    """This string is injected into every member prompt, on every discussion.
+
+    `yaml.parser.ParserError` renders as a four-line pseudo-traceback naming the
+    file, line and column. Measured before the bound: that block went into the
+    summary verbatim, spending member context on stack-trace formatting instead
+    of the fact. One line carrying the type and the reason is what a reader
+    needs; the file and line are one `cat` away.
+    """
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "theteam.config").write_text(
+        "project:\n  name: p\n  description: d\n")
+    _log_a_failure(tmp_path)
+    # A task file with a path long enough that the error text genuinely exceeds
+    # the cap. A short `ParserError` fits inside 160 chars with room to spare,
+    # which is why an earlier version of this test passed with the bound
+    # deleted entirely — the assertion could not fail.
+    long_name = "task-" + ("x" * 150) + ".yaml"
+    (tmp_path / "tasks" / long_name).write_text("id: broken\n  : :\n")
+
+    write_run_context(tmp_path, executed=True)
+    summary = build_context_summary(tmp_path)
+
+    marker = [ln for ln in summary.splitlines() if "could not read" in ln]
+    assert len(marker) == 1, (
+        f"expected one line naming the failure, got {len(marker)}: {marker}")
+    assert "ParserError" in marker[0], "the error type is the useful part"
+    # The whole context file stays a glance, whatever the underlying error.
+    assert len(summary.encode()) < 8192
+
+
+def test_the_error_renderer_caps_a_long_message():
+    """`_one_line_error` is where the bound lives, so it is tested there.
+
+    A `ParserError`'s first line is short — "while parsing a block mapping" —
+    whatever the offending path is, so asserting on the summary cannot see the
+    cap work. Raising the limit to 5000, deleting the truncation, and using the
+    whole message instead of the first line all left the summary test green;
+    measured, three mutations, zero failures. This asserts the function itself.
+    """
+    long_message = "x" * 5000
+    rendered = _one_line_error(RuntimeError(long_message))
+
+    assert len(rendered) <= 200, (
+        f"a 5000-char message rendered as {len(rendered)} chars")
+    assert rendered.endswith("...")
+
+    # And it takes the first line, not the whole multi-line message.
+    multi = RuntimeError("first line here\nsecond line\nthird line")
+    assert _one_line_error(multi).count("\n") == 0
+    assert "first line here" in _one_line_error(multi)
+    assert "third line" not in _one_line_error(multi)
+
+    # An empty message still names the type rather than rendering ": ".
+    assert _one_line_error(RuntimeError()) == "RuntimeError"
 
 
 def test_a_genuinely_healthy_project_still_says_so(tmp_path):

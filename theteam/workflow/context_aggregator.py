@@ -230,6 +230,37 @@ def aggregate_production_invariants(project_root):
         invariants['behavior_settings'] = config.get('behavior', {})
     
     return invariants
+
+
+def aggregate_run_context(project_root):
+    """Read the context file `theteam run` writes, or report that it is absent.
+
+    Every other aggregator here recomputes a value from the tree. This one reads
+    what a run actually recorded, because the alternative is two sources of
+    truth: a recomputation that could disagree with the run it describes.
+
+    A missing file carries meaning worth surfacing. This is the file whose run
+    also refreshes `.loop-state.json`, which `project-integrity` hard-gates, so
+    a project where it has never been written is one whose integrity findings
+    nothing can clear. The note says so rather than returning an empty section
+    that reads like "nothing to report".
+    """
+    from theteam.state import state_dir
+
+    path = state_dir(str(project_root)) / "context.md"
+    try:
+        if path.exists():
+            return {"summary": path.read_text(errors="replace"),
+                    "written_at": path.stat().st_mtime}
+    except OSError as e:
+        print(f"Warning: Failed to read run context: {e}")
+        return {"summary": None,
+                "error": f"could not read {path.name}: {type(e).__name__}"}
+
+    return {"summary": None,
+            "note": "no run context yet - `theteam run` has not been executed"}
+
+
 def aggregate_project_context(project_root):
     """Aggregate all project context into a comprehensive snapshot."""
     context = {
@@ -240,7 +271,18 @@ def aggregate_project_context(project_root):
         "last_health_scan": aggregate_last_health_scan(project_root),
         "production_invariants": aggregate_production_invariants(project_root),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "project_root": project_root
+        "project_root": project_root,
+        # Read, not derived. Every other key here is recomputed on each call, and
+        # `last_health_scan` has been empty on every project measured so far — a
+        # section that is structurally always empty, which is the same shape as
+        # the `open_questions` list that rendered "- (none)" after every
+        # discussion.
+        #
+        # This is the file `theteam run` writes (`theteam/core/run_context.py`),
+        # so it carries what actually happened rather than a recomputation that
+        # could disagree with it. Absent before the first run, and then reported
+        # as absent rather than filled with a placeholder.
+        "run_context": aggregate_run_context(project_root),
     }
     
     return context

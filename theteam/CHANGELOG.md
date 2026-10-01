@@ -9,6 +9,75 @@ roadmap that was never planned. Those entries were removed rather than carried f
 pre-M0 reports they described are preserved in
 `archive/docs-theteam/pre-m0-reports/`, where they are history rather than documentation.
 
+## Task survey — five defects found by running things
+
+Evaluating the six registered tasks by executing them, rather than by reading
+their YAML, found five real defects. None was visible from the task
+definitions; all five are recorded where they can be re-checked.
+
+**1. `system-awareness` could never run again.** `TaskExecutor._breaker`
+reconstructs the breaker per process and replays `record_failure()` N times
+from persisted state, and replaying re-stamps
+`recovery_deadline = now + 60s`. The recovery window was therefore measured
+from *process start*, not from the original failure. A CLI invocation lives
+milliseconds and `serve` rebuilds the executor every tick, so neither could
+hold the window open. Measured, not inferred: a 140-second
+`serve --tick-seconds 20` logged `closed -> open` on every tick and ran the
+task zero times. Fixed by restoring the deadline from `last_run[task_id].at`.
+
+With the breaker admitting it again, the task still failed — `timed out after
+300s`. The five remembered failures were OOM-kills from before the 384MB bound,
+but under them was a second defect: the analysis takes 117s bare on the host and
+~360s inside the executor container. `timeout_seconds` is now 600, measured
+through the executor. The bare-host number is the trap.
+
+**2. Skips fabricated state.** Both skip paths in `run_due_tasks` called
+`record_run`, which writes `at = now` and writes breaker fields even when the
+caller never measured them. So any retry faster than the 60s window re-anchored
+the countdown (measured: three consecutive skips each pushed the deadline a
+further 60s out), and the config-problem skip overwrote a genuine
+`breaker: open` / 5 consecutive failures with `null`. `record_skip` now owns
+both paths and preserves whatever was not re-measured.
+
+**3. `conversation_id` collided within the same second.**
+`run_discussion` named its temp notes directory *and* its report file from
+`strftime('%Y%m%d_%H%M%S')`, so two discussions started in the same second
+shared a directory — the second read the first's notes and overwrote its
+report. Found by running the suite concurrently, which produced
+`run_discussion reported success but wrote no state`. Now microsecond-
+resolution; verified by mutation, since reverting reproduces the failures on
+every concurrent run.
+
+Defended by `test_breaker_recovery_window.py`, `test_record_skip_preserves_at.py`
+and `test_conversation_id_uniqueness.py`. Each was mutation-checked: reverting
+its fix fails it. The third needed the production call extracted into
+`new_conversation_id()` first — the original test inlined the format string, so
+it stayed green while production was reverted, which is a copy of a constant
+rather than a test of anything.
+
+A fourth defect turned up while verifying the third: `test_monitor.py`'s
+`test_a_monitoring_watch_still_draws_the_whole_frame` raced the wall clock.
+`terminal._frame` stamps `time.strftime(...)` into the header row, and the test
+rendered twice — once through `watch`, once to build the expected rows — so a
+second boundary between the two calls failed it on a timestamp. It passed 5
+runs in 6 and failed under concurrent load. Fixed with a `frozen_clock` fixture
+that patches the module the renderer actually reads, so it still fails if the
+header stops being drawn. Verified with four concurrent suites: 678 passing in
+all four, where the same load previously produced failures every run.
+
+A fifth, found while checking the table's own claims rather than by looking for
+one: `system-awareness` reports `ok` while never writing one of the five outputs
+it declares. `EXPECTED_OUTPUTS` lists `infrastructure_report`, and
+`write_infrastructure_report` is called — but only under
+`_update_state_with_improvement`'s `improvement > 0` branch
+(`scripts/sa_runner.py:574`). A run with `improvement == 0` takes the `pass`
+branch next to it and the writer is never reached. Confirmed by two runs: the
+other five reports land with fresh mtimes, `infrastructure_report.json` is absent
+both times, exit 0, task `ok`. The script's own `self-check` reports the missing
+output as `"healthy": false` while the exit code the executor reads says
+success — the in-script checks are more honest than the result. Recorded, not
+fixed.
+
 ## M9 Phase 1 — Wire the selector
 
 `theteam/advisory/selector.py` was live, tested, deterministic code with **no production

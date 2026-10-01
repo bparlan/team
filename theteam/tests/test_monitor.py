@@ -109,6 +109,26 @@ def two_tasks(empty_project):
 
 
 @pytest.fixture
+def frozen_clock(monkeypatch):
+    """Pin `terminal._frame`'s timestamp so a rendered frame is comparable.
+
+    `_frame` stamps `time.strftime("%Y-%m-%d %H:%M:%S")` into the header row, so
+    any test that renders a frame twice and compares them races the wall clock:
+    cross a second boundary between the two calls and the header differs for a
+    reason that has nothing to do with what is under test.
+
+    Patched on the `time` module the renderer reads through
+    (`theteam.ui.terminal.time`), not on a copy of the format string, so this
+    still fails if the header stops being drawn at all.
+    """
+    from theteam.ui import terminal
+
+    monkeypatch.setattr(terminal.time, "strftime",
+                        lambda fmt, *a: "2026-10-01 00:00:00")
+    return "2026-10-01 00:00:00"
+
+
+@pytest.fixture
 def tripped(two_tasks):
     """`alpha` tripped by real recorded runs; `beta` still unmeasured."""
     from theteam.tasks.repository import TaskRepository
@@ -533,7 +553,13 @@ class TestRendererIntegration:
 
         assert out.getvalue() == render_status(payload(two_tasks, "status")) + "\n\n"
 
-    def test_a_monitoring_watch_still_draws_the_whole_frame(self, two_tasks):
+    def test_a_monitoring_watch_still_draws_the_whole_frame(self, two_tasks, frozen_clock):
+        # The clock is frozen because `_frame` stamps the time the frame is
+        # drawn, and this test renders twice: once via `watch`, once to build the
+        # expected rows. Crossing a second boundary between those two calls made
+        # the header line differ, and the test failed on a timestamp rather than
+        # on anything about the monitoring flag. It passed 5 runs in 6 and failed
+        # under concurrency, which is what a real race looks like.
         out = io.StringIO()
         watch(two_tasks, "status", once=True, stream=out, monitoring=True)
 

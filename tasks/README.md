@@ -108,25 +108,52 @@ is deterministic and must not be judged by a model.
 
 ## Verified behaviour
 
-Observed 2026-10-01 by running each task with `theteam run --only <id>`. The
-run count is the final measured sweep, not the history at the time of writing —
-`theteam history` moves as tasks are re-run.
+Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 
-| id | observed result | runs | rate |
-|---|---|---|---|
-| `project-integrity` | **ok** | 10 | 80.0% |
-| `system-awareness` | **ok** — score **0.5545**, grade **D**, six reports + `.loop-state.json` written | 7 | 14.3% |
-| `maintenance` | **ok** | 7 | 100.0% |
-| `ground-truth-audit` | refused by name — requires an OMP session | 2 | 0.0% |
-| `doc-harmonization` | refused by name — requires an OMP session | 2 | 0.0% |
-| `native-feature-loop` | refused by name — requires an OMP session | 2 | 0.0% |
+| id | observed result | evidence it ran |
+|---|---|---|
+| `project-integrity` | **ok** | both phases reported, `rc=0` |
+| `system-awareness` | **ok** — score **0.5545**, grade **D**; five reports + `.loop-state.json` written | artifacts on disk with fresh mtimes; its own `self-check` reports one output missing (below) |
+| `maintenance` | **ok** | single phase, `rc=0` |
+| `ground-truth-audit` | refused by name — requires an OMP session | named refusal, no output written |
+| `doc-harmonization` | refused by name — requires an OMP session | named refusal, no output written |
+| `native-feature-loop` | refused by name — requires an OMP session | named refusal, no output written |
 
-**The rates are historical, not current.** `project-integrity`'s two failures
-are both from before the M12 fix and neither has recurred in eight consecutive
-passes since. `system-awareness`'s five failures are the breaker deadlock and
-the 300s timeout documented below, both fixed; its current state is one
-consecutive failure and a closed breaker. The three `llm` tasks are 0.0% because
-they have never had the session they require, not because they fail when run.
+Run counts and success rates are deliberately absent. They are not stable: every
+re-run changes them, and an earlier draft of this table carried a rate that was
+wrong within the hour — worse than carrying none, because a stale number reads
+as a measurement. `theteam history` reports the live figures; rates there move as
+tasks re-run.
+
+**One declared output is never written, and the task reports `ok` anyway.**
+`sa_runner.py` lists five expected outputs in `EXPECTED_OUTPUTS`, one of them
+`infrastructure_report`. `write_infrastructure_report` exists and *is* called —
+but only inside `_update_state_with_improvement`'s `improvement > 0` branch
+(`scripts/sa_runner.py:574`). A run whose improvement is `0` takes the `pass`
+branch beside it, so the writer is never reached. Confirmed by running it twice:
+the other five reports land with fresh mtimes, `infrastructure_report.json` is
+absent both times, the phase exits 0 and the task reports `ok`.
+
+This is the §3.3 shape again, one level up: the checks *inside* the script are
+more honest than the exit code the executor reads. Recorded, not fixed — the fix
+is to write the reports on the `improvement == 0` path too, or to drop
+`infrastructure_report` from `EXPECTED_OUTPUTS` so the self-check stops
+reporting an output nothing produces on this path.
+
+What is worth recording is which failures were *real*, because a rate cannot
+distinguish "this task is broken" from "this task has never been run since it
+was fixed":
+
+- `project-integrity` has failed twice, both times with
+  `FAIL: Required tool not found in PATH: git` — `git` was in `REQUIRED_TOOLS`
+  and is not visible inside the isolation container. Fixed in M12; every run
+  since has passed.
+- `system-awareness` failed five times before its fixes landed: five OOM-kills at
+  the old memory bound, then the breaker deadlock, then the 300s timeout. All
+  fixed and documented below; it now runs green.
+- The three `llm` tasks have never succeeded **and have never failed a real
+  phase** — they refuse by name before doing anything, so their history records
+  refusals, not results.
 
 The three `llm` refusals are correct behaviour: each returns a named error and
 writes no output file, rather than synthesizing a result.
@@ -147,8 +174,9 @@ the task is skipped with the literal `breaker_open` and is **not** counted
 against itself — so the trip persists until something actually runs green.
 State lives in `.omp/theteam/task-schedule.json` and outlives the process.
 
-`system-awareness` was found at 0.0% over 5 runs, skipping `breaker_open` every
-time — permanently unrunnable. Root cause: `TaskExecutor._breaker` reconstructs
+`system-awareness` was found skipping `breaker_open` on every attempt and
+permanently unrunnable — five consecutive failures, breaker open, and no way for
+it to close. Root cause: `TaskExecutor._breaker` reconstructs
 the breaker per process and replays `record_failure()` N times, and replaying
 re-stamps `recovery_deadline = now + 60s`. The window was therefore measured
 from **process start**, not from the original failure. A CLI invocation lives
@@ -311,16 +339,20 @@ Both are recorded, not fixed — see *Deliberate gaps* below.
 - `.loop-state.json` carries two `last_execution` fields, one nested and
   current, one top-level and frozen. Both stores agree on score and grade.
   Pre-existing, outside the fixes above.
-- `project-integrity`'s two failures are both from before the M12 fix, and
-  neither has recurred in eight consecutive passes since. Cause read from the
-  execution log, not guessed: phase 2 returned `FAIL: Required tool not found in
-  PATH: git`, because `git` was in `REQUIRED_TOOLS` and is not visible inside
-  the isolation container. `REQUIRED_TOOLS` is now `["python3"]`. This is
-  resolved, and it is kept here rather than deleted because the historical rate
-  in `theteam history` still shows it until the old runs age out.
+- `project-integrity`'s two recorded failures are both from before the M12 fix —
+  `FAIL: Required tool not found in PATH: git`, because `git` was in
+  `REQUIRED_TOOLS` and is not visible inside the isolation container.
+  `REQUIRED_TOOLS` is now `["python3"]`, and every run since has passed. Kept
+  here rather than deleted only because `theteam history` still shows those old
+  runs until they age out of the execution log.
 - No command resets a tripped breaker, and `breaker_open` is the only reason
   recorded once a breaker trips — so the *original* failure is lost from the
   schedule. A single `last_run` entry per task cannot hold both. The 60s window
   itself clears on its own now, including under repeated invocation, because
   skips go through `record_skip` and do not restamp `at`; see *Skips were
   fabricating state* for what that cost before.
+- `theteam history` reports a lifetime success rate per task, and nothing ages
+  those old runs out. A task fixed today still reads as failing for as long as
+  its pre-fix runs stay in the execution log, so the rate is evidence about the
+  past, not the present — reading it requires knowing which failures were real.
+  A window, or a "since <date>" filter, would fix that; neither exists.

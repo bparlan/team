@@ -672,6 +672,25 @@ def _paths_named_in(topic):
     return found
 
 
+def new_conversation_id(when=None):
+    """A discussion id unique per microsecond, not per second.
+
+    The id names two things on disk: the `theteam-notes-<id>` temp directory and
+    the written report filename. At second resolution two discussions started
+    within the same second got the same id, so the second run read the first
+    run's notes out of the shared directory and overwrote the first run's
+    report. Found by running the suite concurrently — `run_discussion reported
+    success but wrote no state`, with a synthesis file left by a sibling
+    process.
+
+    A function so the uniqueness is testable. Asserting the format string from
+    the caller would only pin a copy: the tests could pass while production
+    regressed. `when` is injectable so a test can drive the clock deterministically.
+    """
+    moment = when or datetime.now(timezone.utc)
+    return moment.strftime('%Y%m%d_%H%M%S_%f')
+
+
 def run_discussion(project_root, topic):
     """Run a team discussion on a specific topic with actual task spawning."""
     _require_provider()
@@ -686,13 +705,13 @@ def run_discussion(project_root, topic):
         return False
 
     print(f"🚀 Starting team discussion on: {topic}")
-    conversation_id = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')
-    # Microseconds, not seconds. At second resolution two discussions started in
-    # the same second produced the same id, and that id names both the
-    # `theteam-notes-<id>` temp directory and the written report — so the second
-    # run read the first run's notes and overwrote its report. Found by running
-    # the suite concurrently: `run_discussion reported success but wrote no
-    # state`, and a synthesis file left behind by a sibling process.
+    conversation_id = new_conversation_id()
+    # Microseconds, not seconds — see `new_conversation_id`. At second
+    # resolution two discussions started in the same second shared the
+    # `theteam-notes-<id>` temp directory *and* the report filename, so the
+    # second run read the first run's notes and overwrote its report. Found by
+    # running the suite concurrently: `run_discussion reported success but wrote
+    # no state`.
     print(f"📋 Conversation ID: {conversation_id}")
 
     # Record discussion start in state manager

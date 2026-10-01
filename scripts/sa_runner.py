@@ -456,9 +456,29 @@ def _perform_analysis() -> Optional[Dict[str, Any]]:
     return run_analysis()
 
 def _evaluate_correction_result(results: Dict[str, Any], report: Dict[str, Any]) -> bool:
-    """Evaluate a correction attempt result. Returns True if cycle succeeded."""
+    """Evaluate a correction attempt result. Returns True if cycle succeeded.
+
+    The results are stored on the report here, and this is the only place they
+    can be: `_attempt_correction` receives them from `_perform_analysis` and
+    hands them straight to this function, and nothing else in the call chain
+    holds a reference.
+
+    They used to be dropped. `self_correct` then read `report.get("results")` —
+    a key `_build_initial_report` never creates and this function never set — so
+    it was always `None`, `_evaluate_health_improvement(None, ...)` returned 0 via
+    its `if results:` guard, and the `if improvement > 0` branch was unreachable.
+    Verified by running it: `corrected` stayed `False`, `improvements` stayed
+    `[]`, `status` was `partial` after a run that had just written five reports
+    successfully, and `_update_state_with_improvement` was dead code — the only
+    caller of `write_infrastructure_report`, which is why `infrastructure_report.json`
+    sat in OUTPUT_PATHS and never appeared while the task reported `ok`.
+
+    The one artifact whose whole job is to answer "did the fix work" was
+    structurally incapable of saying yes.
+    """
     try:
         _run_correction_cycle(results)
+        report["results"] = results
         report["corrected"] = True
         return True
     except Exception as e:
@@ -530,12 +550,29 @@ def _record_healthy_attempt(report: Dict[str, Any], attempt: int) -> None:
     report["acceptance"] = "accepted"
 
 def _record_correction_issue(report: Dict[str, Any], check: Dict[str, Any]) -> None:
-    """Log current issues as a CORRECTING attempt entry."""
+    """Log current issues as a CORRECTING attempt entry.
+
+    `drift_before` is measured here rather than left at its `None` initialiser.
+    It and `drift_after` were declared in `_build_initial_report`, never written
+    by anything, and rendered as two fields of a report — so they read as a
+    before-and-after comparison while being a constant `null`. A reader checking
+    whether a correction helped had nothing to check.
+    """
+    unhealthy = [c for c in check["checks"] if not c["healthy"]]
+    report["drift_before"] = len(unhealthy)
     report["attempts"].append({
         "attempt": len(report["attempts"]) + 1,
         "status": "CORRECTING",
-        "issues": [c for c in check["checks"] if not c["healthy"]],
+        "issues": unhealthy,
     })
+
+def _count_unhealthy(check: Dict[str, Any]) -> int:
+    """How many checks in a self-check result are not healthy.
+
+    One definition of "drift" for `drift_before` and `drift_after` alike, so
+    the two numbers in the report are measured the same way and can be compared.
+    """
+    return sum(1 for c in check.get("checks", []) if not c.get("healthy", True))
 
 def _record_successful_correction(report: Dict[str, Any], results: Dict[str, Any]) -> None:
     """Record successful correction in report."""
@@ -596,11 +633,36 @@ def self_correct(max_attempts=2, drift_threshold=0.5):
             
             # Try to correct
             if _attempt_correction(attempt, check, report):
-                # Correction successful - evaluate improvement
-                improvement = _evaluate_health_improvement(report.get("results"), check)
+                # The results are read off the report rather than recomputed,
+                # because `_evaluate_correction_result` is where they exist —
+                # it receives them from `_perform_analysis` and this loop has
+                # no other reference. They were dropped on the floor before,
+                # which is what made this whole branch unreachable.
+                results = report.get("results")
+                improvement = _evaluate_health_improvement(results, check)
                 if improvement > 0:
-                    _record_successful_correction(report, report.get("results"))
-                    _update_state_with_improvement(report.get("results"), check, improvement)
+                    _record_successful_correction(report, results)
+                    # `drift_before` counted the unhealthy checks in the `check`
+                    # this attempt started from. `drift_after` counts them in a
+                    # check taken *now* — after `_update_state_with_improvement`
+                    # below has rewritten the reports, which is what
+                    # `self_check_loop_state` inspects. Same measurement, run
+                    # twice, at the two moments a before-and-after is supposed
+                    # to describe. That is the only version of this that can
+                    # report that a correction worked.
+                    #
+                    # Reusing `check` here instead — counting the same dict twice
+                    # — would make the two numbers identical by construction. A
+                    # pair that cannot differ is not a measurement, and printing
+                    # it beside `drift_before` is the same lie as the constant
+                    # `None` these two fields used to hold.
+                    #
+                    # It must come *after* the state update. Measured: reading it
+                    # before, the reports still on disk were the drifted ones and
+                    # this reported `drift_after: 1` immediately after a cycle
+                    # that had genuinely fixed the problem.
+                    _update_state_with_improvement(results, check, improvement)
+                    report["drift_after"] = _count_unhealthy(self_check_loop_state())
                     report["status"] = "corrected"
                     report["acceptance"] = "accepted"
                     break

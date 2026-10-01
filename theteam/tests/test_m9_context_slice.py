@@ -20,7 +20,6 @@ from pathlib import Path
 
 import yaml
 
-from theteam.advisory.context_slice import parse_yaml_section
 
 from theteam.advisory.context_slice import (
     ALWAYS_DELIVERED,
@@ -203,3 +202,23 @@ class TestAgainstThisRepository:
         whole = len(yaml.dump(context, default_flow_style=False))
         total = sum(len(slice_context(context, m)[0]) for m in roster)
         assert total < whole * len(roster)
+
+
+def parse_yaml_section(rendered):
+    """The structured YAML document at the head of a rendered prompt.
+
+    `slice_context` returns a YAML document followed by a markdown tail — the
+    `run_context` summary, which YAML cannot carry readably (see `_render` in
+    `theteam/advisory/context_slice.py` for the four approaches that were
+    measured and why they failed).
+
+    This lives here rather than in the module because nothing at runtime
+    re-parses a rendered prompt: `run_discussion` passes it straight to a
+    member. A production copy would be an orphan, and this repository does not
+    keep those.
+    """
+    head = rendered.split("\n## ", 1)[0]
+    try:
+        return yaml.safe_load(head)
+    except yaml.YAMLError:
+        return None

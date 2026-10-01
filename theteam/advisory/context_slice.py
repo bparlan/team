@@ -219,10 +219,12 @@ def _render(sections: Dict[str, Any]) -> str:
        parseable. The markdown is appended after it, verbatim.
 
     The cost of (4) is that the whole prompt no longer parses as one YAML
-    document. `test_m9_context_slice.py` reads it with `yaml.safe_load` in seven
-    places, so `parse_yaml_section` below extracts the leading document for
-    them — the structure is still there, and still assertable. A member reading
-    markdown has no use for a YAML parse; a test reading structure does.
+    document. The structured half is still parseable on its own:
+    `theteam/tests/test_m9_context_slice.py` reads it back with a local helper
+    rather than `yaml.safe_load`, which would now fail on the markdown tail.
+    That helper lives in the test module because nothing at runtime re-parses a
+    rendered prompt — `run_discussion` passes it straight to a member — so a
+    production copy would be an orphan.
     """
     structured = {k: v for k, v in sections.items() if k != "run_context"}
     parts: List[str] = []
@@ -239,20 +241,6 @@ def _render(sections: Dict[str, Any]) -> str:
                          f"{context['error']}")
     return "\n".join(parts) + "\n" if parts else yaml.dump(
         {}, default_flow_style=False)
-
-
-def parse_yaml_section(rendered: str) -> Any:
-    """The structured YAML document at the head of a rendered prompt.
-
-    Exists because `slice_context` returns YAML followed by markdown. Tests
-    that assert *which sections a member received* read that structure through
-    this rather than `yaml.safe_load`, which now fails on the markdown tail.
-    """
-    head = rendered.split("\n## ", 1)[0]
-    try:
-        return yaml.safe_load(head)
-    except yaml.YAMLError:
-        return None
 
 
 def undelivered_sections(

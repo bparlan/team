@@ -9,7 +9,6 @@ and that .loop-state.json is not stale.
 import os
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 #: Mirrors `theteam.tasks.executor.FINDINGS_EXIT_CODE`. Duplicated rather than
@@ -22,9 +21,19 @@ FINDINGS_EXIT_CODE = 3
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 REQUIRED_DIRS = ["tasks", "scripts", "bin", "theteam"]
-REQUIRED_CONFIGS = ["theteam.config", "system-awareness-config.json"]
+
+# `system-awareness-config.json` used to be required here. Nothing has read its
+# *contents* since the `system-awareness` task was retired — the filename
+# appeared in exactly one place, this list, and `check_required_configs` only
+# calls `exists()` on each entry. So it was a gate on a file whose values
+# nothing consumed, named after a task that no longer exists.
+#
+# Requiring it was therefore a finding about a file's presence and nothing
+# else: removable without losing a check anyone acted on. The file stays in the
+# tree (it is git-tracked) in case the config it holds is wanted again; it is
+# simply no longer a gate.
+REQUIRED_CONFIGS = ["theteam.config"]
 LOOP_STATE = PROJECT_ROOT / ".loop-state.json"
-STALE_THRESHOLD_SECONDS = 86400  # 24 hours
 
 
 def check_project_root() -> list:
@@ -64,7 +73,25 @@ def check_required_configs() -> list:
 
 
 def check_loop_state() -> list:
-    """Check .loop-state.json exists, is valid, and not stale."""
+    """Check `.loop-state.json` exists and parses.
+
+    It used to also fail when `last_execution` was older than 24 hours
+    (`STALE_THRESHOLD_SECONDS`). That rule is gone, and the reason is worth
+    keeping: with scheduling disabled, the only thing that refreshes this file
+    is a human running `theteam run`. So the rule measured how often the
+    operator invoked a command — not whether the project was healthy — and
+    reported both with the same words.
+
+    Measured before removal: a project untouched for a day produced
+    `FINDING: Loop state is stale`, and the only way to clear it was to run the
+    tool. That is a finding about the tool wearing a finding about the project's
+    clothes, which is what §3.3 names: a result that reads like a measurement of
+    something other than what it measured.
+
+    Existence and parseability stay. Both are real — a missing or corrupt state
+    file means `theteam run` cannot record what it did, and running the tool
+    once genuinely fixes that.
+    """
     errors = []
     if not LOOP_STATE.is_file():
         errors.append(f"Loop state file not found: {LOOP_STATE}")
@@ -76,19 +103,9 @@ def check_loop_state() -> list:
         errors.append(f"Loop state file is invalid: {e}")
         return errors
 
-    last_exec = state.get("last_execution")
-    if last_exec:
-        try:
-            last_time = datetime.fromisoformat(last_exec)
-            age = (datetime.now(timezone.utc) - last_time).total_seconds()
-            if age > STALE_THRESHOLD_SECONDS:
-                errors.append(
-                    f"Loop state is stale: last execution {age:.0f}s ago "
-                    f"(threshold: {STALE_THRESHOLD_SECONDS}s)"
-                )
-        except (ValueError, TypeError) as e:
-            errors.append(f"Loop state has invalid last_execution timestamp: {e}")
-
+    if not isinstance(state, dict):
+        errors.append(
+            f"Loop state is not a mapping: got {type(state).__name__}")
     return errors
 
 

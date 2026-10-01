@@ -178,7 +178,7 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    legitimate recommendation. Do not average away a real split.
 10. **Render the report:**
    ```bash
-   PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
+   python3 bin/theteam_report.py build \
      --topic "<topic>" \
      --notes-dir /tmp/theteam-notes-<timestamp> \
      --synthesis /tmp/theteam-synthesis-<timestamp>.json \

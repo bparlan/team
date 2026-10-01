@@ -62,8 +62,9 @@ theteam/
 │   ├── backup.py             # reached by scripts/backup.py
 │   ├── health_monitor.py
 │   ├── event_bus.py, event_log.py, rate_limiting.py
-│   └── state_manager.py, checksum.py, database.py, wal.py,
-│       transactions.py, correlation.py, member.py, postgres_cluster.py
+│   ├── state_manager.py, checksum.py, database.py, wal.py,
+│   │   transactions.py, correlation.py, member.py, postgres_cluster.py
+│   └── run_context.py        # `.omp/theteam/context.md`, written by every run
 ├── advisory/                 # commentary layer
 │   ├── session_reader.py, selector.py, commentary.py, roster.py,
 │   │   context_slice.py, manager.py
@@ -74,7 +75,7 @@ theteam/
 │   └── components/           # design tokens and panel widgets
 ├── security/                 # path validation, audit, secrets
 ├── bin/                      # config helpers (see CLI.md)
-└── tests/                    # 659 tests
+└── tests/                    # 762 tests
 ```
 
 M10 removed the other two schedulers. `core/unified_loop.py` and

@@ -53,7 +53,7 @@ These are the product's promises. Each is a test.
 
 | Promise | You can check it by |
 |---|---|
-| The team reads your real session | `theteam status` shows the session file path, its event count, and the digest the team last saw |
+| The team reads your real session | `theteam comment status` reports the `last_digest` the commentary controller last saw, and a tick over a missing session reports `{spoke: false, reason: "no_session"}` |
 | The team is silent rather than filler | Every tick reports `spoke: false` with a reason, or up to 2 opinions. Never a third. |
 | Opinions are never invented | Running `theteam discuss` outside OMP **fails with an error naming the command to run inside OMP.** It never returns an opinion. |
 | Tasks cannot run away | Every phase has a mandatory memory bound. A phase that exceeds it is killed and reported, not left running. |
@@ -88,9 +88,10 @@ theteam history                       per-task success rate, last run, last fail
 theteam task create|edit|delete|show  single-task operations
 theteam comment on|off|status         continuous in-context commentary
 theteam watch status|tasks|history    the trust surface, rendered, in the terminal
+theteam manager                      grow the roster from a topic
 ```
 
-Eleven subcommands. The list is the whole surface; nothing else is declared.
+Twelve subcommands. The list is the whole surface; nothing else is declared.
 
 | Command | Arguments and flags | Output you can predict |
 |---|---|---|
@@ -110,6 +111,7 @@ Eleven subcommands. The list is the whole surface; nothing else is declared.
 | `comment off` | `--json` | `{ok, on, sentinel}`. Writes the stop sentinel, so a controller mid-tick still sees it. |
 | `comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
 | `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. `--monitor` adds a change block; see below. |
+| `manager` | `--topic`, `--status`, `--reset`, `--apply`, `--json` | `--topic` proposes and writes nothing; `--apply` persists. `--status` states why every member is on the roster, and reports any it cannot justify. `--reset` restores the bootstrapped team. |
 | global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`), `--json` | Applies to every command. |
 
 > **`run` returns 1 when a task failed** (M9 Phase 4). It previously returned 0 with
@@ -252,15 +254,21 @@ The previous failure in this product was not a crash. It was a system that retur
 
 ```
 $ theteam status
-roster          5 members active
-session         ~/.omp/agent/sessions/-myproject/2026-09-27T09-32-48.jsonl
-session events  289 message events, 1.85 MB, last read 14s ago
-commentary      on, last spoke 3 turns ago, digest a4f2...
-tasks           4 registered, 1 due, 0 breaker trips
-audit chain     intact, 142 entries, last verified 14s ago
+project        /your/project
+state          /your/project/.omp/theteam
+roster         5 members active (architect, pragmatist, skeptic, designer, devops)
+tasks          4 registered, 1 scheduled, 0 breaker trips
+audit chain    intact, 142 entries (/your/project/.omp/theteam/audit/audit.jsonl)
 ```
 
-If the session file is missing, `session` reads `not found` and commentary reports `{spoke: false, reason: "no_session"}`. It does not fall back to a guess.
+Those are the five lines `status_payload()` builds, and `status` emits them
+unchanged. **The session file is not among them**: `status` reads the roster,
+the task registry, the schedule, and the audit chain, and nothing else. The
+session state is on `theteam comment status`, which reports the `last_digest`
+the commentary controller last saw.
+
+When the session file is missing, the controller reports `{spoke: false,
+reason: "no_session"}`. It does not fall back to a guess.
 
 ## 3.2 Failure modes are named, never swallowed
 
@@ -510,8 +518,9 @@ theteam/
 
 ### 5.2.1 Every `core/` module, with its layer
 
-`core/` holds 23 modules. The tree above names 8; this table assigns the rest,
-so no module is unowned. "Reached by" is measured, not asserted.
+`core/` holds 21 files: 20 modules plus the package's `__init__.py`. The tree
+above names 7; this table assigns the other 13, so no module is unowned.
+"Reached by" is measured, not asserted.
 
 **M10 re-measured this whole table** after deleting `unified_loop.py`, which
 was the last importer of three modules. Each is recorded on its own evidence
@@ -539,14 +548,15 @@ deleted, and none is claimed dead.
 | `rate_limiting.py` | 5 Telemetry | `core/event_bus.py` |
 | `metrics.py` | 5 Telemetry | `cli.py` (`cmd_serve`) — proven live |
 | `postgres_cluster.py` | — | **not on the entry point.** Imported at point of use by `database.py`. See invariant 7. |
+| `run_context.py` | 2 Task | `cli.py` (`write_run_context`, after the sweep) — proven live. Read by `workflow/context_aggregator.py` for member delivery (§5.6). |
 
 **M10 deleted** `unified_loop.py` and `task_contract.py` (the two schedulers
 this milestone consolidated away), plus `integrated_orchestrator.py`,
 `schema_versioning.py`, `system_integration.py`, `state_validator.py`,
 `core/team_member_manager.py`, `workflow/discussion_interface.py`,
 `workflow/team_member_manager.py`, `workflow/discussion_manager_refactored.py`,
-`ui/components/reflex_renderers.py`, `ui/components/visibility.py`,
-`bin/theteam_report.py`, and `skill/SKILL_metadata.py`. Measured by an AST
+`skill/SKILL_metadata.py`. `bin/theteam_report.py` was **moved** to
+repo-root `bin/`, not deleted. Measured by an AST
 scan for imports at any nesting level plus a runtime `sys.modules` check across
 all three entry points, because a grep alone had already missed one live
 caller (`scripts/backup.py`).
@@ -915,7 +925,7 @@ If any gate fails, cut M5. `selector.py` and `roster.py` still ship — member s
 bootstrap are useful without the loop — and the one-shot discussion path, `run_discussion()` in
 `theteam/__init__.py`, is untouched by this milestone either way.
 
-**Falsification test:** run commentary for 10 turns. At most 2 fragments per turn. `stop` in the user message produces `{spoke: false, reason: "stopped"}`. `theteam status` shows the session path and event count.
+**Falsification test:** run commentary for 10 turns. At most 2 fragments per turn. `stop` in the user message produces `{spoke: false, reason: "stopped"}`.
 
 **Guard:** `run_discussion()` in `theteam/__init__.py` must be byte-identical before and after M5. If it changed, the controller forked the discussion path and the whole premise of the layer is broken.
 
@@ -1126,7 +1136,7 @@ baseline is what catches a silently-failed copy.
 
 A user can check every one of these by running a command.
 
-1. `theteam status` on a bootstrapped project shows a roster, a bound session, and an intact audit chain.
+1. `theteam status` on a bootstrapped project shows a roster, the state directory, task counts, and an audit chain that reads `intact` or names its absence. It reports no session.
 2. `theteam discuss` outside OMP fails with the exact command to run inside OMP, and returns no opinion.
 3. Two bootstraps of structurally different projects produce different rosters.
 4. `theteam run` with nothing due returns `{ran: 0}` and runs nothing. Two consecutive calls are identical.

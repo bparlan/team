@@ -142,18 +142,20 @@ source, or run the suite, which covers it.
 interval is shorter than its worst case is refused at `theteam loop` time
 (see [Schedule integrity](#24-schedule-integrity) in ARCHITECTURE.md).
 
-## The helper scripts in `theteam/bin/`
+## The helper scripts
 
-Two scripts remain. They are helpers for the skill's config and report generation, not part of
-the user-facing CLI. Note the invocation form: they import `bin.utilities` as a top-level
-package, so they need `theteam/` on the path.
+Two scripts remain, in different places. `theteam_config.py` is in `theteam/bin/`
+and is part of the package; `theteam_report.py` is at repo-root `bin/`, outside it.
+Neither is part of the user-facing CLI. The config script imports `bin.utilities`
+as a top-level package, so it needs `theteam/` on the path; the report script
+imports only the standard library and needs nothing.
 
 ```bash
 # Validate a project config
 PYTHONPATH=theteam python3 theteam/bin/theteam_config.py validate theteam.config --json
 
 # Build a report from member notes and a synthesis file
-PYTHONPATH=theteam python3 theteam/bin/theteam_report.py build \
+python3 bin/theteam_report.py build \
   --topic "..." --notes-dir /tmp/notes --synthesis /tmp/synthesis.json \
   --out /tmp/report.md --project "<name>" --expected-ids architect,pragmatist
 ```

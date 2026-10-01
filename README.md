@@ -50,7 +50,7 @@ theteam run                # execute everything currently due
 
 ## Command reference
 
-Eleven subcommands. `--json` works on **either side** of the subcommand for every one of them.
+Twelve subcommands. `--json` works on **either side** of the subcommand for every one of them.
 
 | Command | Arguments and flags | What you get back |
 |---|---|---|
@@ -207,7 +207,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 659 tests
+python -m pytest -q                  # 762 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

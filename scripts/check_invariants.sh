@@ -35,13 +35,19 @@ else
   hard_fail=1
 fi
 
-# 3. No hardcoded /Users/bparlan in the package.
-if grep -rn "/Users/bparlan" theteam/ --include="*.py" >/dev/null 2>&1; then
-  echo "check 3 FAIL: hardcoded /Users/bparlan in theteam/"
-  grep -rn "/Users/bparlan" theteam/ --include="*.py"
+# 3. No hardcoded developer paths. Scoped to the task scripts as well as the
+# package: five scripts carried `~/devcode/team/...` while this check scanned
+# `theteam/` only, so nothing tripped. `sa_runner.py` is excluded because its
+# default-state branch is the one place a literal path is not a resolution —
+# it was corrected there, and the string survives in a comment explaining why.
+hardcoded=$(grep -rn "/Users/bparlan\|~/devcode/team" theteam/ scripts/ \
+  --include="*.py" 2>/dev/null | grep -v "^scripts/sa_runner.py:2[34][0-9]:")
+if [ -n "$hardcoded" ]; then
+  echo "check 3 FAIL: hardcoded developer path in theteam/ or scripts/"
+  echo "$hardcoded"
   hard_fail=1
 else
-  echo "check 3 PASS: no /Users/bparlan in theteam/"
+  echo "check 3 PASS: no hardcoded developer path in theteam/ or scripts/"
 fi
 
 # 4. No parents[ index trickery.

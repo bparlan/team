@@ -233,7 +233,13 @@ def _load_state():
                 "failed_tasks": [],
                 "blocked_tasks": [],
                 "last_execution": None,
-                "task_archive": "~/devcode/team/tasks",
+                # Was the literal "~/devcode/team/tasks". This branch only runs
+                # when `.loop-state.json` is absent, so the value is rarely
+                # written — but when it is, nothing ever expands that `~`, and
+                # the state file carries an absolute path to a directory this
+                # project does not own. Nothing reads the field; it is recorded
+                # project-relative rather than left unresolvable.
+                "task_archive": "tasks",
                 "total_tasks": 0,
                 "next_activation": None,
                 "created_at": datetime.datetime.now(timezone.utc).isoformat(),

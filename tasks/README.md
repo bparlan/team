@@ -108,13 +108,12 @@ is deterministic and must not be judged by a model.
 
 ## Verified behaviour
 
-Observed on 2026-10-01 by running each task with `theteam run --only <id>`,
-after the two fixes recorded below.
+Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 
 | id | observed result |
 |---|---|
 | `project-integrity` | **ok** |
-| `system-awareness` | **ok** — 40 reports on disk, `.loop-state.json` fresh, grade D |
+| `system-awareness` | **ok** — reports written, `.loop-state.json` fresh, grade computed |
 | `maintenance` | **ok** |
 | `ground-truth-audit` | refused by name — requires an OMP session |
 | `doc-harmonization` | refused by name — requires an OMP session |
@@ -123,86 +122,86 @@ after the two fixes recorded below.
 The three `llm` refusals are correct behaviour, not failures: each returns a
 named error and writes no output file, rather than synthesizing a result.
 
-Per-phase, through `TaskExecutor.execute_phase`: 10 phases, 0 problems from
-`_phase_problem`. `loop_health_check` rc 0, `loop_maintenance` rc 0,
-`run_pytest` rc 0, `loop_infrastructure_check` rc 0, `sa_runner self-correct`
-rc 0.
+**UNKNOWN** — no `llm` phase has ever been observed producing output, on this
+machine or any other in this repo. Their behaviour comes from their prompt
+files and is a claim, not a measurement. They need an OMP session with a
+provider bound to verify.
 
-**UNKNOWN** — the `llm` phases have never been observed producing output, on
-this machine or any other in this repo. Their descriptions above come from
-their prompt files and are claims, not measurements. They need an OMP session
-with a provider bound to verify.
+**Exit code is not evidence on its own.** One defect below shipped green: a
+phase reported `ok` while writing nothing. Acceptance for a writing phase is
+*artifact on disk*, checked after the run.
 
-**Exit code is not evidence on its own.** One of the defects below shipped
-green: a phase reported `ok` while writing nothing. Acceptance for any writing
-phase is *artifact on disk*, checked after the run.
+## Is each task project agnostic?
 
-### Fixed A — `git` was required and never used
+No. Measured, not assumed:
 
-`loop_infrastructure_check.py` required `git` in `PATH`, but the isolation
-image `theteam:p4final` has no `git`, so phase 2 exited 1 on every
-containerised run, on every machine. It passed standalone only because the
-*host* has `git` — that asymmetry is why it never surfaced outside the
-executor.
+| task | project agnostic? | why |
+|---|---|---|
+| `project-integrity` | **partly** | `REQUIRED_DIRS`/`SCRIPTS`/`CONFIGS` name *this* repo's layout. Portable only to a repo shaped like this one. |
+| `system-awareness` | **yes, after this change** | detected `theteam/core` by name, and wrote into `<root>/theteam/reports`, which existed only here. Both fixed and tested. |
+| `maintenance` | **yes** | operates on `__pycache__`, `*.pyc`, `.loop-log` — conventions, not this project. |
+| `ground-truth-audit` | **no** | its prompt names `README.md`, `ARCHITECTURE.md`, `theteam/*.md`, `scripts/check_invariants.sh` explicitly. |
+| `doc-harmonization` | **yes** | consumes the audit's output path only. |
+| `native-feature-loop` | **yes** | the prompt asks what exists and names no path of this project's. |
 
-`git` appeared nowhere except its own presence test. It has been removed, so
-`REQUIRED_TOOLS` is now `["python3"]`. Verified: `project-integrity: ok`
-through the executor.
+Every script resolves `PROJECT_ROOT` from `Path(__file__).resolve().parent.parent`,
+so no absolute path is baked in. The coupling is in *what they check*, not *where they run*.
 
-If the image should carry `git` instead, that is a Dockerfile change rather
-than a task change — and the entry belongs back in `REQUIRED_TOOLS` with it,
-because an infrastructure check that cannot see the VCS it is meant to verify
-is checking a fiction.
+## Are they self-sufficient?
 
-### Fixed B — `system-awareness` was killed, then shipped a hollow success
+| task | self-sufficient | note |
+|---|---|---|
+| `project-integrity` | **yes** | needs only the project tree |
+| `system-awareness` | **yes** | writes its own reports; needs 384MB |
+| `maintenance` | **yes** | no inputs |
+| `ground-truth-audit` | **no** | needs an OMP session |
+| `doc-harmonization` | **no** | needs an OMP session **and** the audit's output |
+| `native-feature-loop` | **no** | needs an OMP session; phases 2-4 consume files from earlier phases |
 
-Two defects, found in that order.
+Two ordering facts that are **not enforced by the executor**:
 
-**The bound.** The phase declared `memory_limit_mb: 64` and was OOM-killed at
-exit 137 on every run. Measured floor *through the executor*:
+1. `doc-harmonization` reads `ground-truth-audit`'s output. Its prompt says to
+   stop if the file is missing — that is a prompt-level guard, not a code one.
+2. `native-feature-loop` recon → implement → test → docs is sequential, and the
+   handoff is by file. `execute_task` breaks on `phase_result["success"]` and
+   nothing else, so a phase that "succeeds" without writing still lets the next
+   one run.
 
-| limit | exit |
-|---|---|
-| 64MB | 137 |
-| 256MB | 137 |
-| 320MB | 0 |
-| 384MB | 0 |
+Both are recorded, not fixed — see *Deliberate gaps* below.
 
-320 is the lowest bound measured to survive the executor, and the executor is
-what runs the task. A bare `docker run --memory=256m` succeeds where the
-executor is killed at 256, so this floor has to be measured through the
-executor — a direct invocation understates it.
+## Optimisation and modularisation
 
-**The hollow success the memory fix was hiding.** With the bound fixed, the
-phase still reported `ok` while writing **nothing**: zero reports, and
-`.loop-state.json` untouched. It has 7 write sites and never declared
-`writable_project: true`, so the container's writes failed while the script
-still exited 0. `writable_project: true` is now declared, as in
-`maintenance`.
+**Done — three fixes, each with a measured before/after:**
 
-A task reporting success having done nothing is the defect class this repo
-exists to prevent, and it survived one layer above the `print_help` no-op
-found earlier. It is why the acceptance check is the artifact, not rc 0.
+1. `format_consistency` was the literal `0.8` on every project, worth 0.24 of
+   the documentation component. It is now derived from per-file format analysis.
+   Measured on this repo: **0.8 → 0.0055** (1 of 181 markdown files has both a
+   TOC and consistent headings).
+2. `analyze_architecture` detected `theteam/core` and `theteam/security` by
+   name. Every other project scored zero on architecture for not being this
+   repo. Now detects any conventional source root and any `security`/`auth`
+   module.
+3. `report_dir` was assumed to exist. The analyzer died with `FileNotFoundError`
+   on its first write against any other project. Now created.
 
-Both defects are the same shape: **a check that reports a truth nobody
-verifies.** A check that can only fail is not a check, and a bound that always
-kills is not a bound.
+**Not needed:**
 
-### Observing the bounds
+- **Merging `project-integrity`'s two phases.** Their `REQUIRED_DIRS` overlap,
+  but only phase 1 JSON-parses the configs — merging would silently drop config
+  validation. Kept separate, with the reason in the task file.
+- **Merging `system-awareness` into `ground-truth-audit`.** SA counts files and
+  headings; GTA compares claims against code. Different questions.
+- **Splitting `system-awareness`.** It runs four analyses in one process, which
+  is why it needs 384MB. Splitting is the right move when it outgrows that, not
+  before.
 
-Every phase logs the exact `docker run` it used, at INFO level:
+**Deliberate gaps, recorded not fixed:**
 
-```
-INFO theteam.core.agent_isolation: isolated agent run: docker run --rm
-  --network none --memory 320m --cpus 1.0 ... --mount type=bind,...
-```
-
-`--memory 320m` and the mount mode make both defects legible in plain sight,
-before either check has run.
-
-### Known issue, not fixed
-
-`.loop-state.json` carries two `last_execution` fields — a nested one, fresh
-and correct, and a top-level one frozen at `2026-09-30T22:35`. Both stores
-agree on score `0.5551` and grade `D`. Pre-existing, outside the two fixes
-above.
+- No `depends_on:` field. Exactly one handoff exists between `llm` phases; a
+  general mechanism for one case is the abstraction this repo keeps rejecting.
+- `scripts/loop_reporter.py` and `scripts/loop_state.py` have zero task
+  importers and use `os.getcwd()` rather than `__file__`. Operator tooling, not
+  tasks — left in place.
+- `.loop-state.json` carries two `last_execution` fields, one nested and
+  current, one top-level and frozen. Both stores agree on score and grade.
+  Pre-existing, outside the fixes above.

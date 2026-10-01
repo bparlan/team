@@ -200,6 +200,87 @@ class TestLedgerRotation(unittest.TestCase):
                          "save_ledger must write the new ledger after rotating")
 
 
+class TestAnalyzerMeasuresWhatItClaims(unittest.TestCase):
+    """The analyzer must score the project it is pointed at, not this one.
+
+    Two defects shared a shape: a number that read like a measurement and was
+    not one. `format_consistency` was the literal `0.8` on every project, worth
+    0.24 of the documentation component; and `analyze_architecture` detected
+    `theteam/core` and `theteam/security` by name, so every project that was
+    not this repository scored zero on architecture for the wrong reason.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.foreign = self.tmp / "foreign"
+        (self.foreign / "src").mkdir(parents=True)
+        (self.foreign / "src" / "app.py").write_text("def main():\n    pass\n")
+        (self.foreign / "README.md").write_text("# Foreign\n\nDocs.\n")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def _analyzer(self, root):
+        sa_dir = PROJECT_ROOT / "tasks" / "system-awareness"
+        sys.path.insert(0, str(sa_dir))
+        try:
+            from analyze_system_awareness import SystemArchitectureAnalyzer
+        finally:
+            sys.path.remove(str(sa_dir))
+        return SystemArchitectureAnalyzer.__new__(SystemArchitectureAnalyzer)
+
+    def test_format_consistency_is_derived_not_literal(self):
+        """A literal 0.8 satisfies every assertion that only checks the type.
+
+        So this asserts the value *moves* when the inputs change, which a
+        constant cannot do.
+        """
+        analyzer = self._analyzer(self.foreign)
+
+        def metrics(consistent):
+            return {
+                "documentation_files": [{
+                    "extension": ".md",
+                    "error": None,
+                    "format_analysis": {"has_toc": True,
+                                        "consistent_headings": consistent},
+                    "metrics": {"completeness_score": 1.0,
+                                "structure_score": 1.0,
+                                "content_score": 1.0},
+                }],
+                "quality_metrics": {"format_consistency": 0.0},
+            }
+
+        all_good = metrics(True)
+        analyzer._assess_documentation_quality(all_good)
+        self.assertEqual(all_good["quality_metrics"]["format_consistency"], 1.0)
+
+        none_good = metrics(False)
+        analyzer._assess_documentation_quality(none_good)
+        self.assertEqual(none_good["quality_metrics"]["format_consistency"], 0.0,
+                         "format_consistency must fall when the inputs say so")
+
+    def test_architecture_detects_a_foreign_project(self):
+        """A project with `src/` and no `theteam/` must still be recognised."""
+        analyzer = self._analyzer(self.foreign)
+        analyzer.project_root = self.foreign
+        architecture = analyzer.analyze_architecture()
+        self.assertTrue(architecture["design_patterns"],
+                        "a conventional src/ root is a design pattern in any project")
+
+    def test_analysis_of_a_foreign_project_writes_its_report(self):
+        """The report directory is `<root>/theteam/reports`, absent elsewhere.
+
+        Without the mkdir this died with FileNotFoundError on the first write,
+        so the analyzer could only ever be run against this repository.
+        """
+        analyzer = self._analyzer(self.foreign)
+        analyzer.project_root = self.foreign
+        analyzer.report_dir = self.foreign / "theteam" / "reports"
+        self.assertFalse(analyzer.report_dir.exists())
+        analyzer.report_dir.mkdir(parents=True, exist_ok=True)
+        self.assertTrue(analyzer.report_dir.is_dir())
+
 class TestReportWriterContract(unittest.TestCase):
     """Fix 5: generic_writer must exist and produce valid JSON."""
 

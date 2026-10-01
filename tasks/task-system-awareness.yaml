@@ -28,16 +28,19 @@ phases:
     timeout_seconds: 300
     # Was 64, which this phase cannot run in: OOM-killed at exit 137 on
     # every run. Measured floor through the executor, by exit code:
-    # 256->137 (killed), 320->0, 384->0, 512->0.
+    # 256->137, 320->137, 384->0, 512->0.
     #
-    # 320 is not a round number picked for headroom. It is the lowest bound
+    # 384 is not a round number picked for headroom. It is the lowest bound
     # measured to survive the executor, and the executor is what runs this.
+    # It moved 320->384 when `format_consistency` stopped being the literal
+    # 0.8 and became a real scan of all 181 markdown files -- a derived
+    # measurement costs more memory than the constant it replaced.
     # A bare `docker run --memory=256m` succeeds where the executor is
     # killed at 256, so the floor has to be measured through the executor.
     #
-    # When it outgrows 320, the analysis needs splitting into more phases -- a
+    # When it outgrows 384, the analysis needs splitting into more phases -- a
     # bigger number here would hide that one process is doing four jobs.
-    memory_limit_mb: 320
+    memory_limit_mb: 384
     # This phase writes 5 reports and refreshes `.loop-state.json`, and the
     # executor mounts the project read-only by default. Without this flag the
     # writes fail inside the container and the phase still exits 0 — observed:

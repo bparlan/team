@@ -163,6 +163,11 @@ class SystemArchitectureAnalyzer:
         
         # Save report
         report_file = self.report_dir / f"system-architecture-analysis-{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.md"
+        # `self.report_dir` is `<root>/theteam/reports`, which exists in *this*
+        # repo and no other project. Creating it keeps the analyzer runnable
+        # against any project root; without this it died with FileNotFoundError
+        # on its first write, which is a crash, not a score.
+        self.report_dir.mkdir(parents=True, exist_ok=True)
         with open(report_file, 'w') as f:
             f.write(full_report)
             
@@ -721,7 +726,24 @@ class SystemArchitectureAnalyzer:
             
             docs_structure["quality_metrics"]["content_score"] = avg_content
             
-            docs_structure["quality_metrics"]["format_consistency"] = 0.8
+            # This was the literal `0.8` — a number that looked like a
+            # measurement and was not one. It carries 0.3 weight in the
+            # documentation total below, so every project got a free 0.24 on
+            # that component. Now derived from the per-file `format_analysis`
+            # this class already collects: the share of markdown files with
+            # both a table of contents and consistent heading levels.
+            markdown_files = [f for f in docs_structure["documentation_files"]
+                              if not f.get("error") and f["extension"] == ".md"]
+            if markdown_files:
+                consistent = sum(
+                    1 for f in markdown_files
+                    if f["format_analysis"].get("has_toc", False)
+                    and f["format_analysis"].get("consistent_headings", False)
+                )
+                docs_structure["quality_metrics"]["format_consistency"] = (
+                    consistent / len(markdown_files))
+            else:
+                docs_structure["quality_metrics"]["format_consistency"] = 0.0
     
     def _identify_documentation_gaps(self, docs_structure: Dict[str, Any]) -> None:
         """Identify documentation gaps and generate recommendations."""
@@ -804,22 +826,33 @@ class SystemArchitectureAnalyzer:
             "recommendations": []
         }
         
-        # Analyze architectural elements based on project structure
-        if (self.project_root / "theteam" / "core").exists():
-            architecture["design_patterns"].append({
-                "name": "Modular Architecture",
-                "description": "Clear separation of concerns with dedicated modules",
-                "location": "theteam/core, theteam/security, theteam/workflow",
-                "quality_score": 0.9
-            })
-            
-        if (self.project_root / "theteam" / "security").exists():
-            architecture["architectural_decisions"].append({
-                "pattern": "Security-First Design",
-                "implementation": "Dedicated security utilities module",
-                "rationale": "Centralized security controls and validation",
-                "impact": "High - provides consistent security enforcement"
-            })
+        # Architecture is detected from *any* conventional source root, not this
+        # repository's own directory names. These two branches used to test for
+        # `theteam/core` and `theteam/security` specifically, so every other
+        # project scored zero on architecture for not being this repo — a
+        # measurement of the wrong thing that read as a real measurement.
+        for source_root in ("src", "lib", "app", "pkg", "theteam"):
+            if (self.project_root / source_root).is_dir():
+                architecture["design_patterns"].append({
+                    "name": "Separated source root",
+                    "description": "Source is separated from the project root",
+                    "location": source_root,
+                    "quality_score": 0.9
+                })
+                break
+
+        # A dedicated security module, whatever this project happens to call it.
+        for candidate in sorted(self.project_root.glob("*")):
+            if not candidate.is_dir():
+                continue
+            if {"security", "auth"} & {p.name.lower() for p in candidate.iterdir()}:
+                architecture["architectural_decisions"].append({
+                    "pattern": "Security-First Design",
+                    "implementation": f"Dedicated module in {candidate.name}/",
+                    "rationale": "Centralized security controls and validation",
+                    "impact": "High - provides consistent security enforcement"
+                })
+                break
         
         # Check for technical debt
         if self._detect_technical_debt():

@@ -677,7 +677,21 @@ Measured baseline for the removal work: **7** occurrences of `/Users/bparlan`, *
 
 Nine milestones, ordered by user-visible outcome, not by subsystem. Each is a command the user can run. Each has a falsification test. M6 is the first milestone not named in the original order; a five-member review deferred it until after M4, so that what the renderer displays is real. M7 and M8 shipped before M9 was written and are recorded in `theteam/CHANGELOG.md`; both were documentation audits rather than new capability, so neither has a section here.
 
-The ordering rule: **at every intermediate commit, all four existing tasks still execute.** The switch from the current store to the YAML repository is the one place that can silently break that, and it gets an explicit guard.
+The ordering rule: **at every intermediate commit, all registered tasks still execute.** It was
+originally written as "all four existing tasks", counting the pre-M2 registry; the YAML repository
+carries six, so the count is now taken from `TaskRepository` rather than asserted here.
+
+**The rule was never met, and the recorded history says so.** `task-execution.log` shows
+`project-integrity` 0/2 and `health-check` 0/3 across every run it holds — two tasks failing on
+every attempt, on every machine. Both had the same shape: a requirement nothing could satisfy.
+`project-integrity` phase 2 required `git` in an isolation image that has no `git`;
+`system-awareness` declared a 64MB bound its own analysis cannot run in. Fixed 2026-10-01; the
+evidence table is `tasks/README.md` § Verified behaviour.
+
+A third failure was worse than a red task: `system-awareness` reported `ok` while writing nothing,
+because it never declared `writable_project` and so wrote into a read-only mount. **Exit code is
+not evidence.** The rule as originally worded would have been satisfied by that run. It is now
+stated as *execute and produce its artifact*, which is the property that was actually intended.
 
 ## M0 — The team cannot lie
 

@@ -219,6 +219,37 @@ def test_output_arrives_before_the_process_exits():
     assert proc.exited.is_set(), "test is not exercising a real ordering"
 
 
+def test_the_stream_is_decoded_without_raising():
+    """A container may emit bytes that are not UTF-8, and the run must survive.
+
+    Python's text mode raises `UnicodeDecodeError` on the first byte that is
+    not valid UTF-8. That exception is raised inside the reader thread, so it
+    does not propagate to the caller — it kills the reader, and everything
+    from the bad byte onward is silently lost, including lines already read.
+    Measured without the kwarg: a writer emitting `b"alpha line\n"` then
+    invalid bytes lost both lines and raised after zero were yielded.
+    """
+    # Assert the setting on the call this module actually makes. Asserting on a
+    # hand-rolled `subprocess.Popen` here would pass whether or not `run` had
+    # the kwarg, which is the whole bug this defends.
+    seen_kwargs = {}
+
+    class _Echo(_Proc):
+        def wait(self, timeout=None):
+            return self.returncode
+
+    def runner(argv, **kwargs):
+        seen_kwargs.update(kwargs)
+        return _Echo(returncode=0, lines=[])
+
+    AgentIsolation(runner=runner).run(["x"])
+    assert seen_kwargs.get("errors") == "replace", (
+        "the pipe is decoded as strict UTF-8, so a container emitting a "
+        "non-UTF-8 byte raises UnicodeDecodeError inside the reader thread "
+        "and silently truncates the stream from that point on"
+    )
+
+
 def test_inherited_env_only_contains_allowlisted_keys(monkeypatch):
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setenv("MY_SECRET_TOKEN", "leak-me")

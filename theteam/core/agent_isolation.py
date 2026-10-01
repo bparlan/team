@@ -248,7 +248,6 @@ class AgentIsolation:
         so a silent hang would never time out, which is the exact failure this
         change exists to remove.
 
-
         `MAX_OUTPUT_BYTES` is still a cap, and still the same number. It now
         bounds a deque of recent lines rather than a string being appended to,
         so an agent printing in a loop cannot grow the parent's memory — but
@@ -262,6 +261,15 @@ class AgentIsolation:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                # A container is not obliged to speak UTF-8, and Python's text
+                # mode raises `UnicodeDecodeError` on the first byte that is
+                # not. That exception lands in the reader thread and kills it,
+                # so the stream stops mid-run and the tail silently loses
+                # everything after the bad byte — including the line before it,
+                # because the decode happens before the line is yielded.
+                # Replacing is the honest reading: the bytes are not text, and
+                # the run is still worth reporting.
+                errors="replace",
             )
         except OSError as e:
             raise IsolationError(f"could not start isolated container: {e}") from e

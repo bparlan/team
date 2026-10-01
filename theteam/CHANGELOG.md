@@ -65,6 +65,19 @@ has not returned, and by the existing breaker and history suites, which caught
 two real regressions during the change: the breaker recording was dropped along
 with a duplicated phase loop, and the refusal branch had to move ahead of it.
 
+One more defect in the same rewrite, found by advisories and confirmed by
+measurement rather than argument: `Popen` was given `text=True` with no
+`errors=` setting. Python's text mode raises `UnicodeDecodeError` on the first
+byte that is not valid UTF-8, and a container is under no obligation to speak
+UTF-8. That exception is raised inside the reader thread, so it never reaches
+the caller — it kills the reader, and the stream stops mid-run. Measured: a
+writer emitting `b"alpha line\n"` followed by invalid bytes lost *both* lines,
+raising after zero were yielded. `errors="replace"` fixes it; the bad bytes are
+reported rather than silently truncating everything around them. The
+regression test asserts on the kwarg our own call passes, not on a
+hand-rolled `Popen` — an earlier draft of that test built its own process and
+would have passed with the bug still present.
+
 ## Task survey — five defects found by running things
 
 Evaluating the six registered tasks by executing them, rather than by reading

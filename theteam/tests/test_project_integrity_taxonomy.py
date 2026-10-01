@@ -29,12 +29,12 @@ from theteam.tasks.executor import (
     OOM_KILL_EXIT_CODE,
 )
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
 
 
 def _taxonomy_from_script(name: str) -> dict:
     """Read the constant out of a check script without importing it."""
-    tree = ast.parse((PROJECT_ROOT / "scripts" / name).read_text())
+    tree = ast.parse((SCRIPTS_DIR / name).read_text())
     for node in tree.body:
         if isinstance(node, ast.Assign):
             for target in node.targets:
@@ -171,7 +171,7 @@ def test_the_check_reports_findings_with_exit_three(
         (probe / d).mkdir(parents=True, exist_ok=True)
     # Every directory the script checks for is deliberately absent, so there is
     # at least one genuine finding either way.
-    script = PROJECT_ROOT / "scripts" / script_name
+    script = SCRIPTS_DIR / script_name
     (probe / "scripts" / script.name).write_text(script.read_text())
 
     result = subprocess.run(

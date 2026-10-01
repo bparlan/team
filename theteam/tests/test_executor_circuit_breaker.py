@@ -86,7 +86,13 @@ def _failing_task(root, task_id="crasher", script="phases/crasher.py"):
             "last_run": {},
         },
     )
-    _script(root, script, "import sys\nsys.exit(3)\n")
+    # Exit 1, not 3. This fixture is a phase that *broke*, and the phase-outcome
+    # taxonomy reads 3 as "ran to completion and reported findings" — a success
+    # carrying a marker. With 3 here, four breaker tests asserting real failures
+    # observed `ok` plus a findings marker, because the deliberate crash was
+    # being read as a working check with something to say. That is the exact
+    # confusion the taxonomy exists to prevent, reproduced in its own suite.
+    _script(root, script, "import sys\nsys.exit(1)\n")
     return root
 
 
@@ -180,7 +186,7 @@ def test_five_failures_across_five_runs_then_a_sixth_is_skipped_breaker_open(tmp
         # the fields that are not a timing reading.
         assert [{k: v for k, v in r.items() if k != "elapsed"}
                 for r in payload["results"]] == [
-            {"id": "crasher", "result": "failed", "detail": "returncode 3"}
+            {"id": "crasher", "result": "failed", "detail": "returncode 1"}
         ], attempt
         assert _last(root, "crasher")["breaker_consecutive_failures"] == attempt
 

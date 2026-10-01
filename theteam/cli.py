@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional
 import yaml
 
 from theteam.state import StateStore
+from theteam.core.run_context import write_run_context
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -542,6 +543,32 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         "elapsed": round(time.monotonic() - sweep_started, 2),
         "purged_orphans": purged,
         "results": results,
+        # Every `theteam run` refreshes the state the project-integrity gate
+        # reads and writes the context members are handed. This replaced the
+        # only production writer of `.loop-state.json`, which lived inside
+        # `sa_runner._run_correction_cycle` (sa_runner.py:451) — a 600s analysis
+        # phase. With scheduling off, `run` is the only thing that executes, so
+        # it is the only thing that can keep the gate honest: a file refreshed
+        # only by a task nobody runs would eventually read as stale, and
+        # `loop_health_check.py:79` would report a finding nothing could fix.
+        # Only the booleans, never the paths or the timing. `run_due_tasks`
+        # returns a payload a test can compare byte-for-byte across two runs
+        # that did nothing — `test_two_runs_with_nothing_due_are_byte_identical`
+        # enforces exactly that — and an absolute path or a fractional `elapsed`
+        # makes two identical reads differ. Measured: including them failed that
+        # test with `context_path: /tmp/... != /tmp/...` and `elapsed: 0.0006 !=
+        # 0.0005`.
+        #
+        # The caller that wants the path or the timing can read them off disk or
+        # time it itself; a payload that varies run to run cannot be compared,
+        # and a payload nobody can compare cannot be asserted on.
+        "context": write_run_context(project_root,
+                                     success=not any(
+                                         r["result"] == "failed"
+                                         for r in results),
+                                     executed=any(
+                                         r["result"] in ("ok", "failed")
+                                         for r in results)),
     }
 
 

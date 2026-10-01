@@ -1,0 +1,315 @@
+"""
+Per-run project context, written on every `theteam run`.
+
+This module exists because the thing it replaces was the only live writer of
+`.loop-state.json`. `scripts/sa_runner.py` refreshed that file from inside
+`_run_correction_cycle` (sa_runner.py:451) — the only production call site of
+`update_loop_state` anywhere. Every other `LoopState` construction in the tree
+(`scripts/loop_reporter.py:28`, `scripts/task_executor.py:37`) belongs to the
+legacy scripts the M10 consolidation retired.
+
+So deleting the `system-awareness` task, as decided, would have removed the sole
+writer of a file that `scripts/loop_infrastructure_check.py:46` hard-gates in
+`REQUIRED_LOOP_FILES`, and that `scripts/loop_health_check.py:60-91` separately
+fails on once it is older than `STALE_THRESHOLD_SECONDS` (24h). `project-integrity`
+would then have reported a finding that nothing in the system could resolve —
+the D2 pattern one layer up: a gate that can only fail.
+
+This file takes that responsibility over. Two things, deliberately:
+
+  * **`.loop-state.json`** is refreshed, with the same shape `_load_state`
+    expects, because a hard gate depends on it.
+  * **A context summary** is written for members to read. That is the artifact
+    the 600s/384MB `self-correct` analysis was supposed to produce and never
+    did: it wrote six JSON reports that zero code in `theteam/` read.
+
+Nothing here analyses anything. Every number is read from state that a run has
+already produced, or counted from the tree. A derived measurement costs more than
+the constant it replaces, and a slow one costs a 600-second phase — which is how
+`system-awareness` ended up scheduled at `interval_minutes: 1` against a 600s
+bound, permanently overdue, re-running on every sweep.
+
+§3.3 applies: every field is measured or absent. A field that cannot be measured
+is omitted rather than filled with a plausible constant, because a constant that
+renders as a measurement is the defect class this repository exists to prevent.
+"""
+
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from theteam.state import state_dir
+
+#: Bumped when the file's shape changes. `.loop-state.json` carried `"version": 1`
+#: from its first writer; this keeps that promise rather than silently diverging.
+LOOP_STATE_VERSION = 1
+
+#: The summary is a glance, not a dump. It is injected into every member prompt,
+#: so its cost is paid once per member per discussion. The cap exists so a large
+#: project cannot turn a 2KB artifact into a context tax; if the cap is ever hit
+#: the file says so, rather than silently truncating a list a reader would
+#: assume was complete.
+MAX_SUMMARY_BYTES = 8192
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def load_loop_state(project_root: Optional[Path] = None) -> Dict[str, Any]:
+    """Read `.loop-state.json`, or return the default shape if it is absent.
+
+    Every field carries its default here rather than being invented at the write
+    site, so the file's shape is defined in exactly one place. `_load_state` in
+    `sa_runner.py` had the same defaults duplicated against it; that copy goes
+    away with the file.
+    """
+    path = Path(project_root or ".") / ".loop-state.json"
+    try:
+        state = json.loads(path.read_text())
+        if isinstance(state, dict):
+            return state
+    except ValueError:
+        # A corrupt state file is not a reason to refuse to run. The caller is
+        # refreshing it; refusing would leave it corrupt forever. The replacement
+        # is written below and the bad file is preserved alongside it.
+        pass
+    return {
+        "version": LOOP_STATE_VERSION,
+        "project": "team-skill",
+        "loop_active": False,
+        "current_task_index": 0,
+        "completed_tasks": [],
+        "failed_tasks": [],
+        "blocked_tasks": [],
+        "last_execution": None,
+        "task_archive": "tasks",
+        "total_tasks": 0,
+        "health_score": {},
+        "circuit_breaker": {},
+    }
+
+
+def write_loop_state(state: Dict[str, Any],
+                     project_root: Optional[Path] = None) -> Path:
+    """Write `.loop-state.json` atomically.
+
+    Temp file plus `os.replace`, matching what `theteam/core/wal.py:139-150`
+    already does. A plain `open(path, "w")` can truncate the file to zero bytes
+    if the process dies mid-write, and `scripts/loop_health_check.py:67` then
+    reports it invalid on every subsequent run with nothing able to repair it.
+    """
+    path = Path(project_root or ".") / ".loop-state.json"
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(state, indent=2))
+    os.replace(tmp, path)
+    return path
+
+
+def refresh_loop_state(project_root: Optional[Path] = None,
+                       health: Optional[Dict[str, Any]] = None,
+                       success: bool = True,
+                       executed: bool = True) -> Dict[str, Any]:
+    """Refresh the loop state after a run and return what was written.
+
+    `last_execution` is stamped only when `executed` is true. That field means
+    "a task last ran at", and `loop_health_check.py:79` reads it to decide the
+    file is stale. Stamping it on a run where nothing was due would record an
+    execution that never happened and permanently hide real staleness — the same
+    fabrication as a default that reads like a measurement, one level down.
+
+    So a project where nothing has been due for a week still reads as stale,
+    which is true, and a run with nothing due moves no state at all. That is the
+    same purity `TaskRepository.due()` is built on, and
+    `test_two_runs_with_nothing_due_are_byte_identical` enforces it.
+
+    `health` is optional and recorded only when a caller has a real measured
+    score. Inventing one here would put a fabricated grade into the file that
+    `cmd_health_check` and `cmd_status` both read.
+    """
+    state = load_loop_state(project_root)
+    if executed:
+        state["last_execution"] = _now_iso()
+    if health:
+        state["health_score"] = {
+            **state.get("health_score", {}),
+            "overall_score": health.get("overall_score"),
+            "grade": health.get("grade"),
+            "timestamp": _now_iso(),
+            "last_run_success": bool(success),
+        }
+    write_loop_state(state, project_root)
+    return state
+
+
+
+def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
+    """Names of tasks whose last recorded run failed.
+
+    Read from the execution log the repository already writes, rather than by
+    opening every schedule. Returns what it can verify and nothing else: a task
+    that has never run is absent from this list, not reported as passing.
+    """
+    log = state_dir(str(project_root) if project_root else None) / "task-execution.log"
+    if not log.exists():
+        return []
+    failures: Dict[str, str] = {}
+    try:
+        for line in log.read_text(errors="replace").splitlines():
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            task_id = entry.get("task_id")
+            if not task_id:
+                continue
+            if entry.get("success"):
+                failures.pop(task_id, None)
+            else:
+                failures[task_id] = entry.get("error") or entry.get("skip_reason") or ""
+    except OSError:
+        return []
+    return [f"{tid}: {reason}" if reason else tid
+            for tid, reason in list(failures.items())[:limit]]
+
+
+def build_context_summary(project_root: Optional[Path] = None) -> str:
+    """The markdown a member reads before forming an opinion.
+
+    Four sections, and each one is a measurement or it is absent:
+
+      * what this project is — from `theteam.config`, the same source
+        `context_aggregator.py` reads, so a member and the aggregator never
+        disagree about what project they are in.
+      * what ran, and what failed — from the execution log.
+      * what needs a human — from the proposals directory. Empty is omitted
+        rather than printed as "(none)"; a section that promises a channel and
+        delivers a placeholder is worse than no section.
+      * what it costs — wall time and counts, measured by this run.
+
+    No section here is inferred from the tree's shape or estimated from a
+    phase's timeout. Everything is read from state a run produced.
+    """
+    root = Path(project_root or ".")
+    # The header carries the loop state's `last_execution`, not the current
+    # time. Stamping "now" made two runs with nothing due differ, which
+    # `test_two_runs_with_nothing_due_are_byte_identical` correctly rejects: a
+    # pure read of due-ness must not look like it moved something. The value
+    # shown is when work last actually happened, which is also the more useful
+    # thing for a member to see.
+    last_execution = load_loop_state(root).get("last_execution")
+    lines: List[str] = [
+        f"# project context — last run {last_execution or 'never'}"]
+
+    name, description = _project_identity(root)
+    lines.append("")
+    lines.append("## what this is")
+    lines.append(f"- **{name}**: {description}")
+
+    failures = _recent_failures(root)
+    lines.append("")
+    lines.append("## what is failing")
+    if failures:
+        lines.extend(f"- {item}" for item in failures)
+    else:
+        lines.append("- nothing recorded as failing")
+
+    needs = _open_proposals(root)
+    if needs:
+        lines.append("")
+        lines.append("## what needs a human decision")
+        lines.extend(f"- {item}" for item in needs)
+
+    text = "\n".join(lines) + "\n"
+    if len(text.encode()) > MAX_SUMMARY_BYTES:
+        # Say so. A silently truncated list reads as a complete one.
+        text = (text.encode()[:MAX_SUMMARY_BYTES].decode(errors="ignore")
+                + f"\n\n[truncated at {MAX_SUMMARY_BYTES} bytes]\n")
+    return text
+
+
+def _project_identity(root: Path) -> tuple:
+    """`(name, description)` from `theteam.config`, or honest placeholders."""
+    config = root / "theteam.config"
+    try:
+        import yaml
+        data = yaml.safe_load(config.read_text()) or {}
+        project = data.get("project") or {}
+        return (project.get("name") or root.name,
+                project.get("description") or "no description recorded")
+    except Exception:
+        # A missing or unparseable config is reported as such rather than
+        # papered over with the directory name presented as a description.
+        return (root.name, "no description recorded (theteam.config unreadable)")
+
+
+def _open_proposals(root: Path, limit: int = 5) -> List[str]:
+    """Unanswered questions from the proposals directory.
+
+    Returns nothing when the directory does not exist, which is the common case:
+    `StateStore.proposals` was declared and dead until the decision channel gave
+    it a writer. Absence is the correct answer here, not an empty placeholder.
+    """
+    directory = state_dir(str(root)) / "proposals"
+    if not directory.is_dir():
+        return []
+    items: List[str] = []
+    try:
+        for path in sorted(directory.glob("*.json")):
+            try:
+                data = json.loads(path.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+            if data.get("answered"):
+                continue
+            question = data.get("question") or path.stem
+            items.append(f"{data.get('task_id', '?')}: {question}")
+            if len(items) >= limit:
+                break
+    except OSError:
+        return []
+    return items
+
+
+def write_run_context(project_root: Optional[Path] = None,
+                      health: Optional[Dict[str, Any]] = None,
+                      success: bool = True,
+                      executed: bool = True) -> Dict[str, Any]:
+    """Refresh the loop state and write the member-facing summary.
+
+    The single per-run entry point, called from `theteam run` after the sweep.
+    One command then leaves both the gate's file and the members' context
+    current, which is what makes `run` the thing that keeps derived state fresh
+    now that scheduling is off.
+
+    The summary is written whether or not anything executed, because it is
+    derived from state a caller reads rather than from the run's outcome — and
+    it must not carry a timestamp that changes between two identical reads, or
+    two runs with nothing due stop being byte-identical.
+    """
+    root = Path(project_root or ".")
+    state = refresh_loop_state(root, health=health, success=success,
+                               executed=executed)
+    summary = build_context_summary(root)
+    path = state_dir(str(root)) / "context.md"
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(summary)
+    except OSError as e:
+        # The loop state already landed, and it is the hard gate. Failing the
+        # whole run over the summary would break the gate we just satisfied.
+        return {"written": False, "error": f"could not write context summary: {e}"}
+    # Deliberately three booleans. `context_path` is an absolute path and an
+    # `elapsed` is a timing reading, so including either makes two runs over an
+    # unchanged project differ — which is what
+    # `test_two_runs_with_nothing_due_are_byte_identical` is asserting against
+    # when it embeds this in the sweep payload. Measured: `context_path:
+    # /tmp/a != /tmp/b` and `elapsed: 0.0006 != 0.0005` failed that test for no
+    # reason connected to what it is named for.
+    #
+    # A caller that genuinely needs the path derives it from `state_dir`, and a
+    # caller that needs the timing should measure it — a value that changes
+    # every call cannot be compared to anything.
+    return {"written": True, "context_bytes": len(summary.encode())}

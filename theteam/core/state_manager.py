@@ -62,7 +62,9 @@ def _wal_path_for(state_file: Optional[str]) -> str:
     if state_file:
         return os.path.join(os.path.dirname(os.path.abspath(state_file)),
                             "wal.json")
-    return os.path.join(tempfile.gettempdir(), "theteam-wal.json")
+    return os.path.join(
+        tempfile.gettempdir(),
+        f"theteam-wal-{os.getpid()}-{uuid.uuid4().hex[:8]}.json")
 
 
 class _Notifying:

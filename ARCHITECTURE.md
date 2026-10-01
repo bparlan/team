@@ -603,6 +603,12 @@ deliberately, so that importing the package does not load a database tier.
 | `theteam/tests/test_state_validator.py.backup2` | Not collected by pytest (0 tests), not imported. The live `test_state_validator.py` and `core/state_validator.py` are unaffected. Removed 2026-09-29. |
 | `theteam/__main__.py` as entry point | it is a metrics server, not an orchestrator |
 
+### 5.3.1 Tracked, orphaned, not removed
+
+| Path | Why it is still here |
+|---|---|
+| `config/routine-engine/` (5 files) | Configuration for the `routine-engine/` M10 deleted. Nothing reads any of the 5 files by name, `pyproject.toml` packages only `theteam*`, and none is a valid task under §5.4 — `routines.yaml` holds `command_triggers` maps, `routines_engine.yaml` a dependency graph (`monthly-evolution` → `weekly-analysis` → `daily-maintenance`), `interactive_config.json` a `run_routine` command. Same shape as the unproduced `proposals/` entry in §5.5: a data file with no producer and no reader. Tracked since M0, which removed the engine and left its config. **Not deleted** — removal is a separate decision. |
+
 ## 5.4 One task format
 
 ```
@@ -691,6 +697,7 @@ All resolution goes through one function in `theteam/state.py`, which takes an e
 ```
 .omp/theteam/
   state.json                   # StateStore.state_file
+  wal.json                     # write-ahead log, beside state.json; see below
   task-registry.json           # derived, rebuildable from tasks/*.yaml
   task-schedule.json           # schedule and per-task last_run
   task-execution.log           # bounded by EXECUTION_LOG_MAX_LINES
@@ -709,11 +716,25 @@ resolver is real, and marked here because a state entry with no producer is the
 shape a decision channel would take when it lands. Do not read its presence as a
 feature.
 
-Every name above is one `theteam/state.py` resolves. The list is not exhaustive:
+Every name above but one is one `theteam/state.py` resolves. The exception is
+`wal.json`, which `UnifiedStateManager` places beside `state.json`
+(`state_manager._wal_path_for`) because it is written through `WriteAheadLog`
+(`core/wal.py`), not through `StateStore`. The list is not exhaustive:
 `StateStore` also resolves `tasks_dir`, `events_dir`, `members`, `discussions`,
 `task_stack`, `task_daemon_status`, `task_daemon_pid` and `tool_manifest`, and
 those are omitted here because this section is about the core layout, not a
-property index. Three earlier entries were wrong and are corrected here:
+property index.
+
+The WAL follows `state.json` rather than taking `WriteAheadLog`'s default, a
+bare `wal.json` resolved against the process CWD. That default ignored the
+`state_file` its own constructor was handed, so a manager pointed at one
+project still appended to whatever directory the process started in — which is
+how the tracked `wal.json` at the repo root filled with test fixture state. A
+manager built without a state file has no project to sit beside, so its WAL
+goes to the temp dir under a pid-and-uuid name: never to the CWD, and never to
+a shared path two managers would interleave.
+
+Three earlier entries were wrong and are corrected here:
 `loop/state.json` (there is no `loop/` directory),
 `tasks/registry.cache.json` (the registry is `task-registry.json` at the state
 root, and §5.4 made `tasks/*.yaml` the canonical store), and `audit/chain.jsonl`

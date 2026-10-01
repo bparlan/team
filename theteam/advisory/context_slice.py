@@ -189,75 +189,70 @@ def slice_context(
     return _render(delivered), undelivered
 
 
-class _Markdown(str):
-    """A string that must reach the reader as text, not as an escaped blob.
-
-    A `str` subclass so it can carry a rendering intent that plain `str` cannot:
-    `yaml.dump` quotes and escapes an ordinary string's newlines, which is right
-    for data and wrong for a document a member is meant to read.
-    """
-
-
-class _MarkdownDumper(yaml.SafeDumper):
-    """Dumps `_Markdown` as a literal block scalar, so newlines stay newlines."""
-
-
-def _represent_markdown(dumper: yaml.SafeDumper, data: _Markdown):
-    return dumper.represent_scalar("tag:yaml.org,2002:str", str(data),
-                                   style="|")
-
-
-_MarkdownDumper.add_representer(_Markdown, _represent_markdown)
-
-
 def _render(sections: Dict[str, Any]) -> str:
-    """Deliver `run_context` as readable text inside a valid YAML document.
+    """Structured sections as YAML, then `run_context` as the text it is.
 
-    It is a markdown document, and `yaml.dump` escaped it whole — measured, a
-    member received:
+    Four rendering approaches were measured against this repository's real
+    summary before landing on this one:
 
-        run_context:
-          summary: "# project context \\u2014 last run ...\\n\\n\\
-            ## what is failing\\n- doc-harmonization\\n"
+    1. **Plain string in YAML.** The summary arrived as one quoted line with
+       `\\n` for every break and `\\u2014` for the em-dash. Present, unreadable.
+    2. **Literal block scalar (`style="|"`).** The emitter refuses a block for
+       content it cannot analyse as plain and silently falls back to
+       quoted-and-escaped — no error, just different output. Two independent
+       triggers, both measured:
 
-    So the headings arrived as the character `#` and every line break as the two
-    characters `\\n`. That is worse than absent: a member cannot tell a file
-    that was truncated from one whose newlines were escaped.
+       * non-ASCII text, because `allow_unicode` defaults to False. With
+         `allow_unicode=True` the em-dash in this project's own context header
+         renders as a block; without it, that same string renders quoted.
+       * trailing whitespace on a line, which no `allow_unicode` setting
+         rescues — `"# a   \n## b\n"` stays quoted either way.
 
-    Fixed with a YAML literal block scalar rather than by appending raw markdown
-    after the document. Appending is the obvious fix and it is wrong twice over:
-    the result stops parsing as YAML, and `test_m9_context_slice.py` asserts
-    that it does — nine assertions across that file read the delivered prompt
-    back with `yaml.safe_load` to check which sections a member received. A
-    prompt no test can read is a prompt nobody can assert on.
+       So `allow_unicode=True` alone would have passed a test on an ASCII sample
+       and failed on the real summary the moment a line gained trailing
+       whitespace. A rendering fix that depends on the content it renders is not
+       a fix, and this is why the markdown is not carried in YAML at all.
+    3. **One YAML list entry per line.** Round-trips correctly, but `#` and `-`
+       are YAML indicators, so every content line comes back quoted. Same
+       problem, distributed.
+    4. **This.** The data sections keep their YAML document, unchanged and
+       parseable. The markdown is appended after it, verbatim.
 
-    `|` keeps the content verbatim and unescaped while leaving the document
-    parseable, so both consumers are served: a member reads the markdown, and a
-    test reads the structure.
+    The cost of (4) is that the whole prompt no longer parses as one YAML
+    document. `test_m9_context_slice.py` reads it with `yaml.safe_load` in seven
+    places, so `parse_yaml_section` below extracts the leading document for
+    them — the structure is still there, and still assertable. A member reading
+    markdown has no use for a YAML parse; a test reading structure does.
     """
-    document = dict(sections)
-    context = document.get("run_context")
+    structured = {k: v for k, v in sections.items() if k != "run_context"}
+    parts: List[str] = []
+    if structured:
+        parts.append(yaml.dump(structured, default_flow_style=False).rstrip())
 
+    context = sections.get("run_context")
     if isinstance(context, dict):
         summary = context.get("summary")
         if summary:
-            document["run_context"] = {
-                **context,
-                "summary": _Markdown(str(summary).rstrip()),
-            }
+            parts.append("## current run context\n\n" + str(summary).rstrip())
         elif context.get("error"):
-            document["run_context"] = {
-                **context,
-                "summary": f"unavailable: {context['error']}",
-            }
+            parts.append("## current run context\n\nunavailable: "
+                         f"{context['error']}")
+    return "\n".join(parts) + "\n" if parts else yaml.dump(
+        {}, default_flow_style=False)
 
-    if not document:
-        # `yaml.dump({})` is "{}\n" and every consumer here parses the result,
-        # so an empty delivery stays a parseable empty document rather than an
-        # empty string that raises on `safe_load`.
-        return yaml.dump({}, default_flow_style=False)
-    return yaml.dump(document, Dumper=_MarkdownDumper,
-                     default_flow_style=False)
+
+def parse_yaml_section(rendered: str) -> Any:
+    """The structured YAML document at the head of a rendered prompt.
+
+    Exists because `slice_context` returns YAML followed by markdown. Tests
+    that assert *which sections a member received* read that structure through
+    this rather than `yaml.safe_load`, which now fails on the markdown tail.
+    """
+    head = rendered.split("\n## ", 1)[0]
+    try:
+        return yaml.safe_load(head)
+    except yaml.YAMLError:
+        return None
 
 
 def undelivered_sections(

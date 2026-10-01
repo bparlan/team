@@ -22,10 +22,10 @@ Two properties, both measured rather than assumed:
 from pathlib import Path
 
 import pytest
-import yaml
 
 from theteam.advisory.context_slice import (
     ALWAYS_DELIVERED,
+    parse_yaml_section,
     NEVER_DELIVERED,
     slice_context,
     undelivered_sections,
@@ -57,7 +57,7 @@ def test_every_member_receives_a_real_run_context(member, tmp_path, monkeypatch)
 
     rendered, _ = slice_context({"run_context": aggregate_run_context(tmp_path)},
                                 member)
-    assert "run_context" in rendered, (
+    assert "## current run context" in rendered, (
         f"{member['id']} did not receive the run context")
     assert "probe" in rendered, "the section arrived but carried no summary"
 
@@ -71,7 +71,7 @@ def test_every_member_receives_it_in_the_real_aggregate():
     context = aggregate_project_context(str(Path(__file__).resolve().parent.parent.parent))
     for member in ROSTER:
         rendered, _ = slice_context(context, member)
-        assert "run_context" in rendered, (
+        assert "## current run context" in rendered, (
             f"{member['id']} missed the run context in the full aggregate")
 
 
@@ -88,7 +88,7 @@ def test_an_absent_summary_delivers_nothing(tmp_path, monkeypatch):
     assert section.get("note"), "the absence must say so, not read as empty"
 
     rendered, _ = slice_context({"run_context": section}, {"id": "architect"})
-    assert "run_context" not in rendered, (
+    assert "## current run context" not in rendered, (
         "members were handed a note telling them there was nothing to read, "
         "which costs tokens on every prompt and carries no information")
     assert len(rendered.strip()) <= 3, (
@@ -105,7 +105,7 @@ def test_an_error_section_is_still_delivered(tmp_path, monkeypatch):
     rendered, _ = slice_context(
         {"run_context": {"summary": None, "error": "could not read context.md"}},
         {"id": "architect"})
-    assert "run_context" in rendered, (
+    assert "## current run context" in rendered, (
         "an unreadable context file was delivered as nothing, which reads as "
         "the same as never having run")
     assert "could not read" in rendered, "the reason must reach the member"
@@ -162,7 +162,7 @@ def test_the_context_is_readable_text_not_escaped_yaml():
         str(Path(__file__).resolve().parent.parent.parent))
     rendered, _ = slice_context(context, {"id": "pragmatist"})
 
-    assert "run_context" in rendered
+    assert "## current run context" in rendered
     # Real newlines and real markdown headings, not their escaped spellings.
     assert "## what is failing" in rendered, (
         "the summary's own headings did not survive rendering")
@@ -173,11 +173,13 @@ def test_the_context_is_readable_text_not_escaped_yaml():
     assert rendered.count("## what is failing") == 1, (
         "the summary was embedded more than once")
 
-    # And it is still a parseable document: `test_m9_context_slice.py` reads the
-    # delivered prompt with `yaml.safe_load` in nine places, so readability
-    # cannot be bought by making the output unparseable.
-    parsed = yaml.safe_load(rendered)
-    assert "## what is failing" in parsed["run_context"]["summary"]
+    # The structured half is still parseable, which is how the m9 suite asserts
+    # which sections a member received. Readability cannot be bought by
+    # destroying the structure.
+    parsed = parse_yaml_section(rendered)
+    assert parsed and "project_goal" in parsed, (
+        "the structured section is no longer parseable, so nothing can assert "
+        "which sections a member received")
 
 
 def test_structured_sections_keep_their_yaml_rendering():

@@ -20,6 +20,8 @@ from pathlib import Path
 
 import yaml
 
+from theteam.advisory.context_slice import parse_yaml_section
+
 from theteam.advisory.context_slice import (
     ALWAYS_DELIVERED,
     MATCH_THRESHOLD,
@@ -71,25 +73,25 @@ class TestTheFloorAndTheSkips:
     def test_every_member_gets_the_project_goal(self):
         for member in ROSTER:
             delivered, _ = slice_context(REAL_SHAPED_CONTEXT, member)
-            assert "project_goal" in yaml.safe_load(delivered)
+            assert "project_goal" in parse_yaml_section(delivered)
 
     def test_every_member_gets_the_project_root(self):
         for member in ROSTER:
             delivered, _ = slice_context(REAL_SHAPED_CONTEXT, member)
-            assert "project_root" in yaml.safe_load(delivered)
+            assert "project_root" in parse_yaml_section(delivered)
 
     def test_no_member_gets_the_timestamp(self):
         # It changes every call, so delivering it makes two identical
         # discussions produce two different prompts: a determinism bug.
         for member in ROSTER:
             delivered, _ = slice_context(REAL_SHAPED_CONTEXT, member)
-            assert "timestamp" not in yaml.safe_load(delivered)
+            assert "timestamp" not in parse_yaml_section(delivered)
 
     def test_no_member_gets_an_empty_section(self):
         # `token_budget: {}` reads like a measurement and is not one.
         for member in ROSTER:
             delivered, _ = slice_context(REAL_SHAPED_CONTEXT, member)
-            assert "token_budget" not in yaml.safe_load(delivered)
+            assert "token_budget" not in parse_yaml_section(delivered)
 
     def test_a_non_dict_context_is_rendered_as_text_not_dropped(self):
         rendered, undelivered = slice_context("just a string", ARCHITECT)
@@ -108,14 +110,14 @@ class TestASingleWordIsNotEvidence:
         # package description. That is not evidence they need it.
         context = {"runtime_config": {"notes.md": "a note about scope"}}
         delivered, undelivered = slice_context(context, PRAGMATIST)
-        assert "runtime_config" not in yaml.safe_load(delivered)
+        assert "runtime_config" not in parse_yaml_section(delivered)
         assert "runtime_config" in undelivered
 
     def test_a_section_matching_on_several_words_is_delivered(self):
         # devops matches `deployment` and `infrastructure` here.
         context = {"deployment_plan": "infrastructure and deployment notes"}
         delivered, _ = slice_context(context, DEVOPS)
-        assert "deployment_plan" in yaml.safe_load(delivered)
+        assert "deployment_plan" in parse_yaml_section(delivered)
 
     def test_a_stop_word_never_counts_as_a_match(self):
         # "in" is a substring of "packin"; the token filter is what stops
@@ -191,7 +193,7 @@ class TestAgainstThisRepository:
             roster = yaml.safe_load(handle)["team"]
         for member in roster:
             delivered, _ = slice_context(context, member)
-            assert yaml.safe_load(delivered) is not None
+            assert parse_yaml_section(delivered) is not None
 
     def test_the_real_roster_pays_less_than_the_whole_context_per_member(self):
         from theteam.workflow.context_aggregator import aggregate_project_context

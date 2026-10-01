@@ -158,19 +158,106 @@ def slice_context(
     for key, value in project_context.items():
         if key in NEVER_DELIVERED:
             continue
+        # An empty section carries nothing. Delivering `token_budget: {}` to
+        # everyone is noise that reads like a measurement.
+        #
+        # Checked *before* the always-delivered shortcut, which used to bypass
+        # it entirely. That ordering mattered for `run_context`, whose wrapper
+        # is non-empty even when it has no summary: measured, a project that
+        # had never run `theteam run` handed all five members a note saying
+        # there was nothing to read.
+        if value in (None, "", [], {}):
+            continue
+        #
+        # So for `run_context` the emptiness that matters is the summary's, not
+        # the wrapper's — but only when there is genuinely nothing to say. An
+        # `error` key means the writer ran and failed, which is itself a fact a
+        # member needs; dropping it makes a broken writer indistinguishable
+        # from a project that has never run, and both then read as silence.
+        if (key == "run_context"
+                and not (value or {}).get("summary")
+                and not (value or {}).get("error")):
+            continue
         if key in ALWAYS_DELIVERED:
             delivered[key] = value
-            continue
-        # An empty section carries nothing. Delivering `token_budget: {}`
-        # to everyone is noise that reads like a measurement.
-        if value in (None, "", [], {}):
             continue
         if _section_matches(key, value, focus, set(table)):
             delivered[key] = value
         else:
             undelivered.append(key)
 
-    return yaml.dump(delivered, default_flow_style=False), undelivered
+    return _render(delivered), undelivered
+
+
+class _Markdown(str):
+    """A string that must reach the reader as text, not as an escaped blob.
+
+    A `str` subclass so it can carry a rendering intent that plain `str` cannot:
+    `yaml.dump` quotes and escapes an ordinary string's newlines, which is right
+    for data and wrong for a document a member is meant to read.
+    """
+
+
+class _MarkdownDumper(yaml.SafeDumper):
+    """Dumps `_Markdown` as a literal block scalar, so newlines stay newlines."""
+
+
+def _represent_markdown(dumper: yaml.SafeDumper, data: _Markdown):
+    return dumper.represent_scalar("tag:yaml.org,2002:str", str(data),
+                                   style="|")
+
+
+_MarkdownDumper.add_representer(_Markdown, _represent_markdown)
+
+
+def _render(sections: Dict[str, Any]) -> str:
+    """Deliver `run_context` as readable text inside a valid YAML document.
+
+    It is a markdown document, and `yaml.dump` escaped it whole — measured, a
+    member received:
+
+        run_context:
+          summary: "# project context \\u2014 last run ...\\n\\n\\
+            ## what is failing\\n- doc-harmonization\\n"
+
+    So the headings arrived as the character `#` and every line break as the two
+    characters `\\n`. That is worse than absent: a member cannot tell a file
+    that was truncated from one whose newlines were escaped.
+
+    Fixed with a YAML literal block scalar rather than by appending raw markdown
+    after the document. Appending is the obvious fix and it is wrong twice over:
+    the result stops parsing as YAML, and `test_m9_context_slice.py` asserts
+    that it does — nine assertions across that file read the delivered prompt
+    back with `yaml.safe_load` to check which sections a member received. A
+    prompt no test can read is a prompt nobody can assert on.
+
+    `|` keeps the content verbatim and unescaped while leaving the document
+    parseable, so both consumers are served: a member reads the markdown, and a
+    test reads the structure.
+    """
+    document = dict(sections)
+    context = document.get("run_context")
+
+    if isinstance(context, dict):
+        summary = context.get("summary")
+        if summary:
+            document["run_context"] = {
+                **context,
+                "summary": _Markdown(str(summary).rstrip()),
+            }
+        elif context.get("error"):
+            document["run_context"] = {
+                **context,
+                "summary": f"unavailable: {context['error']}",
+            }
+
+    if not document:
+        # `yaml.dump({})` is "{}\n" and every consumer here parses the result,
+        # so an empty delivery stays a parseable empty document rather than an
+        # empty string that raises on `safe_load`.
+        return yaml.dump({}, default_flow_style=False)
+    return yaml.dump(document, Dumper=_MarkdownDumper,
+                     default_flow_style=False)
 
 
 def undelivered_sections(

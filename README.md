@@ -199,7 +199,7 @@ order. Two rendered diagrams sit beside it:
 | Diagram | Renders | File |
 |---|---|---|
 | System architecture | package layout, layers, entry points | [`diagrams/active-usage-architecture.html`](diagrams/active-usage-architecture.html) |
-| Delivery order | M0–M6 and their gates | [`diagrams/active-usage-milestones.html`](diagrams/active-usage-milestones.html) |
+| Delivery order | M0–M6 and their gates (the JSON next to it carries M0–M10) | [`diagrams/active-usage-milestones.html`](diagrams/active-usage-milestones.html) |
 
 Both diagrams are generated from the JSON next to them. **The JSON is authoritative; the HTML is
 the rendered view.** Edit the JSON, then regenerate.
@@ -267,7 +267,7 @@ is the defect. So:
 Two things a reader should know about the diagrams:
 
 1. The architecture diagram is rendered at the `standard` quality profile, not `showcase`. Its
-   12 components and 14 edges are factually correct and every source path is verified against
+   13 components and 12 connections are factually correct and every source path is verified against
    git, but eight *composition* diagnostics remain at `showcase` (relationship crossings and
    label clearance, not factual errors). Fixing those is a geometry exercise in the renderer's
    domain, and shipping a diagram that draws a subsystem that does not import is the worse

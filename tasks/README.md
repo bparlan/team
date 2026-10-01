@@ -88,6 +88,7 @@ scheduled: naming it *is* the request.
 | kind | tasks | how they run |
 |---|---|---|
 | **Routine** | `project-integrity`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
+| **On-call** | `ground-truth-audit`, `doc-harmonization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
 
 The three on-call tasks are `runner: llm`. Outside an OMP session they report
 `skipped (no_task_provider)` — a **skip, not a failure**, so they never count
@@ -208,9 +209,9 @@ was fixed":
   `FAIL: Required tool not found in PATH: git` — `git` was in `REQUIRED_TOOLS`
   and is not visible inside the isolation container. Fixed in M12; every run
   since has passed.
-- `system-awareness` failed five times before its fixes landed: five OOM-kills at
-  the old memory bound, then the breaker deadlock, then the 300s timeout. All
-  fixed and documented below; it now runs green.
+- The `system-awareness` task, since deleted, failed five times before its
+  fixes landed: five OOM-kills at the old memory bound, then the breaker
+  deadlock, then the 300s timeout. All were fixed before its removal.
 - The three `llm` tasks have never succeeded **and have never failed a real
   phase** — they refuse by name before doing anything, so their history records
   refusals, not results.
@@ -344,7 +345,6 @@ orphans, not two.
 | task | self-sufficient | note |
 |---|---|---|
 | `project-integrity` | **yes** | needs only the project tree |
-| `system-awareness` | **yes** | writes its own reports; needs 384MB |
 | `maintenance` | **yes** | no inputs |
 | `ground-truth-audit` | **no** | needs an OMP session |
 | `doc-harmonization` | **no** | needs an OMP session **and** the audit's output |

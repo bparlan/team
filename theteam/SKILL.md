@@ -23,6 +23,26 @@ report the exact stderr to the user, do not paraphrase it into a softer
 
 Every invocation of this skill starts here:
 
+## Commands, short
+
+| Command | What it does | What you do next |
+|---|---|---|
+| `theteam status` | Roster, state dir, task counts, audit chain. | Read it. Nothing else runs. |
+| `theteam tasks` | Every task with `order`, `next_run`, `last_result`, `breaker`. | Pick an id, or schedule one. |
+| `theteam run` | Runs what is due. `script:` phases finish on their own. | See **Running an `llm` task** below for the rest. |
+| `theteam run --only <id>` | One task now, scheduled or not. | If it reports `awaiting`, spawn the named agent and write to the `write:` path, then run it again. |
+| `theteam run --dry-run` | What would run and its worst-case time. Runs nothing. | — |
+| `theteam history` | Success rate, last run, last failure per task. | — |
+| `theteam task show\|create\|edit\|delete` | Single-task YAML operations. `delete` needs `--yes`. | — |
+| `theteam discuss <topic>` | One-shot team discussion. | **Refuses outside a session** — see below. Do not retry or synthesize. |
+| `theteam manager --topic` | Proposes roster additions. `--apply` persists, `--status` justifies, `--reset` restores. | Ask the user before `--apply`. |
+| `theteam serve` | Runs due tasks on an interval, serves `/metrics` and `/health`. | Long-running. Not needed for a single run. |
+| `theteam loop <id>` | Schedules one task on an interval. | — |
+| `theteam watch status\|tasks\|history` | The trust surface as a rendered frame. `--once`, `--interval`, `--monitor`. | `--monitor` names transitions worth noticing. |
+| `theteam comment on\|off\|status` | Continuous in-context commentary, cap 4 members. | — |
+
+`--json` works on either side of the subcommand. `--project-root` only before it.
+
 ## Why `discuss` refuses and `run` does not
 
 `theteam discuss` calls `theteam.default_api` directly. That symbol's only

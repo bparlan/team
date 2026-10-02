@@ -60,7 +60,7 @@ Twelve subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else `8000`), `--tick-seconds S` (default `$THETEAM_TICK_SECONDS`, else `60`), `--json` | Runs due tasks on an interval and serves `/metrics` + `/health`. The only command that starts a server. |
 | `theteam loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. |
 | `theteam tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`. |
-| `theteam run` | `--only <id>`, `--json` | `{ran, skipped, failures, results}`. Idempotent. Returns 1 when a task failed. `--only <id>` runs that task now, scheduled or not. |
+| `theteam run` | `--only <id>`, `--dry-run`, `--json` | `{ran, skipped, awaiting, failures, results}`. Idempotent. Returns 1 when a task failed. `--only <id>` runs that task now, scheduled or not. |
 | `theteam history` | `--task <id>`, `--json` | `runs`, `successes`, `failures`, `success_rate`, `last_run`, `last_failure`, `breaker`. |
 | `theteam task create` | `--path <file.yaml>` (required), `--json` | The created task, as stored. |
 | `theteam task edit <task_id>` | `--patch <file>` (required), `--json` | The new task state. |
@@ -76,6 +76,44 @@ Global: `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`).
 
 `status`, `tasks`, and `history` are the **machine surface** — their output is a contract with
 agentic consumers. `watch` is a renderer over the same payloads and does not restate them.
+
+### Running a task that needs a member
+
+Two kinds of phase, and only one of them needs you.
+
+A **`script:`** phase runs a Python file in a container. It has a real exit code,
+so `theteam run` finishes it on its own and reports `ok` or `failed`.
+
+An **`runner: llm`** phase is *instructions to a model*. The CLI cannot spawn a
+model — spawning lives in the session, and the CLI is a subprocess with no
+channel to it. So the CLI does the part it can: it works out which phase is
+next and prints what it needs.
+
+```bash
+$ theteam run --only root-organization
+root-organization: awaiting (0.01s) (session must spawn the next phase)
+  root-organization: awaiting a member
+    spawn:  sonic (as devops)
+    prompt: prompts/root-organization-scan.md
+    write:  .omp/theteam/reports/root-organization-scan.md
+```
+
+Three steps, then repeat:
+
+1. Spawn the named agent with the `prompt:` file as its task.
+2. Write the answer to the `write:` path.
+3. Run the same command again. The phase is done, so it names the next one.
+
+A phase is done when its declared output exists and is not empty. Re-running is
+always safe — the command either names the next unfinished phase or reports the
+task complete. There is no run id and nothing to resume. **To redo a phase,
+delete its output file**, because a stale artifact reads as finished.
+
+`spawn:` is the **agent type** to spawn; the parenthetical is the **persona**
+from `theteam.config`, which only frames the prompt. They are different:
+`devops` and `architect` are personas and the host rejects both as agent types.
+
+`diagrams/llm-phase-spawn.html` is the rendered version of this loop.
 
 ### Watching for change
 

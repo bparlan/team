@@ -5,9 +5,9 @@ priority: 7
 description: >-
   The project root at ~/devcode/team/ must stay thin and agentic-friendly: an
   agent working in this repo must be able to find where any file belongs
-  without guessing. This task audits the root surface, classifies every entry,
-  relocates files that belong in a subfolder, and reports the items that need a
-  human decision before moving.
+  without guessing. This task audits the root surface and its subfolders to
+  depth 3, classifies every entry, and reports the items that need a human
+  decision before moving. It does not move or delete anything.
 
   Success is measured, not asserted: when the task ends, every file remaining
   at root is either in the keep-list or in the ask-list, and every ask-list
@@ -48,6 +48,9 @@ phases:
 coverage:
   - root depth 1 (files and directories)
   - depth 2 subfolders
+  - depth 3 subfolders, scoped to the three duplicate projects
+    (python-project/, bash-project/, typescript-project/) and their
+    examples/ counterparts
   - tracked files only, via `git ls-files`
   - runtime artifacts identified by content, not by name
 
@@ -72,3 +75,6 @@ rules:
   - runtime state (wal.json, *.db, *.jsonl, *_report.json) is untracked, never
     re-tracked after relocation
   - archive/ and theteam/ trees are out of scope unless the human widens it
+  - the three duplicate projects (python-project/, bash-project/,
+    typescript-project/) are in scope at depth 3 because they duplicate
+    examples/ and are candidate leftovers

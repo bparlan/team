@@ -3,14 +3,41 @@ name: Ground Truth Audit
 type: analysis
 priority: 9
 description: >-
-  Reconnaissance only. Reads the documents and the code, and reports every
-  place a documented claim is contradicted by the code or cannot be checked.
-  Writes findings; changes nothing.
+  Reconnaissance only. Reads the three top-level documents named in the
+  prompt, and reports places where a documented claim is contradicted by the
+  code or cannot be checked. Writes findings; changes nothing.
+
+  The scope is bounded deliberately. An earlier version asked the member to
+  find "every place" a claim was contradicted across the whole repository,
+  with no file list and no cap, and permitted it to read the test suite and
+  `check_invariants.sh`. Measured: 34m41s on the scout agent, returning
+  findings no narrower than a bounded pass produces. Executable claims are
+  excluded because the way to check one is to run it, not to read it.
+
 failure_handling: retry
 expected_output: >-
   .omp/theteam/reports/ground-truth-audit.md, one section per finding, each
   with the verbatim claim, what the code says, the user-visible difference,
   and whether it was verified.
+
+gates: >-
+  scope: the prompt names the three documents to read and forbids reading
+  thetest suite, `check_invariants.sh`, or the `theteam/` package tree.
+  cap: 8 findings. overflow: a run that stops at the cap ends with
+  `Not reported: N further findings.`, so the reader can tell a bounded
+  result from a finished search. empty_is_success: an empty findings list
+  naming what was read is a complete audit, not a failed one.
+  measurement: wall time alone does not prove the bound worked. A run that
+  hits the cap and reports overflow in about the baseline time means the
+  bounding did what it was for; a run that stops at the cap AND still takes
+  25 minutes means the cost is reasoning, not search breadth, and the fix is
+  the mechanical/judgement split, not a tighter prompt.
+
+rules:
+  - this phase reads documents; it never runs the tests or the invariant gates
+  - a claim that can only be settled by running something is reported as
+    could-not-verify, with the command that would settle it
+  - an empty report is a successful run and must not be padded
 phases:
   - name: audit
     runner: llm

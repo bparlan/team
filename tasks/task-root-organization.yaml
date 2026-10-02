@@ -1,0 +1,74 @@
+id: root-organization
+name: Root Folder Organization
+type: maintenance
+priority: 7
+description: >-
+  The project root at ~/devcode/team/ must stay thin and agentic-friendly: an
+  agent working in this repo must be able to find where any file belongs
+  without guessing. This task audits the root surface, classifies every entry,
+  relocates files that belong in a subfolder, and reports the items that need a
+  human decision before moving.
+
+  Success is measured, not asserted: when the task ends, every file remaining
+  at root is either in the keep-list or in the ask-list, and every ask-list
+  item is a grouped question awaiting a human answer.
+
+failure_handling: abort
+expected_output: >-
+  reports/root-organization.md — one section per root entry, its
+  classification (keep / move / ask / skip), its destination if moved, and the
+  reason. A grouped ask section for every item needing a human decision.
+memory_limit_mb: 64
+
+phases:
+  - name: scan
+    runner: llm
+    member: scout
+    prompt_file: prompts/root-organization-scan.md
+    output: reports/root-organization-scan.md
+    memory_limit_mb: 32
+    order: 1
+
+  - name: classify
+    runner: llm
+    member: architect
+    prompt_file: prompts/root-organization-classify.md
+    output: reports/root-organization-classify.md
+    memory_limit_mb: 32
+    order: 2
+
+  - name: report
+    runner: llm
+    member: pragmatist
+    prompt_file: prompts/root-organization-report.md
+    output: reports/root-organization.md
+    memory_limit_mb: 32
+    order: 3
+
+coverage:
+  - root depth 1 (files and directories)
+  - depth 2 subfolders
+  - tracked files only, via `git ls-files`
+  - runtime artifacts identified by content, not by name
+
+definition_of_done:
+  - every root entry classified as keep / move / ask / skip
+  - every moved file relocated and verified present at destination
+  - every ask item is a grouped question, not a decision made by the agent
+  - `git status` clean after the task, or only the ask-list items uncommitted
+  - no file deleted without explicit human approval
+
+termination:
+  - stop when every root entry is classified and every ask item is open
+  - a second pass over the same root is expected if new entries appear
+  - a third pass is a signal to widen scope, not to keep re-scanning
+  - never delete; deletion is a human decision, always surfaced in the ask list
+
+rules:
+  - scout phase: inventory only, no edits, no moves
+  - classify phase: categorize only, no edits, no moves
+  - report phase: write the report and the grouped ask, no edits, no moves
+  - the actual moves happen after the human answers the ask list
+  - runtime state (wal.json, *.db, *.jsonl, *_report.json) is untracked, never
+    re-tracked after relocation
+  - archive/ and theteam/ trees are out of scope unless the human widens it

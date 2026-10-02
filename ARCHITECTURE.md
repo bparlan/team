@@ -862,8 +862,11 @@ Correct form, verified live:
 def _require_provider():
     if "default_api" not in globals():
         raise ProviderUnavailable(
-            "theteam requires an OMP session. Run this inside OMP, "
-            "or import it from an OMP-hosted agent."
+            "theteam requires an OMP session. A shell is a fresh subprocess "
+            "and can never bind a provider; an in-process host must bind one "
+            "that answers the contract run_discussion reads. For tasks, run "
+            "`theteam run --only <id> --run-id <id>` instead — that path needs "
+            "no provider."
         )
 
 def run_discussion(project_root, topic):

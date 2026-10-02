@@ -32,23 +32,18 @@ provider bound into `theteam` as `default_api` in order to spawn a member.
 **No subprocess binds it.** `default_api` is the namespace Gemini-family
 models use to spell a tool call in generated text (`default_api.read(path="x")`
 inside a ```` ```tool_code ```` block). It is a wire format OMP parses — not a
-Python object — and the OMP runtime does not inject one into an imported
-module. Verified two ways:
+Python object — and nothing binds it automatically. Both of these were run
+**from a shell**, so they establish the subprocess case and nothing wider:
 
 ```bash
 python3 -c "import theteam; print(hasattr(theteam,'default_api'))"   # -> False
 theteam discuss "anything"   # -> ProviderUnavailable
 ```
 
-The import check was also run in an OMP eval kernel — the one place a live
-session's Python runs — and `default_api` was absent there too. So "the
-runtime does not inject it" is measured, not inferred.
-
-Scope the claim carefully, because the narrower version is the true one:
-**nothing binds it automatically.** A host that *chooses* to bind a value at
-that name is a different thing, and the refusal's own wording ("or import it
-from an OMP-hosted agent") points at that. No shipped code path does it, and
-no OMP flag is documented to.
+The import check was repeated in an OMP eval kernel, the one place a live
+session's Python runs, and `default_api` was absent there too — so "the
+runtime does not inject it" is measured rather than inferred, in both places
+it could plausibly have been injected.
 
 So the bare CLI returns a **named refusal** (`no_task_provider`) rather than a
 fabricated result, and that refusal must be reported as-is. Do not search for
@@ -56,16 +51,33 @@ a session flag that enables it — none exists. The refusal now names the
 command that runs the task instead: `theteam run --only <id> --run-id <id>`.
 
 For `runner: llm` **tasks** there is a supported path that needs no provider,
-described in the next section. `theteam discuss` has no such path yet: it
-calls `default_api` directly, so it still refuses. Report that refusal; do not
-retry it or synthesize the notes a discussion would have produced.
+described in the next section. `theteam discuss` has no such path: it calls
+`default_api` directly, so from a shell it refuses. Report that refusal; do
+not retry it, and do not synthesize the notes a discussion would have
+produced. The one case where retrying is right is a host that has bound a
+correct provider in-process — see the contract below before concluding it
+has.
 
-**Where the provider *can* exist.** `default_api` is a global in the
-importing interpreter, so a session that `import theteam` in-process can bind
-it and `discuss` works — that is what "or import it from an OMP-hosted agent"
-in the refusal means. A shell (`!`/`bash`) is always a fresh subprocess and can
-never have it, in a live session or a dead one. This is not a workaround to
-find; it is why the task path exists in files rather than in a bound symbol.
+**Where the provider could exist, and what was actually measured.**
+`default_api` is a global in the importing interpreter, so a host that
+binds one before calling `run_discussion` would satisfy the gate. A shell
+(`!`/`bash`) is always a fresh subprocess and can never have it, in a live
+session or a dead one.
+
+**A binding is not enough — it has to answer the right contract.**
+`run_discussion` reads `spawn_results["tasks"]` as a list of
+`{"name", "handle"}` entries and calls `default_api.output(handle)`. Probed in
+an OMP eval kernel, the session's own `tool.task` returns `{"text",
+"details"}` with no `tasks` key, and `tool.output` is absent from that
+kernel's bridge. So a naive binding over the session's task tool would clear
+the gate and then fail on the shape — which is why `run_llm_phase` now checks
+the envelope and refuses by name instead of raising.
+
+**This has not been tested end to end.** No in-process binding of
+`default_api` has been driven through a real `theteam discuss`, so do not
+report that path as working. What is established: the gate is satisfiable in
+principle, the session's stock task tool does not satisfy the contract, and
+an adapter is what any working binding would need.
 
 `tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 

@@ -47,23 +47,39 @@ from .security import log_security_event
 from .core.member import load_config, write_member_note, validate_member_note
 from .bin.theteam_config import _load_yaml, _load_json, merge_config, validate_config
 class ProviderUnavailable(RuntimeError):
-    """No OMP task provider is bound.
+    """No OMP task provider is bound in this interpreter.
 
-    This module will not fabricate team opinions. Run inside an OMP
-    session so a task provider is injected, then retry.
+    This module will not fabricate team opinions. A subprocess never binds one;
+    a host that imports `theteam` in-process could, but must also answer the
+    contract `run_discussion` reads — see SKILL.md.
     """
-
 
 def _require_provider():
     """Refuse to fabricate team opinions when no OMP provider is bound.
 
     Guarded at the point of use rather than at module import, so that the
-    safety components in this package remain importable and testable.
+    safety components in this package remain importable and testable. A guard
+    at class-body or module scope would run at import time, which is the
+    defect this placement avoids.
     """
     if "default_api" not in globals():
+        # The first clause is load-bearing: `scripts/smoke_cli.py` substring-
+        # matches "requires an OMP session" to recognise this as a named
+        # refusal rather than a silent non-zero exit. Do not reword it.
+        #
+        # The second clause used to be "Run this inside OMP, or import it from
+        # an OMP-hosted agent", which is advice that cannot be followed: a
+        # shell is already inside an OMP session and is still refused, because
+        # the gate is a global in the *importing interpreter* and a shell is
+        # always a fresh subprocess. Measured in an OMP eval kernel — the one
+        # place a live session's Python runs — `default_api` was absent there
+        # too, so being "inside OMP" was never the variable. See SKILL.md.
         raise ProviderUnavailable(
-            "theteam requires an OMP session. Run this inside OMP, "
-            "or import it from an OMP-hosted agent."
+            "theteam requires an OMP session. A shell is a fresh subprocess "
+            "and can never bind a provider; an in-process host must bind one "
+            "that answers the contract run_discussion reads. For tasks, run "
+            "`theteam run --only <id> --run-id <id>` instead — that path needs "
+            "no provider."
         )
 
 

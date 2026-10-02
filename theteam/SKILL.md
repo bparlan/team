@@ -293,9 +293,13 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    substitute an LLM for it: the same topic must select identically every
    time, and a test asserts that.
 8. **Spawn each selected member independently**, one `task` call per member
-   (isolated — members must not see each other's output). Each member's
-   system prompt should be built from its `role`, `expertise`, and `voice`
-   fields, plus the topic, the project's `permitted_skills` under
+   with `"isolation": {"mode": "worktree"}` — members must not see each
+   other's output. **Do not use `"isolated": true`:** the task preflight
+   rejects it with "Subagent isolated execution requires
+   `task.isolation.mode` to be set; current mode is `none`", and passing
+   both keys is rejected too. `worktree` is the only form that spawns.
+   Each member's system prompt should be built from its `role`, `expertise`,
+   and `voice` fields, plus the project's `permitted_skills` under
    `## Tool Inventory`, and the project context from step 6. Each member's
    `outputSchema` should require exactly:
    `{id, role, verdict, note}` — matching what `theteam_report.py` expects.

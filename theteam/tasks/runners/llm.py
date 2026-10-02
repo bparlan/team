@@ -138,7 +138,7 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
             "task": prompt,
             "agent": "task",
             "name": f"{name}_{member_id}",
-            "isolated": True,
+            "isolation": {"mode": "worktree"},
         }],
     )
 

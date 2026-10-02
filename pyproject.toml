@@ -21,3 +21,8 @@ theteam = "theteam.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["theteam*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "live: requires a live external resource (Docker daemon, OMP session bridge). Skips cleanly when absent.",
+]

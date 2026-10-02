@@ -43,6 +43,34 @@ Every invocation of this skill starts here:
 
 `--json` works on either side of the subcommand. `--project-root` only before it.
 
+## After a successful implementation
+
+One task covers step 0, which is the only mechanical step:
+
+```bash
+theteam run --only update-team
+```
+
+It hashes every file each diagram cites and reports which have changed.
+Exit 0 = nothing necessary. Exit 3 = a cited file changed; re-derive the
+nodes citing it. Exit 2 = no anchor sidecar, so it could not check.
+
+Steps 1–4 are manual, and each for a measured reason:
+
+| Step | Command | Why it cannot be a task |
+|---|---|---|
+| 1. Diagrams | `node ~/.omp/agent/skills/archify/bin/archify.mjs validate\|deliver architecture …` | archify is outside the project mount |
+| 2. Docs | edit prose | no output signal for the llm completion rule |
+| 3. Command guide | edit the two short tables above | same |
+| 4. Export | `python3 scripts/export_skill.py` | the production dir is outside the mount; this is the one step with real blast radius, so it stays host-side |
+
+Order matters: export rewrites repo paths to absolute on the way in, so it
+must run last. It is the gate — it runs the suite and installs only if the
+suite passes.
+
+After a **re-derived** diagram, re-record its anchors:
+`python3 scripts/update_team_check.py --record`
+
 ## Why `discuss` refuses and `run` does not
 
 `theteam discuss` calls `theteam.default_api` directly. That symbol's only

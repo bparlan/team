@@ -115,6 +115,40 @@ from `theteam.config`, which only frames the prompt. They are different:
 
 `diagrams/llm-phase-spawn.html` is the rendered version of this loop.
 
+### After a successful implementation
+
+```bash
+theteam run --only update-team     # is anything necessary?
+```
+
+`update-team` hashes every file each diagram cites and reports which changed
+since the diagram was derived. Exit 0 = nothing necessary, 3 = a cited file
+changed, 2 = no anchor sidecar so it could not check. Only
+`active-usage-architecture.json` carries source anchors; the other two
+diagrams are judgment-only, and the task says so rather than implying
+coverage it does not have.
+
+The rest of the sequence is manual, each step for a measured reason:
+
+1. **Diagrams** — `archify validate` then `deliver`. archify is outside the
+   project mount, so no task phase can reach it.
+2. **Documentation** — prose has no mechanical truth test.
+3. **Command guide** — the short tables in `theteam/SKILL.md` and this file.
+4. **Export** — `python3 scripts/export_skill.py`. The production skill
+   directory is outside the project mount, and this is the one step with real
+   blast radius, so it stays host-side.
+
+Export must run **last**: it rewrites repo-relative paths to absolute on the
+way in, so exporting before editing the docs ships the stale ones. It is also
+the gate — it runs the test suite and installs only if it passes. It takes no
+arguments.
+
+The gate hashes files rather than diffing git because the phase image
+`theteam:p4final` has no git binary (measured: `docker run --rm
+theteam:p4final sh -c "which git"` → `NO-GIT-BINARY`). After re-deriving a
+diagram, re-record its anchors with
+`python3 scripts/update_team_check.py --record`.
+
 ### Watching for change
 
 `--monitor` diffs each frame against the one before it and names the transitions worth

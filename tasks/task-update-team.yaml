@@ -4,17 +4,23 @@ type: maintenance
 priority: 5
 description: >-
   The post-implementation sequence. Runs the mechanical half — the staleness
-  gate over the diagram's own pinned revision and source anchors — and names
-  the rest, because most of it needs a session or a host.
+  gate over the files each diagram cites — and names the rest, because most of
+  it needs a session or a host.
 
   Step 0 (this task): is anything necessary? Steps 1–4 stay manual — see
   `expected_output` for why each is out of scope.
+
+  The gate hashes cited files instead of diffing git, because the phase image
+  has no git binary. Measured: `docker run --rm theteam:p4final sh -c "which
+  git"` prints NO-GIT-BINARY, so a git-based gate exits CANNOT_EVALUATE every
+  run, which the executor scores as a failure — five breaker trips, then the
+  task never runs again.
 failure_handling: retry
 expected_output: >-
   .omp/theteam/reports/update-team.md — pinned revision vs HEAD, the cited
-  paths that moved between them, and the next action. Exit 0 = up to date,
-  3 = findings (a cited path moved), 2 = cannot evaluate (no git in the phase
-  container, which is the measured default — see gates.graceful).
+  cited files that changed since the diagram was derived, and the next
+  action. Exit 0 = nothing necessary, 3 = findings (a cited file changed),
+  2 = cannot evaluate (no anchor sidecar, or a cited file is gone).
 
   Why steps 1–4 are not in this task:
   * archify lives at ~/.omp/agent/skills/archify, outside the project mount,
@@ -34,20 +40,22 @@ expected_output: >-
      absolute on the way in.
 gates: >-
   scope: step 0 only. Nothing else is automatable from inside a container.
-  mtime: never. staleness is git diff --name-only <pin>..HEAD -- <cited paths>;
-  a rebase or checkout moves mtimes without changing cited content.
-  scope-is-trigger: the gate names files that moved, not files that are wrong.
-  Re-deriving a node that did not change is the safe failure mode.
-  graceful: the phase container image has no git binary — measured by running
-  `docker run python:3.12-slim git --version`, not assumed. So in the default
-  image this task reports cannot-evaluate (exit 2) rather than guessing. That
-  is the CANNOT_EVALUATE pattern, not a failure: the phase did its job and
-  could not measure. Running the script directly on the host, where git
-  exists, is what produces a real verdict today.
-  no-anchors: a diagram with zero source anchors has no mechanical staleness
-  test. Reported, not papered over.
+  mtime: never. staleness is a content hash per cited file; a rebase or
+  checkout moves mtimes without changing content.
+  no-git: the phase image has no git binary, so the gate hashes instead of
+  diffing. The derived state lives beside each diagram, as
+  diagrams/<name>.anchors.json,
+  written by `python3 scripts/update_team_check.py --record` on the host.
+  scope-is-trigger: the gate names files that changed, not files that are
+  wrong. Re-deriving a node that did not need it is the safe failure mode.
+  honest-coverage: only active-usage-architecture.json carries source anchors.
+  llm-phase-spawn and active-usage-milestones have none and stay
+  judgment-only. That asymmetry is reported, never smoothed over.
+  no-anchors: a diagram with no sidecar has no mechanical staleness test.
+  Reported as could-not-evaluate, never as up to date.
 rules:
   - the staleness gate is a trigger, not a verdict
+  - re-record the sidecar only after the diagram itself is re-derived
   - do not register export-skill as a task, because it cannot reach the
     production directory from inside a container
   - do not run archify from inside a task, because it is not in the project

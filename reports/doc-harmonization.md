@@ -129,9 +129,12 @@ overstated the invariant, not the gate.
    of sync with `diagrams/active-usage-milestones.json` (11 nodes). Both are generated artifacts and
    were not hand-edited. Blocked on `archify` refusing the source for
    `composition/desktop-readability`.
-2. **Decide whether a missing phase script should be rejected at write time.** The document now
-   says it is not. If that is a product defect rather than the intended behaviour, the fix is in
-   `TaskRepository._check_writable`, not in the documents.
+2. ~~**Decide whether a missing phase script should be rejected at write time.**~~ **Decided:
+   no, by design.** A task YAML is version-controlled and its script may legitimately be written
+   after the task is created, in the same commit series; an existence check would reject valid
+   work-in-progress. `_phase_problem` already reports `missing script: <path>` as a named skip,
+   which is an honest report rather than a silent one. The reasoning is now recorded at
+   `ARCHITECTURE.md` §3.2 so it does not reopen as a defect.
 3. ~~**`config/routine-engine/`** is git-tracked, is the surviving residue of the `routine-engine/`
    removal described at `ARCHITECTURE.md:180`, and is documented nowhere. Document or remove it.~~
    **Documented** — `ARCHITECTURE.md` §5.3.1 now records what the 5 files are and why nothing reads

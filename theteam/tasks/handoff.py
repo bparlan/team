@@ -94,8 +94,9 @@ def handoff_dir(project_root: str, run_id: str) -> Path:
     return Path(state_dir(project_root)) / HANDOFF_SUBDIR / run_id
 
 
-def write_request(project_root: str, run_id: str, phase: Dict[str, Any],
-                  prompt: str, output: Optional[str]) -> Path:
+def write_request(project_root: str, run_id: str, task_id: str,
+                  phase: Dict[str, Any], prompt: str,
+                  output: Optional[str]) -> Path:
     """Record what Python asked a member to produce, then let the phase pause.
 
     Written BEFORE the pause, because a session that starts work with nothing on
@@ -110,7 +111,7 @@ def write_request(project_root: str, run_id: str, phase: Dict[str, Any],
     manifest = {
         "version": HANDOFF_VERSION,
         "run_id": run_id,
-        "task_id": phase.get("_task_id"),
+        "task_id": task_id,
         "phase": name,
         "member": phase.get("member"),
         "prompt_file": phase.get("prompt_file"),

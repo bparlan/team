@@ -414,7 +414,7 @@ def _phase_problem(task, project_root):
     return None
 
 def run_due_tasks(project_root: str, only: Optional[str] = None,
-                  on_output=None) -> Dict[str, Any]:
+                  on_output=None, run_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Execute every due task and return the run payload.
 
@@ -488,7 +488,8 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
             results.append({"id": task["id"], "result": "skipped", "detail": problem,
                             "elapsed": round(time.monotonic() - phase_started, 2)})
             continue
-        outcome = executor.execute_task(task, on_output=on_output)
+        outcome = executor.execute_task(task, on_output=on_output,
+                                        run_id=run_id)
         breaker = outcome["breaker"]
         consecutive = outcome["breaker_consecutive_failures"]
         if outcome.get("skipped"):
@@ -616,7 +617,8 @@ def cmd_run(args: argparse.Namespace) -> int:
                       file=sys.stderr, flush=True)
 
     payload = run_due_tasks(project_root, only=args.only,
-                            on_output=_live_reporter(args))
+                            on_output=_live_reporter(args),
+                            run_id=getattr(args, "run_id", None))
     if not payload["results"]:
         # "nothing due" and "the schedule could not be read" are the same
         # string unless something distinguishes them. Measured: two overdue
@@ -1151,6 +1153,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--only", help="Run one task id, ignoring the rest.")
     run.add_argument("--dry-run", action="store_true",
                      help="Show what would run and its worst-case time; run nothing.")
+    run.add_argument("--run-id", dest="run_id",
+                     help="Run identifier for a session-driven pass. Present it to "
+                          "let `runner: llm` phases stage a request and pause; "
+                          "reuse the SAME id to collect the member's result and "
+                          "continue the loop. Absent, an llm phase refuses with "
+                          "no_task_provider, exactly as before.")
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
     run.set_defaults(func=cmd_run)

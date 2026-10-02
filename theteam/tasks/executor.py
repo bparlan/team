@@ -198,7 +198,8 @@ class TaskExecutor:
                     except (FileNotFoundError, OSError) as error:
                         return {"success": False,
                                 "error": f"phase '{name}': {error}"}
-                    write_request(str(self.project_root), run_id, phase, prompt,
+                    write_request(str(self.project_root), run_id,
+                                  str((task or {}).get("id", "?")), phase, prompt,
                                   phase.get("output"))
                     return {
                         "success": False,

@@ -285,21 +285,7 @@ reason: "no_session"}`. It does not fall back to a guess.
 | Circuit breaker tripped | Task skipped, reason `breaker_open`, visible in `tasks` and `history`. |
 | Audit chain broken | `status` reports it. Writes continue but every entry is marked `chain_broken`. |
 
-**The missing-script check is deliberately not a write-time check.** The function states this
-scope itself: `_check_writable`'s docstring reads "The write contract, §5.4: the read contract
-plus a memory bound per phase", and it never touches the filesystem. §5.4 names one write-time
-rejection, `memory_limit_mb`; script existence is not part of the contract, so adding a check
-would widen it rather than satisfy it.
-
-The counter-argument is real and was answered. The **"Task script missing"** row above
-was raised as a possible defect, because `_check_writable` does reject a phase with no
-`memory_limit_mb` and a missing script is superficially the same class of error. But a task YAML is version-controlled in the user's
-this row was raised as a possible defect. But a task YAML is version-controlled in the user's
-repo, and its script may legitimately be written *after* the task is created, in the same commit
-series. An existence check would reject valid work-in-progress that `_phase_problem` already
-handles: it reports `missing script: <path>` and records the phase as `skipped`, with a named
-reason, which is an honest report rather than a silent skip. Decided 2026-10-01; the behaviour
-above is intended, not a gap.
+Not a write-time check by design: a task YAML is version-controlled, so its script may legitimately be written after the task, and `_phase_problem` already names the failure as a skip. Decided 2026-10-02.
 
 ## 3.3 The one rule
 

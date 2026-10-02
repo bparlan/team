@@ -124,28 +124,28 @@ class TestOnlyBypassesTheSchedule:
         assert repo.schedule()["scheduled_tasks"] == {}
 
 
-class TestTheThreeShippedTasks:
-    """The commands §M9 says must work, checked against the real files."""
+class TestEveryShippedTask:
+    """The commands §M9 says must work, checked against the real files.
 
-    @pytest.mark.parametrize("task_id", ["ground-truth-audit",
-                                         "doc-harmonization",
-                                         "native-feature-loop"])
+    Driven from `yaml_ids()` rather than a hand-written list, because a list
+    is a fourth thing to update when a task is added and nothing fails when
+    someone forgets: the new task's phases would get zero coverage and a
+    renamed prompt would pass the suite silently.
+    """
+
+    @pytest.mark.parametrize("task_id", TaskRepository(str(REPO_ROOT)).yaml_ids)
     def test_the_task_is_registered(self, task_id):
         repo = TaskRepository(str(REPO_ROOT))
         assert repo.get(task_id) is not None
 
-    @pytest.mark.parametrize("task_id", ["ground-truth-audit",
-                                         "doc-harmonization",
-                                         "native-feature-loop"])
+    @pytest.mark.parametrize("task_id", TaskRepository(str(REPO_ROOT)).yaml_ids)
     def test_every_llm_phase_names_a_prompt_that_exists(self, task_id):
         task = TaskRepository(str(REPO_ROOT)).get(task_id)
         for phase in task["phases"]:
             if phase.get("runner") == "llm":
                 assert (REPO_ROOT / phase["prompt_file"]).exists(), phase
 
-    @pytest.mark.parametrize("task_id", ["ground-truth-audit",
-                                         "doc-harmonization",
-                                         "native-feature-loop"])
+    @pytest.mark.parametrize("task_id", TaskRepository(str(REPO_ROOT)).yaml_ids)
     def test_every_phase_names_exactly_one_runner(self, task_id):
         task = TaskRepository(str(REPO_ROOT)).get(task_id)
         assert _phase_problem(task, str(REPO_ROOT)) is None

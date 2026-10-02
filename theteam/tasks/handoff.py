@@ -149,6 +149,26 @@ def read_request(project_root: str, run_id: str, phase_name: str) -> Optional[Di
     return manifest
 
 
+def is_collected(project_root: str, run_id: str, phase_name: str) -> bool:
+    """Has this phase already been collected on this run id?
+
+    `accept_result` writes a `.collected.json` marker when it moves a result
+    to its declared output. This reads it back. The marker is the *only*
+    evidence that a phase completed: `os.replace` destroys the result, so a
+    request on disk with no result beside it is the normal shape of a finished
+    phase, and a collector that cannot tell "finished" from "waiting" re-enters
+    it forever.
+    """
+    marker = handoff_dir(project_root, run_id) / f"{phase_name}.collected.json"
+    if not marker.exists():
+        return False
+    try:
+        with open(marker, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, json.JSONDecodeError):
+        return False
+    return data.get("version") == HANDOFF_VERSION and data.get("phase") == phase_name
+
 def accept_result(project_root: str, run_id: str, phase_name: str,
                   result_path: Path) -> Dict[str, Any]:
     """Accept a staged result only when it answers the request on record.
@@ -233,6 +253,23 @@ def accept_result(project_root: str, run_id: str, phase_name: str,
     destination = Path(project_root) / output
     destination.parent.mkdir(parents=True, exist_ok=True)
     os.replace(result_path, destination)
+
+
+    # Record that this phase is collected, so a later call with the same
+    # `--run-id` does not re-enter it. `os.replace` above has already moved
+    # the result to its declared output, so the evidence that this phase ran
+    # lives *only* in this marker: the request survives, the result does not.
+    # Without the marker the next call finds a request and no result and
+    # returns `awaiting_member` — the loop walks back to phase 1 forever and
+    # a 4-phase task is unfinishable, which is a deadlock, not a pause.
+    collected = result_path.with_name(f"{phase_name}.collected.json")
+    collected.write_text(json.dumps({
+        "version": HANDOFF_VERSION,
+        "run_id": run_id,
+        "phase": phase_name,
+        "output": str(destination),
+        "collected_at": datetime.now(timezone.utc).isoformat(),
+    }, indent=2), encoding="utf-8")
 
     return {
         "success": True,

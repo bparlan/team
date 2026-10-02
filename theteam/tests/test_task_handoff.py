@@ -34,10 +34,12 @@ import json
 from pathlib import Path
 from typing import Optional
 
+from theteam.tasks.executor import TaskExecutor
 from theteam.tasks.handoff import (
     AWAITING_MEMBER,
     accept_result,
     handoff_dir,
+    is_collected,
     read_request,
     write_request,
 )
@@ -225,3 +227,63 @@ class TestTheHappyPathStillWorks:
 
         assert result["success"] is False
         assert "no `output`" in result["error"]
+
+
+class TestReentryTerminates:
+    """A collected phase must never be re-entered — the loop must terminate.
+
+    This is the defect the suite did not catch. `accept_result` moves the
+    staged result to its declared output with `os.replace`, so after a phase is
+    collected the evidence that it ran lives *only* in what the collector
+    leaves behind — the request survives, the result does not. A second
+    `theteam run --run-id <same id>` therefore finds a request and no result
+    and returns `awaiting_member`, having walked back to phase 1.
+
+    Measured 2026-10-02 on `root-organization` (4 phases): CALL 1 stages,
+    CALL 2 stages a result, CALL 3 collects, and CALLs 4/5/6 return
+    `awaiting_member` at phase 1 forever. The task is unfinishable — a
+    deadlock, not a pause, and a fresh `--run-id` escapes it only by
+    discarding the phases already done.
+
+    `SKILL.md` instructs the session to "re-run the same command with the same
+    `--run-id`", so the documented procedure is the one that hangs.
+    """
+
+    def test_a_collected_phase_is_marked_and_readable(self, tmp_path):
+        phase = _phase()
+        manifest = _stage_request(tmp_path, phase)
+        staged = _stage_result(tmp_path, phase, "83 root entries.\n",
+                               manifest["prompt_sha256"])
+
+        assert accept_result(str(tmp_path), RUN_ID, "scan", staged)["success"]
+
+        assert is_collected(str(tmp_path), RUN_ID, "scan") is True
+
+    def test_an_uncollected_phase_is_not_marked(self, tmp_path):
+        """The marker must mean collected, not merely requested."""
+        _stage_request(tmp_path, _phase())
+
+        assert is_collected(str(tmp_path), RUN_ID, "scan") is False
+
+    def test_the_executor_skips_a_phase_it_already_collected(self, tmp_path):
+        """The property the deadlock fix actually delivers.
+
+        Drives the executor's own llm branch rather than the collector, because
+        the deadlock lived in the branch structure: no-request staged, request
+        collected, and nothing for request-plus-no-result — which is what a
+        finished phase looks like.
+        """
+        phase = _phase()
+        manifest = _stage_request(tmp_path, phase)
+        _stage_result(tmp_path, phase, "83 root entries.\n",
+                      manifest["prompt_sha256"])
+        result_path = handoff_dir(str(tmp_path), RUN_ID) / "scan.result.md"
+        accept_result(str(tmp_path), RUN_ID, "scan", result_path)
+
+        executor = TaskExecutor(str(tmp_path))
+        again = executor.execute_phase(
+            phase, {"id": "root-organization", "_run_id": RUN_ID})
+
+        # Before the fix this returned `awaiting_member` and re-entered phase 1.
+        assert again["success"] is True
+        assert again["already_collected"] is True

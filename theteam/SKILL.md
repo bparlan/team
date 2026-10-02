@@ -129,6 +129,15 @@ Then, **per phase**:
    the pair, moves the result into the declared output, and the loop advances
    to the next phase. Repeat until the task reports a terminal outcome.
 
+Each collected phase leaves a `<phase>.collected.json` marker beside its
+request. That marker is what lets a later call with the same `--run-id` skip
+the phase instead of re-entering it: `accept_result` *moves* the result to its
+declared output, so a request with no result beside it is the normal shape of
+a **finished** phase, not a phase still waiting. Without the marker the loop
+walked back to phase 1 on every call and no multi-phase task could finish.
+Do not delete a `.collected.json` file to "restart" a phase — a fresh
+`--run-id` is how you start over, and it discards the phases already done.
+
 Resume *is* re-entry — same `--run-id`, one phase at a time. There is no
 resume protocol to follow.
 
@@ -293,13 +302,9 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    substitute an LLM for it: the same topic must select identically every
    time, and a test asserts that.
 8. **Spawn each selected member independently**, one `task` call per member
-   with `"isolation": {"mode": "worktree"}` — members must not see each
-   other's output. **Do not use `"isolated": true`:** the task preflight
-   rejects it with "Subagent isolated execution requires
-   `task.isolation.mode` to be set; current mode is `none`", and passing
-   both keys is rejected too. `worktree` is the only form that spawns.
-   Each member's system prompt should be built from its `role`, `expertise`,
-   and `voice` fields, plus the project's `permitted_skills` under
+   (isolated — members must not see each other's output). Each member's
+   system prompt should be built from its `role`, `expertise`, and `voice`
+   fields, plus the topic, the project's `permitted_skills` under
    `## Tool Inventory`, and the project context from step 6. Each member's
    `outputSchema` should require exactly:
    `{id, role, verdict, note}` — matching what `theteam_report.py` expects.

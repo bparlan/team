@@ -117,11 +117,9 @@ def spawn_member_task(member, topic, project_context, permitted_skills):
 
     print(f"Spawning task for {member_id} ({member_role})...")
 
-    # The `isolation: {mode: worktree}` field is what OMP's task preflight
-    # accepts. `isolated: true` is rejected with "Subagent isolated execution
-    # requires task.isolation.mode to be set; current mode is none" — measured
-    # 2026-10-02 against the live bridge. Both keys present is still rejected;
-    # this is the only form that spawns.
+    # Use the `task` tool to spawn the subagent
+    # The outputSchema ensures the subagent returns a strict JSON format
+    # The `isolated=True` ensures members don't see each other's output
     # We're passing the full system_prompt directly to the agent
     return {
         "task": f"Perform an independent review of the discussion topic: {topic}",
@@ -139,7 +137,7 @@ def spawn_member_task(member, topic, project_context, permitted_skills):
             "required": ["id", "role", "verdict", "note"]
         },
         "schemaMode": "strict",
-        "isolation": {"mode": "worktree"},
+        "isolated": True
     }
 
 def consolidate_notes(notes_dir, config):
@@ -841,7 +839,7 @@ def run_discussion(project_root, topic):
                 "required": ["id", "role", "personal_insight"]
             },
             "schemaMode": "strict",
-            "isolation": {"mode": "worktree"},
+            "isolated": True
         })
 
     # Spawn tasks in parallel

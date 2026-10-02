@@ -176,6 +176,7 @@ class TaskExecutor:
                 AWAITING_MEMBER,
                 accept_result,
                 handoff_dir,
+                is_collected,
                 read_request,
                 write_request,
             )
@@ -191,6 +192,22 @@ class TaskExecutor:
             # and the collector decides. Acceptance never consults the declared
             # output path, so a stale artifact there is inert.
             if run_id:
+                # Three-way branch, in order of what the on-disk state says.
+                # A request with a collected marker is DONE — `accept_result`
+                # already moved the result to its declared output, so the
+                # evidence that this phase ran lives only in the marker. Without
+                # this check the next call finds a request and no result and
+                # returns `awaiting_member`, walking the loop back to phase 1
+                # forever: a 4-phase task is unfinishable, which is a deadlock,
+                # not a pause. Measured 2026-10-02, 6 calls, same --run-id.
+                if is_collected(str(self.project_root), run_id, name):
+                    return {
+                        "success": True,
+                        "output_path": None,
+                        "phase": name,
+                        "already_collected": True,
+                    }
+
                 if read_request(str(self.project_root), run_id, name) is None:
                     prompt = ""
                     try:

@@ -23,144 +23,122 @@ report the exact stderr to the user, do not paraphrase it into a softer
 
 Every invocation of this skill starts here:
 
-## The `default_api` gate — why the CLI cannot spawn
+## Why `discuss` refuses and `run` does not
 
-`discuss` and every task whose phases are `runner: llm` (`root-organization`,
-`doc-truth`, `native-feature-loop`) need a task provider bound into `theteam`
-as `default_api` in order to spawn a member.
-
-**No subprocess binds it.** `default_api` is the namespace Gemini-family
-models use to spell a tool call in generated text (`default_api.read(path="x")`
-inside a ```` ```tool_code ```` block). It is a wire format OMP parses — not a
-Python object — and nothing binds it automatically. Both of these were run
-**from a shell**, so they establish the subprocess case and nothing wider:
+`theteam discuss` calls `theteam.default_api` directly. That symbol's only
+assignment in this repository is a `monkeypatch` in a test file, so the gate is
+not a condition that sometimes fails — it cannot pass anywhere:
 
 ```bash
 python3 -c "import theteam; print(hasattr(theteam,'default_api'))"   # -> False
-theteam discuss "anything"   # -> ProviderUnavailable
+theteam discuss "anything"                                            # -> ProviderUnavailable
 ```
 
-The import check was repeated in an OMP eval kernel, the one place a live
-session's Python runs, and `default_api` was absent there too — so "the
-runtime does not inject it" is measured rather than inferred, in both places
-it could plausibly have been injected.
+The host *does* offer a subagent helper, `agent(prompt, agent=..., handle=True)`.
+It is injected as a builtin into the eval kernel's retained subprocess, and
+that is the only place it exists:
 
-So the bare CLI returns a **named refusal** (`no_task_provider`) rather than a
-fabricated result, and that refusal must be reported as-is. Do not search for
-a session flag that enables it — none exists. The refusal now names the
-command that runs the task instead: `theteam run --only <id> --run-id <id>`.
+```bash
+python3 -c "print(callable(agent))"    # -> NameError, from any subprocess
+```
 
-For `runner: llm` **tasks** there is a supported path that needs no provider,
-described in the next section. `theteam discuss` has no such path: it calls
-`default_api` directly, so from a shell it refuses. Report that refusal; do
-not retry it, and do not synthesize the notes a discussion would have
-produced. The one case where retrying is right is a host that has bound a
-correct provider in-process — see the contract below before concluding it
-has.
+Measured in both directions. In the eval kernel `agent("...", agent="scout")`
+works; from `bash` the name does not resolve. Every call site in `theteam run`
+is a bash-launched subprocess, so a provider adapter is not possible — writing
+one would be a guess dressed as an integration.
 
-**Where the provider could exist, and what was actually measured.**
-`default_api` is a global in the importing interpreter, so a host that
-binds one before calling `run_discussion` would satisfy the gate. A shell
-(`!`/`bash`) is always a fresh subprocess and can never have it, in a live
-session or a dead one.
+So `discuss` refuses, and that refusal must be reported as-is. Do not search
+for a session flag that enables it; none exists. Do not synthesize the notes a
+discussion would have produced.
 
-**A binding is not enough — it has to answer the right contract.**
-`run_discussion` reads `spawn_results["tasks"]` as a list of
-`{"name", "handle"}` entries and calls `default_api.output(handle)`. Probed in
-an OMP eval kernel, the session's own `tool.task` returns `{"text",
-"details"}` with no `tasks` key, and `tool.output` is absent from that
-kernel's bridge. So a naive binding over the session's task tool would clear
-the gate and then fail on the shape — which is why `run_llm_phase` now checks
-the envelope and refuses by name instead of raising.
+**Tasks take the other path.** `runner: llm` phases never needed a provider —
+they need a session to spawn, and the session is you. `theteam run` names the
+phase and stops.
 
-**This has not been tested end to end.** No in-process binding of
-`default_api` has been driven through a real `theteam discuss`, so do not
-report that path as working. What is established: the gate is satisfiable in
-principle, the session's stock task tool does not satisfy the contract, and
-an adapter is what any working binding would need.
+What is verified: the command names the next phase with a spawnable agent, the
+prompt and the output path, and advances once that output exists and is not
+empty. A 4-phase task was driven to `ok` that way. What is **not** verified: a
+member spawned by this loop producing a real artifact. Every end-to-end check
+so far wrote the output file directly rather than through a live spawn, so
+treat the spawn step itself as untested.
 
 `tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 
+
 ## Running an `llm` task from inside a session
 
-`runner: llm` tasks are **not** blocked — they are unspawned. The gate above is
-about spawning, and spawning is the one thing Python cannot do from inside
-`theteam run`: the CLI is a subprocess, so it has no channel to this session's
-`task` tool. That is why the phases are `runner: llm` and why the bare CLI
-answers `no_task_provider`.
+`runner: llm` tasks are **not** blocked. They need one thing Python cannot do
+from inside `theteam run`: spawn. The CLI is a subprocess, so it has no channel
+to this session's `task` tool. The host's `agent()` helper exists, but only as
+a builtin injected into the eval kernel — `python3 -c "print(callable(agent))"`
+raises `NameError`, so it is unreachable from every call site here.
 
-The fix inverts the direction. Python stops spawning and starts **recording**:
-it writes down what it asked for, pauses, and reads the answer back when one
-appears. You do the spawning, because you are the only party that can.
+So the direction is inverted. Python does not spawn and does not record a
+request for someone to answer. It **names the next phase and stops**. You spawn,
+because you are the only party that can.
 
 ### The loop
 
 ```bash
-theteam run --only <task-id> --run-id <run-id>     # stages a request, pauses
+theteam run --only <task-id>
 ```
 
-It prints `skipped (awaiting_member)` and writes
-`.omp/theteam/handoff/<run-id>/<phase>.request.json`. Read that file: it names
-the phase, the member persona, the prompt file, the declared output, and
-`prompt_sha256`.
+If the task has an unfinished phase, it prints what it needs:
 
-Then, **per phase**:
+```
+root-organization: awaiting a member
+  spawn:  sonic (as devops)
+  prompt: prompts/root-organization-scan.md
+  write:  .omp/theteam/reports/root-organization-scan.md
+```
 
-1. **Spawn one member** with the native `task` tool. Pass the contents of
-   `prompt_file` as the task. The persona is already prose inside that prompt
-   ("You are the **architect** on a `root-organization` phase") — do **not**
-   pass `member:` as an `agent:` type. Those are `theteam.config` persona ids,
-   not OMP agent types, and OMP's `scout` is read-only, which would make a
-   scan phase unable to write its report. Use `agent: "task"`; the persona is
-   in the prompt.
-2. **Write the member's answer** to
-   `.omp/theteam/handoff/<run-id>/<phase>.result.md`.
-3. **Write the hash sidecar** beside it, so the collector can prove the result
-   answers the prompt that was pinned. The sidecar path is the result path
-   with its `.md` replaced by `.meta.json`:
+Then:
 
-   ```bash
-   python3 -c "import json,sys; json.dump({'prompt_sha256': sys.argv[1]}, open(sys.argv[2],'w'))" \
-     "<prompt_sha256 from the request>" \
-     ".omp/theteam/handoff/<run-id>/<phase>.result.meta.json"
-   ```
+1. **Spawn one member** with the native `task` tool, using the `spawn:` agent
+   type and the contents of `prompt:` as the task text.
+2. **Write the member's answer** to the `write:` path. That is the declared
+   output for the phase, and its existence is the whole completion signal.
+3. **Run the same command again.** The phase is done, so the loop names the
+   next one. Repeat until the task reports `ok` or a failure.
 
-4. **Re-run the same command with the same `--run-id`.** The collector accepts
-   the pair, moves the result into the declared output, and the loop advances
-   to the next phase. Repeat until the task reports a terminal outcome.
+There is no run id, no request file, no hash sidecar, and no collector. A phase
+is done when its declared output exists and is not empty.
 
-Each collected phase leaves a `<phase>.collected.json` marker beside its
-request. That marker is what lets a later call with the same `--run-id` skip
-the phase instead of re-entering it: `accept_result` *moves* the result to its
-declared output, so a request with no result beside it is the normal shape of
-a **finished** phase, not a phase still waiting. Without the marker the loop
-walked back to phase 1 on every call and no multi-phase task could finish.
-Do not delete a `.collected.json` file to "restart" a phase — a fresh
-`--run-id` is how you start over, and it discards the phases already done.
+### `agent:` is the agent type; `member:` is the persona
 
-Resume *is* re-entry — same `--run-id`, one phase at a time. There is no
-resume protocol to follow.
+They are different things and the phase declares both.
 
-### What the collector refuses, and why you must not route around it
+- `agent_type:` — a **spawnable OMP agent type**. Measured against the host:
+  `advisor`, `default`, `designer`, `explore`, `scout`, `task`, `Tester`,
+  `vision`, `reviewer`, `security-reviewer`, `librarian`, `sonic`. Anything else
+  raises `Unknown agent`.
+- `member:` — a **project persona** from `theteam.config`, used only for the
+  prompt's framing ("You are the **skeptic**…"). `architect`, `pragmatist`,
+  `skeptic` and `devops` are *not* spawn targets and the host rejects all four.
 
-| you stage | outcome |
+Use the `spawn:` line's agent type. Do not pass `member:` as `agent:` — that
+fails at spawn time, not at read time.
+
+### Re-running and resuming
+
+Re-running is always safe. `theteam run --only <id>` either names the next
+unfinished phase or reports the task complete. There is no resume protocol.
+
+**To redo a phase, delete its output file.** A stale artifact reads as a
+finished phase, because a non-empty declared output *is* the completion signal.
+That is the deliberate trade: the simplest rule that can work, with a remedy
+you can see. Delete the file and run the command again.
+
+### What is refused
+
+| the phase declares | outcome |
 |---|---|
-| nothing | `awaiting_member` — nothing ran |
-| a result with no request on record | refused: `no request on record` |
-| a result whose hash does not match | refused: `answers prompt <a> but the request pinned <b>` |
-| a result with no hash sidecar | refused: `carries no prompt hash` |
-| an empty result | refused: `is empty` |
+| no `prompt_file` | refused: `runner is llm but names no prompt_file` |
+| a `prompt_file` that does not exist | refused: `prompt_file not found` |
+| no `output` | refused: `names no output, so it cannot prove it ran` |
+| an `agent_type` the host cannot spawn | refused: `is not one a session can spawn` |
 
-A stale file already sitting at the declared output path is **never**
-consulted — acceptance reads the staged result, then moves it into place. That
-is deliberate: `reports/root-organization-scan.md` from last week is
-non-empty, and accepting it would turn a phase green with no member behind it.
-Do not "help" by copying a file to the output path; the collector will not see
-it, and if you edit the sidecar to match, you have forged provenance, which is
-the exact defect §3.3 forbids.
-
-Without `--run-id`, everything above is inert and `theteam run` behaves exactly
-as it always has.
+These are defects in the task file, not states to work around. Fix the YAML.
 
 ## Step 0 — Locate and check the project config
 

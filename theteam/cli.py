@@ -727,6 +727,23 @@ def cmd_run(args: argparse.Namespace) -> int:
     for r in payload["results"]:
         if r.get("hint"):
             lines.append(f"  hint: {r['id']} — {r['hint']}")
+    # An awaiting phase is the one place this command hands work *back* to the
+    # reader. `theteam run` does not spawn; it says what a session must run and
+    # where to put the answer, so a session reading this knows the whole loop
+    # without consulting the task YAML. The persona is shown next to the agent
+    # because the prompt's framing is written in it — "You are the skeptic" —
+    # and the two are not the same thing.
+    for r in payload["results"]:
+        spawn = r.get("awaiting")
+        if not spawn:
+            continue
+        persona = f" (as {spawn['member']})" if spawn.get("member") else ""
+        done = r.get("completed_phases") or []
+        progress = f" ({len(done)} done so far)" if done else ""
+        lines.append(f"  {r['id']}: awaiting a member{progress}")
+        lines.append(f"    spawn:  {spawn['agent']}{persona}")
+        lines.append(f"    prompt: {spawn['prompt_file']}")
+        lines.append(f"    write:  {spawn['output']}")
     # Findings are named rather than folded into either total. "0 failed" on a
     # sweep where a check reported a problem reads as a clean project, and the
     # point of the taxonomy is that those are two different facts — a check

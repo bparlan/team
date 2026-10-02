@@ -26,6 +26,7 @@ phases:
   - name: scan
     runner: llm
     member: devops
+    agent_type: sonic
     prompt_file: prompts/root-organization-scan.md
     output: .omp/theteam/reports/root-organization-scan.md
     memory_limit_mb: 32
@@ -34,6 +35,7 @@ phases:
   - name: classify
     runner: llm
     member: architect
+    agent_type: reviewer
     prompt_file: prompts/root-organization-classify.md
     output: .omp/theteam/reports/root-organization-classify.md
     memory_limit_mb: 32
@@ -42,6 +44,7 @@ phases:
   - name: decide
     runner: llm
     member: skeptic
+    agent_type: reviewer
     prompt_file: prompts/root-organization-decide.md
     output: .omp/theteam/reports/root-organization-decision.md
     memory_limit_mb: 32
@@ -50,6 +53,7 @@ phases:
   - name: report
     runner: llm
     member: pragmatist
+    agent_type: task
     prompt_file: prompts/root-organization-report.md
     output: .omp/theteam/reports/root-organization.md
     order: 4

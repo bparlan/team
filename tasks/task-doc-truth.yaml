@@ -66,6 +66,7 @@ phases:
   - name: audit
     runner: llm
     member: architect
+    agent_type: reviewer
     prompt_file: prompts/doc-truth-audit.md
     output: .omp/theteam/reports/doc-truth-audit.md
     memory_limit_mb: 64
@@ -74,6 +75,7 @@ phases:
   - name: harmonize
     runner: llm
     member: pragmatist
+    agent_type: task
     prompt_file: prompts/doc-truth-harmonize.md
     output: .omp/theteam/reports/doc-truth-harmonize.md
     memory_limit_mb: 64

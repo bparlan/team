@@ -33,28 +33,28 @@ def task_readiness():
     """Per-task readiness, and whether it can run on this machine.
 
     Two independent gates decide it, and neither is inferred:
-
       * a `script` phase needs Docker (`AgentIsolation.available()`);
-      * an `llm` phase needs a session to spawn the member, which the
-        `--run-id` handoff provides.
+      * an `llm` phase needs a session to spawn the member. `theteam run`
+        names the phase and the session writes the result, so the bare CLI
+        cannot finish the task on its own — but it is not blocked either.
 
     The second gate used to read `hasattr(theteam, "default_api")` and report
     "needs a bound OMP provider", which was true of the code and useless to a
     reader: no environment binds that symbol, so the column said every `llm`
     task was permanently unrunnable and a session had no way to learn the
-    command that runs it. The handoff replaced that precondition, so the gate
-    now names what is actually required — a run id, and a session to drive
-    the members — and reports those tasks as runnable.
+    command that runs it. It then read `hasattr(theteam, "default_api")` a
+    second time under `--run-id`, which was equally untrue — the run id named
+    a staging area, and staging is gone.
 
     A task that genuinely cannot run here is still reported as a named
     refusal, which is the same pass condition the command checks use — §3.3.
     What is NOT done is reporting an unrunnable task as though it had run.
 
-    `runnable_here` deliberately means "the bare CLI can execute this without a
-    session", so it keys on the phase kinds and the Docker daemon only. Nothing
-    here is derived from the calling process, because a column that changed
-    with the environment would make this listing a per-process reading rather
-    than a statement about the task.
+    `runnable_here` means the task can be driven here — by the bare CLI for a
+    `script` task, or by `theteam run` naming the phase for a session to fill
+    in. Nothing is derived from the calling process, because a column that
+    changed with the environment would make this listing a per-process reading
+    rather than a statement about the task.
     """
     from theteam.core.agent_isolation import AgentIsolation
 
@@ -72,9 +72,9 @@ def task_readiness():
         elif needs_docker and not docker:
             ready, why = False, "needs Docker (no daemon answering)"
         elif needs_session:
-            # Runnable, with a stated precondition. The bare command refuses
-            # by name; the run-id form does not.
-            ready, why = True, "runnable here (llm phases need --run-id + a session)"
+            # Runnable, with a stated precondition: `theteam run` names the
+            # phase, and a session spawns the member and writes the result.
+            ready, why = True, "runnable here (llm phases need a session to spawn)"
         else:
             ready, why = True, "runnable here"
 

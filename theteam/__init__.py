@@ -78,8 +78,8 @@ def _require_provider():
             "theteam requires an OMP session. A shell is a fresh subprocess "
             "and can never bind a provider; an in-process host must bind one "
             "that answers the contract run_discussion reads. For tasks, run "
-            "`theteam run --only <id> --run-id <id>` instead — that path needs "
-            "no provider."
+            "`theteam run --only <id>` instead — it names the next phase, and "
+            "the session spawns the member. No run id, no provider."
         )
 
 

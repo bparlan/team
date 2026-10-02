@@ -172,7 +172,52 @@ class TaskExecutor:
         is observable rather than inferred (§7.1.6).
         """
         if phase.get("runner") == "llm":
+            from theteam.tasks.handoff import (
+                AWAITING_MEMBER,
+                accept_result,
+                handoff_dir,
+                read_request,
+                write_request,
+            )
             from theteam.tasks.runners.llm import run_llm_phase
+
+            name = str(phase.get("name", "?"))
+            run_id = (task or {}).get("_run_id")
+
+            # A result is admissible only against a request on record, and the
+            # request is only on record if Python wrote it. Two passes, one
+            # loop: the first finds no request and pauses; the session reads it,
+            # spawns the member, and stages a result; the second finds the pair
+            # and the collector decides. Acceptance never consults the declared
+            # output path, so a stale artifact there is inert.
+            if run_id:
+                if read_request(str(self.project_root), run_id, name) is None:
+                    prompt = ""
+                    try:
+                        prompt = self._llm_prompt(phase)
+                    except (FileNotFoundError, OSError) as error:
+                        return {"success": False,
+                                "error": f"phase '{name}': {error}"}
+                    write_request(str(self.project_root), run_id, phase, prompt,
+                                  phase.get("output"))
+                    return {
+                        "success": False,
+                        # Not a failure: nothing ran yet. The executor declines
+                        # to count it, the same rule `no_task_provider` uses.
+                        "skip_reason": AWAITING_MEMBER,
+                        "error": (f"phase '{name}': request staged at "
+                                  f"{handoff_dir(str(self.project_root), run_id)}, "
+                                  f"awaiting a member result"),
+                        "awaiting": True,
+                    }
+
+                result_path = (handoff_dir(str(self.project_root), run_id)
+                               / f"{name}.result.md")
+                return accept_result(str(self.project_root), run_id, name,
+                                     result_path)
+
+            # No run id means nobody is driving this run phase by phase — the
+            # bare CLI. It refuses exactly as it always has.
             return run_llm_phase(task or {}, phase, str(self.project_root))
 
         script = phase.get("script")
@@ -282,9 +327,33 @@ class TaskExecutor:
             outcome["findings_output"] = result["stdout"]
         return outcome
 
-    def execute_task(self, task_def: Dict, on_output=None) -> Dict:
+    def _llm_prompt(self, phase: Dict) -> str:
+        """The prompt text an `llm` phase would hand its member.
+
+        The same read `run_llm_phase` performs, so a staged request pins the
+        prompt that actually reached the member rather than a re-derivation of
+        it that could drift.
+        """
+        from theteam.tasks.runners.llm import _read_prompt
+
+        return _read_prompt(str(self.project_root), phase)
+
+    def execute_task(self, task_def: Dict, on_output=None,
+                     run_id: Optional[str] = None) -> Dict:
         task_id = task_def["id"]
         breaker = self._breaker(task_id)
+
+        # A run id is what makes an `llm` phase resumable. Without one the
+        # runner refuses by name (`no_task_provider`), which is the bare-CLI
+        # path and stays correct. With one, each `llm` phase stages a request
+        # and pauses; the session spawns the member and stages a result; a
+        # second call to `execute_task` with the SAME id re-enters the loop and
+        # the collector decides the pair. Resume is re-entry, not a protocol.
+        #
+        # The id is the caller's, not a fresh one per attempt: a new id would
+        # orphan the request the session is about to read.
+        if run_id:
+            task_def = {**task_def, "_run_id": run_id}
 
         # §1.2: an execution is in the chain before it runs, so a run that
         # kills the process still leaves the fact that it was attempted.

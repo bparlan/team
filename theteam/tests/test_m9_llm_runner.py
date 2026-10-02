@@ -94,6 +94,73 @@ class TestNoProviderIsANamedFailure:
         assert result["success"] is False
         assert "no prompt_file" in result["error"]
 
+class TestSuccessRequiresAnArtifact:
+    """§3.3: a phase cannot report success having produced nothing.
+
+    `run_llm_phase` used to write only `if target:` and then return
+    `{"success": True}` regardless. A phase naming no `output` therefore
+    reported green with zero evidence on disk, and the executor — which reads
+    `success` and has no notion of an artifact — advanced the breaker on it.
+
+    These cases need a bound provider: without one the runner returns at the
+    `no_task_provider` guard and the artifact gate is never reached. The stub
+    is the minimum `task()`/`output()` surface `run_llm_phase` uses, bound the
+    way the product binds it — as `theteam.default_api`.
+    """
+
+    @pytest.fixture
+    def member_says(self, monkeypatch):
+        """Bind a stub member whose output is whatever the test declares."""
+        import theteam
+
+        def _bind(payload):
+            class _Stub:
+                def task(self, **kwargs):
+                    tasks = kwargs.get("tasks") or []
+                    return {"tasks": [{"name": t["name"],
+                                       "handle": f"h:{t['name']}"}
+                                      for t in tasks]}
+
+                def output(self, handle):
+                    return payload
+
+            monkeypatch.setattr(theteam, "default_api", _Stub(), raising=False)
+
+        return _bind
+
+    def test_a_phase_naming_no_output_cannot_report_success(
+            self, tmp_path, member_says):
+        """No declared output means no way to prove the phase ran."""
+        member_says("the member produced something")
+        (tmp_path / "p.md").write_text("do the thing")
+        phase = {"name": "audit", "runner": "llm", "prompt_file": "p.md",
+                 "member": "scout"}
+        result = run_llm_phase({"id": "x"}, phase, str(tmp_path))
+        assert result["success"] is False
+        assert "no `output`" in result["error"]
+
+    def test_an_empty_artifact_is_refused_by_name(self, tmp_path, member_says):
+        """A member that produced nothing is a failure, not a zero-byte pass."""
+        member_says("")
+        (tmp_path / "p.md").write_text("do the thing")
+        phase = {"name": "audit", "runner": "llm", "prompt_file": "p.md",
+                 "member": "scout", "output": "out.md"}
+        result = run_llm_phase({"id": "x"}, phase, str(tmp_path))
+        assert result["success"] is False
+        assert "is empty" in result["error"]
+
+    def test_a_real_artifact_still_succeeds(self, tmp_path, member_says):
+        """The gate refuses only the cases with no evidence behind them."""
+        member_says("the member's actual finding")
+        (tmp_path / "p.md").write_text("do the thing")
+        phase = {"name": "audit", "runner": "llm", "prompt_file": "p.md",
+                 "member": "scout", "output": "out.md"}
+        result = run_llm_phase({"id": "x"}, phase, str(tmp_path))
+        assert result["success"] is True
+        assert result["output_path"] == str(tmp_path / "out.md")
+        assert (tmp_path / "out.md").read_text() == "the member's actual finding"
+
+
 
 class TestOnlyBypassesTheSchedule:
     """`--only <id>` means run it now, scheduled or not."""

@@ -468,7 +468,7 @@ def _contract_problem(task, phase, project_root):
     return None
 
 def run_due_tasks(project_root: str, only: Optional[str] = None,
-                  on_output=None, run_id: Optional[str] = None) -> Dict[str, Any]:
+                  on_output=None) -> Dict[str, Any]:
     """
     Execute every due task and return the run payload.
 
@@ -542,10 +542,29 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
             results.append({"id": task["id"], "result": "skipped", "detail": problem,
                             "elapsed": round(time.monotonic() - phase_started, 2)})
             continue
-        outcome = executor.execute_task(task, on_output=on_output,
-                                        run_id=run_id)
+        outcome = executor.execute_task(task, on_output=on_output)
         breaker = outcome["breaker"]
         consecutive = outcome["breaker_consecutive_failures"]
+        if outcome.get("awaiting"):
+            # The task is mid-loop and the session owns the next step. Nothing
+            # is recorded: no `record_run`, no `record_skip`, no breaker
+            # movement. A task waiting for a member to be spawned has not been
+            # attempted, and restamping `at` here would re-anchor the breaker's
+            # recovery window on every pass — the same defect the skip branch
+            # below was written to avoid.
+            #
+            # `awaiting` carries everything needed to run the member, so the
+            # caller does not have to re-read the task YAML to find out what to
+            # spawn or where to write the result.
+            results.append({
+                "id": task["id"],
+                "result": "awaiting",
+                "detail": "session must spawn the next phase",
+                "awaiting": outcome["awaiting"],
+                "completed_phases": outcome.get("completed_phases", []),
+                "elapsed": round(time.monotonic() - phase_started, 2),
+            })
+            continue
         if outcome.get("skipped"):
             # §3.2: the reason is the literal `breaker_open`, and it is
             # persisted so `theteam tasks` and `theteam history` still show it
@@ -610,6 +629,12 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         # due but never ran, so counting it would report work that never happened.
         "ran": sum(1 for r in results if r["result"] in ("ok", "failed")),
         "skipped": sum(1 for r in results if r["result"] == "skipped"),
+        # Counted apart from `skipped`: a task waiting for a session to spawn
+        # its next phase is not a failure and not a refusal. It ran some
+        # phases, then stopped because the next one needs a model. Collapsing
+        # it into `skipped` would say the task was passed over, and into
+        # `failures` would count it against a breaker it never tripped.
+        "awaiting": sum(1 for r in results if r["result"] == "awaiting"),
         "failures": sum(1 for r in results if r["result"] == "failed"),
         # Counted apart from `failures` because the two answer different
         # questions and collapsing them is what made a working monitor look
@@ -622,7 +647,6 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         "elapsed": round(time.monotonic() - sweep_started, 2),
         "purged_orphans": purged,
         "repaired_schedules": repaired,
-
         "results": results,
         # Every `theteam run` refreshes the state the project-integrity gate
         # reads and writes the context members are handed. This replaced the
@@ -679,8 +703,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                       file=sys.stderr, flush=True)
 
     payload = run_due_tasks(project_root, only=args.only,
-                            on_output=_live_reporter(args),
-                            run_id=getattr(args, "run_id", None))
+                            on_output=_live_reporter(args))
     if not payload["results"]:
         # "nothing due" and "the schedule could not be read" are the same
         # string unless something distinguishes them. Measured: two overdue
@@ -1223,12 +1246,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--only", help="Run one task id, ignoring the rest.")
     run.add_argument("--dry-run", action="store_true",
                      help="Show what would run and its worst-case time; run nothing.")
-    run.add_argument("--run-id", dest="run_id",
-                     help="Run identifier for a session-driven pass. Present it to "
-                          "let `runner: llm` phases stage a request and pause; "
-                          "reuse the SAME id to collect the member's result and "
-                          "continue the loop. Absent, an llm phase refuses with "
-                          "no_task_provider, exactly as before.")
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
     run.set_defaults(func=cmd_run)

@@ -2,48 +2,88 @@
 """
 theteam.tasks.runners.llm - run a task phase that is instructions, not a script.
 
-§M9 Phase 4 adds a second kind of phase. A `script:` phase runs a Python
-file; a `runner: llm` phase hands `prompt_file` to a team member and records
-what it wrote. Both live under the same executor, the same breaker, and the
-same `ok` / `failed` / `skipped` outcomes, so a run of the two kinds is
-indistinguishable from the outside except by what it produced.
+A `script:` phase runs a Python file. A `runner: llm` phase is *instructions to
+a model*, and this module does not run them. It resolves which phase is next and
+whether that phase is done. Spawning belongs to the session, because spawning
+is a capability that exists in the session and nowhere else.
 
-## The rule this module exists to enforce
+## Why Python does not spawn, measured
 
-**A missing provider is a named failure, never a synthesized result.** M0
-removed `MockAPI` because the system's whole value is honest opinion, and M0
-deleted it *for this shape of problem*: a function returning something
-plausible when it had nothing. An `llm` phase outside an OMP session is
-exactly that shape — the prompt is real, the member is not. So
-`run_llm_phase` refuses, with the command to run inside OMP, exactly as
-`run_discussion` does.
+This module used to gate every `llm` phase on `hasattr(theteam, "default_api")`
+and call `default_api.task(...)`. That symbol's only assignment in the whole
+repository was a `monkeypatch` in a test file, so the gate could not pass in any
+environment — the refusal was correct everywhere and the tasks were unrunnable
+by construction.
 
-The prompt is never executed as a shell command and never partially
-applied. An `llm` phase writes exactly one output file, and only when the
-member actually produced one.
+The host does offer a subagent helper, `agent(prompt, agent=..., handle=True)`
+(`omp://python-repl.md`, `src/eval/agent-bridge.ts`). It is injected as a
+builtin into the *eval kernel's* retained subprocess. It is not importable, not
+an env var, and not on any port:
 
-## What it is not
+    $ python3 -c "print(callable(agent))"
+    NameError: name 'agent' is not defined
 
-Not a synthesis engine, not a general agent loop, and not a second way to
-run a script. `script:` remains the kind for anything deterministic, and
-Phase 4 keeps a `pytest` phase as `script:` in `native-feature-loop`
-precisely because a test suite is not a judgement call.
+Every call site here is `python3 -m theteam.cli` — a fresh process launched by
+`bash`. So a provider adapter is not possible, and writing one would have been
+a guess dressed as an integration. The gap is not a missing import; it is a
+process boundary.
+
+## The loop, in full
+
+    1. theteam run --only <id>   → names the next phase: member, prompt path,
+                                   output path. No spawn.
+    2. the session spawns         → native `task` tool, writes the result to the
+                                   declared output path.
+    3. theteam run --only <id>   → the output exists and is non-empty, so the
+                                   phase is done and the next one is named.
+
+Three steps, no provider, no staging area, no run id. Re-running step 1 is
+always safe: it either names the next unfinished phase or reports the task
+complete.
+
+## The one rule this module enforces
+
+**A phase is done when its declared output exists and is not empty.**
+
+That was once contested. `handoff.py` argued the opposite — that accepting "the
+file exists" is worse than refusing, because a report left over from last week
+is also non-empty. That argument was sound *while a Python-side collector was
+accepting results*. It no longer is: there is no collector, so nothing else
+decides, and a phase that cannot produce its declared artifact has not run.
+
+The honest cost: a stale output reads as done. That is the price of the simplest
+thing that works, and the remedy is visible — delete the output to re-run. A
+run manifest would fix it and is exactly the bookkeeping this design exists to
+avoid.
+
+## What this is not
+
+Not a synthesis engine, not an agent loop, and not a second way to run a script.
+`script:` remains the kind for anything deterministic, and
+`native-feature-loop` keeps its `pytest` phase as `script:` precisely because a
+test suite is not a judgement call.
 """
 
 import os
 from typing import Any, Dict, Optional
 
-#: The provider `theteam/__init__.py` exposes inside an OMP session. Named
-#: once so the check and the call cannot disagree about what "the provider"
-#: is — the M9 Phase 1 bug was two places believing two things about a
-#: manifest that did not exist.
-PROVIDER = "default_api"
+#: The agent types a session can actually spawn. Measured against the host's
+#: own registry — `agent(prompt, agent="architect")` raises
+#: `RuntimeError: Unknown agent "architect"` — so this list is what a phase may
+#: name, and it is deliberately not read from `theteam.config`.
+#:
+#: That config lists project *personas* (`architect`, `pragmatist`, `skeptic`,
+#: `designer`, `devops`), and a persona is not a spawn target. Validating a
+#: phase against it certifies a name the host rejects, which is worse than no
+#: check at all: the task reports itself runnable and then cannot spawn anyone.
+AGENT_TYPES = (
+    "advisor", "default", "designer", "explore", "scout", "task",
+    "Tester", "vision", "reviewer", "security-reviewer", "librarian", "sonic",
+)
 
-#: Exit-code-free failure shape. A phase returns a dict; the executor reads
-#: `success` and `error`, exactly as it does for a script phase. An `llm`
-#: phase has no returncode, and inventing one would be a number nobody
-#: measured.
-NO_PROVIDER = "llm runner requires an OMP session"
+#: The agent a phase gets when it names none. `task` is the general-purpose
+#: agent, and the one the previous hardcoded `"agent": "task"` used.
+DEFAULT_AGENT_TYPE = "task"
 
 
 def _read_prompt(project_root: str, phase: Dict[str, Any]) -> str:
@@ -67,9 +107,8 @@ def _read_prompt(project_root: str, phase: Dict[str, Any]) -> str:
 def _output_path(project_root: str, phase: Dict[str, Any]) -> Optional[str]:
     """Where this phase's result goes, relative to the project root.
 
-    `None` when the phase names no output. An `llm` phase that produces a
-    result nobody reads is still recorded in the execution log, so this is
-    about durability, not about whether the phase ran.
+    `None` when the phase names no output. Such a phase cannot report success:
+    an `llm` phase that produces a result nobody reads has no evidence it ran.
     """
     output = phase.get("output")
     if not output:
@@ -77,198 +116,120 @@ def _output_path(project_root: str, phase: Dict[str, Any]) -> Optional[str]:
     return os.path.join(project_root, output)
 
 
-def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
-                  project_root: str) -> Dict[str, Any]:
-    """Run one `runner: llm` phase. Returns the same shape a script phase does.
+def agent_type_for(phase: Dict[str, Any]) -> str:
+    """The agent type a session should spawn for this phase.
 
-    Three outcomes, matching `execute_phase`:
+    A phase may name `agent_type:` directly. Failing that it falls back to
+    `agent:`, which is the field OMP's own `task` tool spells that way, so a
+    task written against either name does the obvious thing.
 
-    * `{"success": True, "output_path": ...}` — the member ran and wrote.
-    * `{"success": False, "error": "llm runner requires an OMP session"}` —
-      no provider. A failure, not a skip: the task did not do its work.
-    * `{"success": False, "error": "..."}` — a named refusal, such as a
-      missing `prompt_file` or a member that is not on the roster.
+    `member:` is deliberately not consulted. It names a project persona for the
+    prompt's framing — "You are the skeptic" — and personas are not spawn
+    targets. Wiring it to the spawn was the mistake that made every task in
+    this repository look runnable while naming agents the host rejects.
+    """
+    return (phase.get("agent_type") or phase.get("agent")
+            or DEFAULT_AGENT_TYPE)
+
+
+def _exists_nonempty(target: str) -> bool:
+    return os.path.exists(target) and os.path.getsize(target) > 0
+
+
+def resolve_phase(project_root: str, task: Dict[str, Any],
+                  phase: Dict[str, Any]) -> Dict[str, Any]:
+    """What the session must do for this phase, and whether it is already done.
+
+    Two outcomes, and the second is not an error:
+
+    * `{"done": True, "output_path": ...}` — the declared output exists and is
+      not empty. The phase is finished; move to the next one.
+    * `{"done": False, "spawn": {...}}` — everything the session needs to run
+      the member: the agent type, the prompt text, and where to write it.
+
+    Refusals — a missing `prompt_file`, a missing `output`, an agent type the
+    host does not offer — are raised by the caller as named errors. This
+    function answers only "is it done, and if not what is needed".
     """
     name = phase.get("name", "?")
+    target = _output_path(project_root, phase)
 
-    # A member named in a phase must be a member the project has. This
-    # runs before the prompt is read because it is a question about the
-    # task's own declaration, not about the phase's inputs: a phase that
-    # names a member nobody owns should be refused before anything is
-    # loaded.
-    #
-    # Without it, `root-organization/scan` named `scout`, which is not on
-    # the roster (`theteam.config` lists architect, pragmatist, skeptic,
-    # designer, devops), and the runner accepted it silently: the spawn
-    # carried a name nobody owns, the request was staged, and the task sat
-    # in `awaiting_member` forever because no member could answer it.
-    #
-    # The check fires only when the project declares a roster. A project
-    # with no theteam.config has no membership to validate against, and
-    # refusing there would break every test project that binds a stub
-    # provider without writing one — the config's absence is a separate
-    # concern, and it is the config's own loader that names it.
-    member_id = phase.get("member")
-    if member_id:
-        from theteam.core.member import load_config
+    if target is None:
+        return {"done": False, "phase": name,
+                "error": (f"phase '{name}': runner is llm but names no "
+                          f"`output`, so it cannot prove it ran")}
+    if _exists_nonempty(target):
+        return {"done": True, "phase": name, "output_path": target}
 
-        config, _ = load_config(project_root)
-        if config is not None:
-            roster = {m["id"] for m in config.get("team", []) if m.get("id")}
-            if member_id not in roster:
-                return {
-                    "success": False,
-                    "error": (f"phase '{name}': member '{member_id}' is not on "
-                              f"the roster declared by theteam.config (members: "
-                              f"{', '.join(sorted(roster)) or 'none'})"),
-                }
-
-    # A missing `prompt_file` is a named failure, not a traceback: the
-    # executor reads `phase_result["success"]` and has no except clause for
-    # a raised FileNotFoundError, so raising here would take down `theteam
-    # run` with a stack trace instead of naming the phase.
     try:
         prompt = _read_prompt(project_root, phase)
     except (FileNotFoundError, OSError) as error:
-        return {"success": False, "error": f"phase '{name}': {error}"}
+        return {"done": False, "phase": name, "error": f"phase '{name}': {error}"}
 
-
-    import theteam
-
-    if not hasattr(theteam, PROVIDER):
-        task_id = task.get("id", "?")
-        return {
-            "success": False,
-            # `skip_reason`, not just `error`: the task did not fail, it never
-            # got to run. The executor reads this and declines to count the
-            # attempt, so a machine with no OMP session does not walk three
-            # tasks into a breaker trip that can never be cleared.
-            "skip_reason": "no_task_provider",
-            "error": (f"{NO_PROVIDER} (phase '{name}')."),
-            # The old text said "run this inside an OMP session, where a task
-            # provider is bound" — advice that cannot be followed. A session
-            # reading it while already inside an OMP session is told to find a
-            # flag that does not exist, which `SKILL.md` explicitly warns
-            # against. The spawn is still the session's job; the only thing
-            # that changed is that the message now says which command does it.
-            "hint": (f"this task is unspawned, not blocked. Re-run with a run id "
-                     f"and let the session drive the members:\n"
-                     f"    theteam run --only {task_id} --run-id <id>"),
-        }
-    api = getattr(theteam, PROVIDER)
-    outcome = api.task(
-        i=f"Task phase: {name}",
-        context=f"Phase of task {task.get('id', '?')}",
-        tasks=[{
-            "task": prompt,
-            "agent": "task",
-            "name": f"{name}_{member_id}",
-            "isolated": True,
-        }],
-    )
-
-    # A bound provider is not automatically a well-behaved one. `tool.task`
-    # in an OMP eval kernel returns `{"text", "details"}` — no `tasks` key at
-    # all — and a provider that returned a bare string raised
-    # `AttributeError: 'str' object has no attribute 'get'` out of the phase
-    # loop, which is a crash where §3.3 requires a named refusal. Measured,
-    # not assumed: all three shapes are in the test that guards this.
-    #
-    # It is a refusal, not a failure, for the reason `no_task_provider` is
-    # one: a provider that cannot answer the contract it was bound to is
-    # structurally incapable of running this task, so counting it would walk
-    # the task toward a breaker trip that nothing can clear.
-    if not isinstance(outcome, dict):
-        return {
-            "success": False,
-            "skip_reason": "provider_contract_violated",
-            "error": (f"phase '{name}': provider returned "
-                      f"{type(outcome).__name__}, not a result envelope"),
-            "hint": ("the bound provider did not answer the contract "
-                     f"`run_llm_phase` reads. Expected a dict with a 'tasks' "
-                     f"list of {{'name', 'handle'}} entries."),
-        }
-    if not isinstance(outcome.get("tasks"), list):
-        return {
-            "success": False,
-            "skip_reason": "provider_contract_violated",
-            # `sorted(outcome)` was the defect: a provider returning a dict
-            # with mixed key types raised `TypeError: '<' not supported
-            # between instances of 'int' and 'str'` from inside the error
-            # path, so the one branch meant to NAME a bad response crashed
-            # instead of naming it. Coerce first, then sort.
-            "error": (f"phase '{name}': provider returned no 'tasks' list "
-                      f"(keys: {sorted(map(str, outcome))})"),
-            "hint": ("the bound provider did not answer the contract "
-                     f"`run_llm_phase` reads. Expected a dict with a 'tasks' "
-                     f"list of {{'name', 'handle'}} entries."),
-        }
-    # Each entry is read defensively for the same reason: a list of strings is
-    # a plausible provider response and `r.get` on a str is the crash above
-    # one level down.
-    handles = {}
-    for entry in outcome["tasks"]:
-        if isinstance(entry, dict):
-            handles[entry.get("name")] = entry.get("handle")
-        else:
-            return {
-                "success": False,
-                "skip_reason": "provider_contract_violated",
-                "error": (f"phase '{name}': provider returned a "
-                          f"{type(entry).__name__} in 'tasks', not a dict"),
-                "hint": ("expected each entry to be "
-                         f"{{'name': ..., 'handle': ...}}"),
-            }
-    handle = handles.get(f"{name}_{member_id}")
-    if not handle:
-        return {
-            "success": False,
-            "error": f"phase '{name}': no handle returned for member {member_id}",
-        }
-
-    try:
-        produced = api.output(handle)
-    except Exception as error:  # the provider's own failure, named not hidden
-        return {"success": False, "error": f"phase '{name}': {error}"}
-
-    target = _output_path(project_root, phase)
-
-    # Validate before writing: a phase must declare an output to be considered successful
-    if not target:
-        return {
-            "success": False,
-            "error": (f"phase '{name}': runner is llm but names no `output`, "
-                      f"so it cannot prove it ran"),
-        }
-
-    # Write the produced content to the target file
-    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-    with open(target, "w", encoding="utf-8") as handle_out:
-        handle_out.write(_render(produced))
-
-    # After writing, verify the file is not empty. This closes the fabrication hole
-    # where a session could handwrite a file and have it accepted as success.
-    if os.path.getsize(target) == 0:
-        return {
-            "success": False,
-            "error": f"phase '{name}': declared output {target} is empty",
-        }
+    agent = agent_type_for(phase)
+    if agent not in AGENT_TYPES:
+        return {"done": False, "phase": name,
+                "error": (f"phase '{name}': agent_type '{agent}' is not one a "
+                          f"session can spawn (available: "
+                          f"{', '.join(AGENT_TYPES)})")}
 
     return {
-        "success": True,
-        "output_path": target,
-        "member": member_id,
+        "done": False,
+        "phase": name,
+        "spawn": {
+            "agent": agent,
+            "member": phase.get("member"),
+            "prompt_file": phase.get("prompt_file"),
+            "prompt": prompt,
+            "output": phase.get("output"),
+            "output_path": target,
+        },
     }
 
 
-def _render(produced: Any) -> str:
-    """What a phase writes when a member produced a result.
+def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
+                  project_root: str) -> Dict[str, Any]:
+    """Resolve one `runner: llm` phase. Never spawns.
 
-    A string is written as-is. Anything else is written as JSON, because a
-    dict rendered with `str()` loses its structure and a reader cannot tell
-    a list from a dict with one key.
+    Returns the same shape `execute_phase` reads, so the executor, the breaker
+    and the CLI are unchanged:
+
+    * `{"success": True, "output_path": ...}` — the phase is done.
+    * `{"success": False, "awaiting": True, "spawn": {...}}` — the phase needs
+      the session to run a member. Not a failure and not a refusal: the task
+      did not fail, it has not been asked to do this phase yet.
+    * `{"success": False, "error": "..."}` — a named defect in the task's own
+      declaration: no `prompt_file`, no `output`, or an agent type the host
+      does not offer.
     """
-    if isinstance(produced, str):
-        return produced
-    import json
-    return json.dumps(produced, indent=2, default=str)
+    resolved = resolve_phase(project_root, task, phase)
+    name = resolved.get("phase", "?")
+
+    if resolved.get("done"):
+        return {"success": True, "output_path": resolved["output_path"],
+                "phase": name}
+
+    if resolved.get("error"):
+        return {"success": False, "error": resolved["error"]}
+
+    return {
+        "success": False,
+        # `awaiting`, not `skip_reason`: the executor must NOT decline to count
+        # this as a refusal. A refusal means "this task structurally cannot
+        # run here". This means "this phase is next, and the session is the
+        # one that runs it" — the normal state of every unfinished llm phase.
+        "awaiting": True,
+        "spawn": resolved["spawn"],
+        "error": (f"phase '{name}': output {phase.get('output')} does not exist "
+                  f"yet — spawn `{resolved['spawn']['agent']}` and write the "
+                  f"result there"),
+    }
+
+
+__all__ = [
+    "AGENT_TYPES",
+    "DEFAULT_AGENT_TYPE",
+    "agent_type_for",
+    "resolve_phase",
+    "run_llm_phase",
+]

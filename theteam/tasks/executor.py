@@ -235,70 +235,20 @@ class TaskExecutor:
         is observable rather than inferred (§7.1.6).
         """
         if phase.get("runner") == "llm":
-            from theteam.tasks.handoff import (
-                AWAITING_MEMBER,
-                accept_result,
-                handoff_dir,
-                is_collected,
-                read_request,
-                write_request,
-            )
             from theteam.tasks.runners.llm import run_llm_phase
 
-            name = str(phase.get("name", "?"))
-            run_id = (task or {}).get("_run_id")
-
-            # A result is admissible only against a request on record, and the
-            # request is only on record if Python wrote it. Two passes, one
-            # loop: the first finds no request and pauses; the session reads it,
-            # spawns the member, and stages a result; the second finds the pair
-            # and the collector decides. Acceptance never consults the declared
-            # output path, so a stale artifact there is inert.
-            if run_id:
-                # Three-way branch, in order of what the on-disk state says.
-                # A request with a collected marker is DONE — `accept_result`
-                # already moved the result to its declared output, so the
-                # evidence that this phase ran lives only in the marker. Without
-                # this check the next call finds a request and no result and
-                # returns `awaiting_member`, walking the loop back to phase 1
-                # forever: a 4-phase task is unfinishable, which is a deadlock,
-                # not a pause. Measured 2026-10-02, 6 calls, same --run-id.
-                if is_collected(str(self.project_root), run_id, name):
-                    return {
-                        "success": True,
-                        "output_path": None,
-                        "phase": name,
-                        "already_collected": True,
-                    }
-
-                if read_request(str(self.project_root), run_id, name) is None:
-                    prompt = ""
-                    try:
-                        prompt = self._llm_prompt(phase)
-                    except (FileNotFoundError, OSError) as error:
-                        return {"success": False,
-                                "error": f"phase '{name}': {error}"}
-                    write_request(str(self.project_root), run_id,
-                                  str((task or {}).get("id", "?")), phase, prompt,
-                                  phase.get("output"))
-                    return {
-                        "success": False,
-                        # Not a failure: nothing ran yet. The executor declines
-                        # to count it, the same rule `no_task_provider` uses.
-                        "skip_reason": AWAITING_MEMBER,
-                        "error": (f"phase '{name}': request staged at "
-                                  f"{handoff_dir(str(self.project_root), run_id)}, "
-                                  f"awaiting a member result"),
-                        "awaiting": True,
-                    }
-
-                result_path = (handoff_dir(str(self.project_root), run_id)
-                               / f"{name}.result.md")
-                return accept_result(str(self.project_root), run_id, name,
-                                     result_path)
-
-            # No run id means nobody is driving this run phase by phase — the
-            # bare CLI. It refuses exactly as it always has.
+            # No staging, no run id, no collector. An `llm` phase is done when
+            # its declared output exists and is not empty; until then it needs
+            # the session to spawn a member, and the runner says exactly what.
+            #
+            # This replaces a two-file protocol: a staged `*.request.json`
+            # pinning the prompt hash, a `*.result.meta.json` sidecar the
+            # session wrote naming that hash, and an `accept_result` that
+            # moved the result into place. All of it existed so a subprocess
+            # could ask a session to run a model on its behalf and then verify
+            # the answer's provenance. With nothing staging anything, the
+            # provenance check had nothing to check and the protocol was three
+            # files of bookkeeping around one boolean.
             return run_llm_phase(task or {}, phase, str(self.project_root))
 
         script = phase.get("script")
@@ -408,33 +358,9 @@ class TaskExecutor:
             outcome["findings_output"] = result["stdout"]
         return outcome
 
-    def _llm_prompt(self, phase: Dict) -> str:
-        """The prompt text an `llm` phase would hand its member.
-
-        The same read `run_llm_phase` performs, so a staged request pins the
-        prompt that actually reached the member rather than a re-derivation of
-        it that could drift.
-        """
-        from theteam.tasks.runners.llm import _read_prompt
-
-        return _read_prompt(str(self.project_root), phase)
-
-    def execute_task(self, task_def: Dict, on_output=None,
-                     run_id: Optional[str] = None) -> Dict:
+    def execute_task(self, task_def: Dict, on_output=None) -> Dict:
         task_id = task_def["id"]
         breaker = self._breaker(task_id)
-
-        # A run id is what makes an `llm` phase resumable. Without one the
-        # runner refuses by name (`no_task_provider`), which is the bare-CLI
-        # path and stays correct. With one, each `llm` phase stages a request
-        # and pauses; the session spawns the member and stages a result; a
-        # second call to `execute_task` with the SAME id re-enters the loop and
-        # the collector decides the pair. Resume is re-entry, not a protocol.
-        #
-        # The id is the caller's, not a fresh one per attempt: a new id would
-        # orphan the request the session is about to read.
-        if run_id:
-            task_def = {**task_def, "_run_id": run_id}
 
         # The dependency gate runs before anything else, including the audit
         # event: a task that is waiting on a prerequisite has not been
@@ -487,16 +413,44 @@ class TaskExecutor:
         results = []
         refusal: Optional[str] = None
         skip_hint: Optional[str] = None
+        awaiting: Optional[Dict] = None
         for phase in task_def.get("phases", []):
             phase_result = self.execute_phase(phase, task_def, on_output=on_output)
             phase_result["phase"] = phase["name"]
             results.append(phase_result)
+            if phase_result.get("awaiting"):
+                # The session runs this phase. Not a refusal and not a
+                # failure: nothing is wrong with the task, and later phases
+                # cannot start until this one has produced its output. The
+                # loop stops here and the payload carries the spawn request.
+                awaiting = phase_result.get("spawn")
+                break
             if phase_result.get("skip_reason"):
                 refusal = phase_result["skip_reason"]
                 skip_hint = phase_result.get("hint")
                 break
             if not phase_result["success"]:
                 break
+
+        if awaiting:
+            # A task mid-loop is neither succeeded nor failed. Reporting
+            # `failed` would count an unfinished task against its breaker, and
+            # three llm tasks on a machine with no session would walk to a
+            # permanent trip exactly as they did under `no_task_provider`.
+            # So the breaker is neither advanced nor reset, nothing is
+            # recorded as a completion, and the caller gets the spawn request.
+            return {
+                "task_id": task_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "phases": results,
+                "overall_success": False,
+                "awaiting": awaiting,
+                "completed_phases": [r["phase"] for r in results
+                                     if r.get("success")],
+                "breaker": breaker.stats.state.value,
+                "breaker_consecutive_failures":
+                    breaker.stats.consecutive_failures,
+            }
 
         if refusal:
             # The task did not fail — it never got to run. Counting a refusal

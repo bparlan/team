@@ -17,4 +17,5 @@ phases:
     prompt_file: prompts/doc-harmonization.md
     output: .omp/theteam/reports/doc-harmonization.md
     memory_limit_mb: 64
+    timeout_seconds: 900
 order: 6

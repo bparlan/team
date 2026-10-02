@@ -19,12 +19,14 @@ phases:
     prompt_file: prompts/native-feature-loop-recon.md
     output: .omp/theteam/reports/native-feature-recon.md
     memory_limit_mb: 64
+    timeout_seconds: 900
   - name: implement
     runner: llm
     member: pragmatist
     prompt_file: prompts/native-feature-loop-implement.md
     output: .omp/theteam/reports/native-feature-implementation.md
     memory_limit_mb: 64
+    timeout_seconds: 900
   - name: test
     script: scripts/run_pytest.py
     args: []
@@ -36,4 +38,5 @@ phases:
     prompt_file: prompts/native-feature-loop-docs.md
     output: .omp/theteam/reports/native-feature-docs.md
     memory_limit_mb: 64
+    timeout_seconds: 900
 order: 7

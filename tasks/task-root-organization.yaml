@@ -24,6 +24,7 @@ phases:
     prompt_file: prompts/root-organization-scan.md
     output: reports/root-organization-scan.md
     memory_limit_mb: 32
+    timeout_seconds: 900
     order: 1
 
   - name: classify
@@ -32,6 +33,7 @@ phases:
     prompt_file: prompts/root-organization-classify.md
     output: reports/root-organization-classify.md
     memory_limit_mb: 32
+    timeout_seconds: 900
     order: 2
 
   - name: decide
@@ -40,6 +42,7 @@ phases:
     prompt_file: prompts/root-organization-decide.md
     output: reports/root-organization-decision.md
     memory_limit_mb: 32
+    timeout_seconds: 900
     order: 3
 
   - name: report
@@ -47,7 +50,7 @@ phases:
     member: pragmatist
     prompt_file: prompts/root-organization-report.md
     output: reports/root-organization.md
-    memory_limit_mb: 32
+    timeout_seconds: 900
     order: 4
 
 coverage:

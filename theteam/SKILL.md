@@ -23,6 +23,106 @@ report the exact stderr to the user, do not paraphrase it into a softer
 
 Every invocation of this skill starts here:
 
+## The `default_api` gate — why the CLI cannot spawn
+
+`discuss` and every task whose phases are `runner: llm` (`root-organization`,
+`ground-truth-audit`, `doc-harmonization`, `native-feature-loop`) need a task
+provider bound into `theteam` as `default_api` in order to spawn a member.
+
+**No such provider exists, in any environment.** `default_api` is the
+namespace Gemini-family models use to spell a tool call in generated text
+(`default_api.read(path="x")` inside a ```` ```tool_code ```` block). It is a
+wire format OMP parses — not a Python object, and nothing in the OMP runtime
+injects one into an imported module. Verified two ways:
+
+```bash
+python3 -c "import theteam; print(hasattr(theteam,'default_api'))"   # -> False
+theteam discuss "anything"   # -> ProviderUnavailable
+```
+
+So the bare CLI returns a **named refusal** (`no_task_provider`) rather than a
+fabricated result, and that refusal must be reported as-is. Do not search for
+a session flag that enables it — none exists.
+
+For `runner: llm` **tasks** there is a supported path that needs no provider,
+described in the next section. `theteam discuss` has no such path yet: it
+calls `default_api` directly, so it still refuses. Report that refusal; do not
+retry it or synthesize the notes a discussion would have produced.
+
+`tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
+
+## Running an `llm` task from inside a session
+
+`runner: llm` tasks are **not** blocked — they are unspawned. The gate above is
+about spawning, and spawning is the one thing Python cannot do from inside
+`theteam run`: the CLI is a subprocess, so it has no channel to this session's
+`task` tool. That is why the phases are `runner: llm` and why the bare CLI
+answers `no_task_provider`.
+
+The fix inverts the direction. Python stops spawning and starts **recording**:
+it writes down what it asked for, pauses, and reads the answer back when one
+appears. You do the spawning, because you are the only party that can.
+
+### The loop
+
+```bash
+theteam run --only <task-id> --run-id <run-id>     # stages a request, pauses
+```
+
+It prints `skipped (awaiting_member)` and writes
+`.omp/theteam/handoff/<run-id>/<phase>.request.json`. Read that file: it names
+the phase, the member persona, the prompt file, the declared output, and
+`prompt_sha256`.
+
+Then, **per phase**:
+
+1. **Spawn one member** with the native `task` tool. Pass the contents of
+   `prompt_file` as the task. The persona is already prose inside that prompt
+   ("You are the **architect** on a `root-organization` phase") — do **not**
+   pass `member:` as an `agent:` type. Those are `theteam.config` persona ids,
+   not OMP agent types, and OMP's `scout` is read-only, which would make a
+   scan phase unable to write its report. Use `agent: "task"`; the persona is
+   in the prompt.
+2. **Write the member's answer** to
+   `.omp/theteam/handoff/<run-id>/<phase>.result.md`.
+3. **Write the hash sidecar** beside it, so the collector can prove the result
+   answers the prompt that was pinned. The sidecar path is the result path
+   with its `.md` replaced by `.meta.json`:
+
+   ```bash
+   python3 -c "import json,sys; json.dump({'prompt_sha256': sys.argv[1]}, open(sys.argv[2],'w'))" \
+     "<prompt_sha256 from the request>" \
+     ".omp/theteam/handoff/<run-id>/<phase>.result.meta.json"
+   ```
+
+4. **Re-run the same command with the same `--run-id`.** The collector accepts
+   the pair, moves the result into the declared output, and the loop advances
+   to the next phase. Repeat until the task reports a terminal outcome.
+
+Resume *is* re-entry — same `--run-id`, one phase at a time. There is no
+resume protocol to follow.
+
+### What the collector refuses, and why you must not route around it
+
+| you stage | outcome |
+|---|---|
+| nothing | `awaiting_member` — nothing ran |
+| a result with no request on record | refused: `no request on record` |
+| a result whose hash does not match | refused: `answers prompt <a> but the request pinned <b>` |
+| a result with no hash sidecar | refused: `carries no prompt hash` |
+| an empty result | refused: `is empty` |
+
+A stale file already sitting at the declared output path is **never**
+consulted — acceptance reads the staged result, then moves it into place. That
+is deliberate: `reports/root-organization-scan.md` from last week is
+non-empty, and accepting it would turn a phase green with no member behind it.
+Do not "help" by copying a file to the output path; the collector will not see
+it, and if you edit the sidecar to match, you have forged provenance, which is
+the exact defect §3.3 forbids.
+
+Without `--run-id`, everything above is inert and `theteam run` behaves exactly
+as it always has.
+
 ## Step 0 — Locate and check the project config
 
 The project root is the current working directory of the session (not an

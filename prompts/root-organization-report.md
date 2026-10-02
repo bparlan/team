@@ -6,9 +6,9 @@ anything.
 
 ## Inputs
 
-- `reports/root-organization-scan.md`
-- `reports/root-organization-classify.md`
-- `reports/root-organization-decision.md`
+- `.omp/theteam/reports/root-organization-scan.md`
+- `.omp/theteam/reports/root-organization-classify.md`
+- `.omp/theteam/reports/root-organization-decision.md`
 
 Read all three. If any is missing, say which and stop — a report built on a
 missing classification is worse than no report.

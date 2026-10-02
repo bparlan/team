@@ -649,8 +649,8 @@ phases:
   - name: audit
     runner: llm              # a prompt, not a process
     member: architect
-    prompt_file: prompts/ground-truth-audit.md
-    output: .omp/theteam/reports/ground-truth-audit.md
+    prompt_file: prompts/doc-truth-audit.md
+    output: .omp/theteam/reports/doc-truth-audit.md
     memory_limit_mb: 64
 ```
 
@@ -659,7 +659,7 @@ phases:
 container, because there is no process to bound. Both share the executor, the
 breaker, and the `ok`/`failed`/`skipped` outcomes.
 
-Three rules, each enforced rather than documented:
+Five rules, each enforced rather than documented:
 
 1. **Exactly one runner per phase.** Both is ambiguous; neither is a phase that
    reads as "ran, did nothing". `theteam run` refuses either case by name
@@ -682,15 +682,56 @@ Three rules, each enforced rather than documented:
    a non-dict return, a missing `tasks` key, and a non-dict entry inside the
    list — because each was a measured crash before the guard existed.
 
-Task **filenames** keep the `task-` prefix the directory already uses
-(`repository.py:148`). `tasks/ground-truth-audit.yaml` is invisible to the
-registry — not an error, just a file nothing reads — so the shipped tasks are
-`tasks/task-ground-truth-audit.yaml` with `id: ground-truth-audit`. The id is
-what the command names; the filename is what the reader globs.
+5. **A phase may only name a member on the roster.** `run_llm_phase` reads
+   `theteam.config` and refuses a member the project does not have, naming the
+   members that do exist. This is checked before the prompt is even read: it
+   is a question about the task's own declaration, not about its inputs.
+   `root-organization/scan` named `scout`, which is on no roster, and the
+   runner accepted it — the spawn carried a name nobody owned, the request was
+   staged, and the task sat in `awaiting_member` forever because no member
+   could answer it. The check is skipped when the project declares no
+   `theteam.config`: a project with no roster has no membership to validate
+   against, and refusing there would refuse every test fixture.
 
-**No `depends_on` key.** Three linear tasks a human sequences need no graph, and
-a key nothing reads is the schema-lies-nothing-enforces defect that retired
-`option_selection_required`.
+Task **filenames** keep the `task-` prefix the directory already uses
+(`repository.py:148`). `tasks/doc-truth.yaml` is invisible to the
+registry — not an error, just a file nothing reads — so the shipped tasks are
+`tasks/task-doc-truth.yaml` with `id: doc-truth`. The id is what the command
+names; the filename is what the reader globs.
+
+**`depends_on` — a list of task ids, and it gates.** `order` is presentation
+only: `repository.py` reads it to sort a listing, and nothing sorts by it or
+gates on it. A `depends_on` list is the relationship the executor enforces.
+
+This reverses an earlier decision, and the reason is worth keeping. That
+version said: *"No `depends_on` key. Three linear tasks a human sequences need
+no graph, and a key nothing reads is the schema-lies-nothing-enforces defect
+that retired `option_selection_required`."* The premise was correct — a key
+nothing reads is that same defect — and the conclusion drawn from it was
+wrong, because one real dependency already existed and was enforced by
+prose: `doc-harmonization` consumed `ground-truth-audit`'s output, and the
+only thing sequencing them was a sentence in a prompt file saying "read it,
+and if it does not exist, stop." A dependency declared in the wrong language
+is still a dependency, just an unenforceable one.
+
+What the executor does (`executor.py:_dependency_refusal`, checked before any
+phase runs): the task runs only when every dependency's last recorded result
+is `ok`. Two cases refuse, and neither is a fault of the waiting task:
+
+- **never run** — no result was ever measured, so there is no evidence the
+  dependency succeeded;
+- **not `ok`** — including `skipped`, because a skipped dependency did not do
+  its work and whatever it would have written is not on disk.
+
+A dependency that ran and reported *findings* is `ok`: it did its job, and
+whether the project has problems is a different question. A refusal records
+`skip_reason: dependency_unmet`, counts against no breaker, and writes no
+`task_start` — a task waiting on a prerequisite has not been attempted, and a
+start with no matching finish is a dangling audit record.
+
+`depends_on: project-integrity` (a bare string, not a list) is rejected at
+read time by `_check_task`, because a string iterates its characters and the
+task would wait on `p`, `r`, `o`, `j` forever.
 
 
 Validation runs on write. `TaskRepository` rejects a phase without
@@ -1086,9 +1127,9 @@ repeat ticks, and `commentary.py:223` already covers the case that needs one.
 ### Phase 4 — Prompt-derived work as registered tasks
 
 ```
-theteam run --only ground-truth-audit
-theteam run --only doc-harmonization
+theteam run --only doc-truth
 theteam run --only native-feature-loop --topic "..."
+theteam run --only root-organization
 ```
 
 One new schema field. A phase today runs `script:`; these prompts are instructions to a model:
@@ -1098,7 +1139,8 @@ phases:
   - name: audit
     runner: llm
     member: architect
-    prompt_file: prompts/ground-truth-audit.md
+    prompt_file: prompts/doc-truth-audit.md
+    output: .omp/theteam/reports/doc-truth-audit.md
     memory_limit_mb: 64
 ```
 
@@ -1110,15 +1152,23 @@ phases:
 **The missing-script check must not weaken.** `cli.py:243-246` reports a missing script as `skipped`
 with a named reason. A phase with *neither* `script` nor `runner: llm` takes that same path —
 otherwise the new field is a silent-skip hole, the exact shape §3.3 forbids.
-
-**Three tasks:** `ground-truth-audit` (architect, recon only), `doc-harmonization` (pragmatist,
-consumes the audit), `native-feature-loop` (skeptic recon → pragmatist implement → **`script:`
-pytest** → doc sync). Tests stay a subprocess: a test suite is deterministic and must not be judged
+**Three tasks:** `doc-truth` (architect audit → pragmatist harmonize, two ordered
+phases in one task), `native-feature-loop` (skeptic recon → pragmatist implement → **`script:`
+pytest** → doc sync), and `root-organization` (devops scan → architect classify → skeptic decide
+→ pragmatist report). Tests stay a subprocess: a test suite is deterministic and must not be judged
 by a model.
 
-**No `depends_on` key.** `repository.py:26` requires only `id`; nothing reads dependencies. Three
-linear tasks a human sequences need no graph. A key nothing reads is the same
-schema-lies-nothing-enforces defect as the retired `option_selection_required`.
+`doc-truth` is two phases in one task where there were once two tasks. `doc-harmonization` existed
+only to consume `ground-truth-audit`'s output and had no opinion of its own, so it could run before,
+during, or instead of the audit it reads. One task makes the ordering the executor's job; §5.4's
+`depends_on` covers the same class of problem across tasks.
+
+**`depends_on` exists and gates.** `repository.py` still requires only `id`, but a task may also
+declare `depends_on: [<task id>, ...]`, and `TaskExecutor._dependency_refusal` holds the task until
+every dependency's last result is `ok`. This reverses the earlier decision recorded above, which
+argued the key should not exist because nothing read it; one real dependency already existed and was
+enforced only by prompt prose.
+
 
 ### Phase 5 — Diagrams
 

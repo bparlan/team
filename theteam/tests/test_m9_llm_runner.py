@@ -44,16 +44,16 @@ class TestOneRunnerPerPhase:
         assert _phase_problem(task, str(tmp_path)) is None
 
     def test_an_llm_phase_needs_no_script(self, tmp_path):
+        # `output` is required, and always has been: `run_llm_phase` refuses
+        # an `llm` phase that declares none (`llm.py:237`, guarded by
+        # `test_a_phase_naming_no_output_cannot_report_success`). The gate
+        # names that earlier rather than at run time. What this test is
+        # about is narrower — an `llm` phase needs no *script*, because its
+        # instructions live in the prompt file.
         task = {"id": "x", "phases": [
-            {"name": "a", "runner": "llm", "prompt_file": "p.md"}]}
+            {"name": "a", "runner": "llm", "prompt_file": "p.md",
+             "output": "out.md"}]}
         assert _phase_problem(task, str(tmp_path)) is None
-
-    def test_a_phase_naming_both_is_refused(self, tmp_path):
-        (tmp_path / "run.py").write_text("print(1)\n")
-        task = {"id": "x", "phases": [
-            {"name": "a", "script": "run.py", "runner": "llm"}]}
-        problem = _phase_problem(task, str(tmp_path))
-        assert "both" in problem
 
     def test_a_phase_naming_neither_is_refused(self, tmp_path):
         task = {"id": "x", "phases": [{"name": "a", "memory_limit_mb": 64}]}
@@ -63,6 +63,7 @@ class TestOneRunnerPerPhase:
     def test_a_missing_script_is_still_named(self, tmp_path):
         task = {"id": "x", "phases": [{"name": "a", "script": "absent.py"}]}
         assert "missing script" in _phase_problem(task, str(tmp_path))
+
 
 
 class TestNoProviderIsANamedFailure:
@@ -160,6 +161,74 @@ class TestSuccessRequiresAnArtifact:
         assert result["output_path"] == str(tmp_path / "out.md")
         assert (tmp_path / "out.md").read_text() == "the member's actual finding"
 
+
+
+class TestMemberMustBeOnTheRoster:
+    """A phase may name only a member the project actually has.
+
+    `root-organization/scan` named `scout`, which is not on the roster, and
+    `run_llm_phase` accepted it: the spawn carried a name nobody owns, the
+    request was staged, and the task sat in `awaiting_member` forever because
+    no member could answer it. The roster is the project's own declaration,
+    so the runner reads it rather than trusting the phase.
+
+    The check fires only when a roster exists. A test project with no
+    `theteam.config` has no membership to validate against, and refusing
+    there would break every fixture that binds a stub provider without
+    writing one — the config's absence is a separate concern, and it is the
+    config's own loader that names it.
+    """
+
+    @pytest.fixture
+    def with_config(self, tmp_path):
+        """A project that declares the roster the real one does."""
+        (tmp_path / "theteam.config").write_text(
+            "team:\n"
+            "  - id: architect\n"
+            "  - id: pragmatist\n"
+            "  - id: skeptic\n"
+            "  - id: designer\n"
+            "  - id: devops\n", encoding="utf-8")
+        return tmp_path
+
+    def test_a_member_not_on_the_roster_is_refused(self, with_config):
+        phase = {"name": "scan", "runner": "llm", "member": "scout",
+                 "prompt_file": "p.md", "output": "out.md"}
+        result = run_llm_phase({"id": "x"}, phase, str(with_config))
+
+        assert result["success"] is False
+        assert "scout" in result["error"]
+        assert "roster" in result["error"]
+        # The refusal names the members that exist, so the reader can fix it
+        # by editing the phase rather than hunting the config.
+        for member in ("architect", "pragmatist", "skeptic", "designer",
+                       "devops"):
+            assert member in result["error"]
+
+    def test_a_member_on_the_roster_is_not_refused(self, with_config,
+                                                    monkeypatch):
+        """The guard must not swallow a valid member — the good path still
+        reaches the provider, or it dies on the provider, not on the roster.
+        """
+        import theteam
+        (with_config / "p.md").write_text("do the thing")
+
+        class Provider:
+            @staticmethod
+            def task(**kw):
+                return {"tasks": [{"name": "scan_architect", "handle": "h1"}]}
+
+            @staticmethod
+            def output(handle):
+                return "the member's report"
+
+        monkeypatch.setattr(theteam, "default_api", Provider(), raising=False)
+        phase = {"name": "scan", "runner": "llm", "member": "architect",
+                 "prompt_file": "p.md", "output": "out.md"}
+        result = run_llm_phase({"id": "x"}, phase, str(with_config))
+
+        assert result["success"] is True, result
+        assert (with_config / "out.md").read_text() == "the member's report"
 
 
 class TestOnlyBypassesTheSchedule:
@@ -395,3 +464,68 @@ class TestProviderContract:
         assert result["success"] is False
         assert result["skip_reason"] == "provider_contract_violated", result
         assert "'7'" in result["error"] and "'text'" in result["error"], result
+
+
+class TestLlmPhasePreconditionsAreCheckedBeforeTheRun:
+    """The runner's two `llm` refusals, hoisted from run time to the gate.
+
+    `run_llm_phase` already refuses an `llm` phase with no `prompt_file` and
+    one that declares no `output`. Those refusals happen at run time, once per
+    attempt, with the reason buried inside a phase result — a reader sees
+    `skipped` and has to open the payload to learn why. `_phase_problem`
+    names both before the task starts.
+
+    **Nothing more is checked, and that is the point.** An earlier version of
+    this also gated on `expected_output`, and it broke two long-standing tests
+    whose fixtures build minimal tasks. Those tests were not wrong; the
+    requirement was invented. `definition_of_done`, `gates`, `coverage`,
+    `termination`, `rules` and `failure_handling` are prose with no
+    operational spec — "every ask item is a grouped question" is not
+    decidable by an assertion. A validator that returned "fine" for prose it
+    never read would be the same defect as a contract no code reads at all,
+    and one that refused would be inventing semantics on the way past.
+    """
+
+    def _task(self, **phase):
+        base = {"name": "a", "runner": "llm", "prompt_file": "p.md",
+                "output": ".omp/theteam/reports/a.md"}
+        base.update(phase)
+        return {"id": "x", "phases": [base]}
+
+    def test_a_well_formed_llm_phase_passes(self, tmp_path):
+        (tmp_path / "p.md").write_text("do the thing")
+        assert _phase_problem(self._task(), str(tmp_path)) is None
+
+    def test_an_llm_phase_naming_no_output_is_refused_at_the_gate(self, tmp_path):
+        """Same refusal the runner makes, made before the run instead of
+        during it: the task never starts, and the human sees why.
+        """
+        (tmp_path / "p.md").write_text("do the thing")
+        problem = _phase_problem(self._task(output=None), str(tmp_path))
+        assert "no output" in problem
+
+    def test_an_llm_phase_naming_no_prompt_file_is_refused(self, tmp_path):
+        problem = _phase_problem(self._task(prompt_file=None), str(tmp_path))
+        assert "no prompt_file" in problem
+
+    def test_a_minimal_task_with_no_contract_fields_still_runs(self, tmp_path):
+        """The regression that killed the `expected_output` gate.
+
+        A task may declare phases and nothing else. It is not refused for the
+        contract prose it chose not to write — the absence of a spec is not a
+        defect in the task.
+        """
+        (tmp_path / "p.md").write_text("do the thing")
+        task = {"id": "x", "phases": [
+            {"name": "a", "runner": "llm", "prompt_file": "p.md",
+             "output": "out.md"}]}
+        assert _phase_problem(task, str(tmp_path)) is None
+
+    def test_a_script_phase_is_not_held_to_the_llm_preconditions(self, tmp_path):
+        """Only `llm` phases need a prompt and a declared output; a script
+        phase's artifact is whatever it writes. Demanding them here would
+        refuse the two tasks that have always worked.
+        """
+        (tmp_path / "run.py").write_text("print(1)\n")
+        task = {"id": "x", "phases": [{"name": "a", "script": "run.py"}]}
+        assert _phase_problem(task, str(tmp_path)) is None

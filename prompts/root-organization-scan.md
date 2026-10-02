@@ -5,7 +5,9 @@ read, you count, you write a list. You do not edit, move, or delete anything.
 
 ## What to scan
 
-The project root at `~/devcode/team/`, to depth 3.
+The project root — the directory you are running in — to depth 3. A prompt
+that hardcodes a home directory breaks the moment the project is cloned
+anywhere else, and a scan of the wrong tree is worse than no scan.
 
 - depth 1: every file and directory at root
 - depth 2: every subfolder's immediate contents

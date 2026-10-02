@@ -14,8 +14,8 @@ that behaviour exposes.
 |---|---|---|---|
 | `project-integrity` | 0 | 2 scripts | directories, configs (parsed, not just present), scripts, tools, Python version, loop-state existence and parseability |
 | `maintenance` | 3 | script | cache cleaning, log rotation, temp-file cleanup |
-| `ground-truth-audit` | 5 | llm | reports where a documented claim is contradicted by the code |
-| `doc-harmonization` | 6 | llm | consumes the audit, makes the documents true |
+| `doc-truth` | 5 | llm ×2 | audit: reports where a documented claim is contradicted by the code. harmonize: consumes the audit, makes the documents true |
+| `root-organization` | 6 | llm ×4 | devops scan → architect classify → skeptic decide → pragmatist report. `depends_on: [project-integrity]` |
 | `native-feature-loop` | 7 | llm×3 + script | skeptic recon → pragmatist implement → pytest → docs sync |
 
 `order` is the task's own `order:` field, and the gaps are deliberate — an

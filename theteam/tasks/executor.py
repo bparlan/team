@@ -91,6 +91,21 @@ class TaskExecutor:
         # so the executor does not open the schedule file itself.
         self.breaker_states: Dict[str, Dict] = breaker_states or {}
 
+        # `depends_on` gate state: the last measured result per task id, read
+        # from the schedule the caller handed in. §5.1 keeps the schedule in
+        # Layer 2, so the executor never opens the file — it is told.
+        #
+        # Before this, `order` was the only relationship between tasks and
+        # nothing read it: it sorted a listing and gated nothing. A task
+        # that consumed another task's output — `doc-harmonization` reading
+        # `ground-truth-audit` — said so only in prompt prose, so the two
+        # could run in either order, concurrently, or not at all.
+        self.last_results: Dict[str, str] = {
+            task_id: str(state.get("result"))
+            for task_id, state in (breaker_states or {}).items()
+            if isinstance(state, dict) and state.get("result") is not None
+        }
+
     def _breaker(self, task_id: str) -> CircuitBreaker:
         """The breaker for a task, created lazily and held for the process.
 
@@ -145,6 +160,54 @@ class TaskExecutor:
                         breaker._evaluate_state()
             self.breakers[task_id] = breaker
         return self.breakers[task_id]
+
+    def _dependency_refusal(self, task_def: Dict) -> Optional[Dict]:
+        """Why this task must not run yet, or None if it may.
+
+        A task declares `depends_on: [<task id>, ...]`. It runs only when every
+        dependency has a last result of `ok`. Two cases are refusals rather
+        than failures, because neither is anything wrong with this task:
+
+        * **never run** — no result has been measured for the dependency, so
+          there is no evidence it succeeded. Running anyway is how a
+          consumer reads a stale or absent input and produces a confident
+          answer from nothing.
+        * **not ok** — the dependency ran and did not succeed. Its output is
+          absent or untrustworthy, which is the same problem with a receipt.
+
+        A *skipped* dependency counts as not-ok: it did not do its work, so
+        whatever it would have produced is not on disk. A dependency that ran
+        and reported findings is `ok` — it did its job, and whether the
+        project has problems is not this gate's question.
+
+        Neither refusal counts against this task's breaker. It has not been
+        attempted, and a task that is merely waiting for a prerequisite must
+        not walk to a breaker trip by being asked to run too early.
+        """
+        depends_on = task_def.get("depends_on") or []
+        if not depends_on:
+            return None
+        unmet = []
+        for dependency in depends_on:
+            result = self.last_results.get(dependency)
+            if result is None:
+                unmet.append(f"{dependency} (never run)")
+            elif result != "ok":
+                unmet.append(f"{dependency} (last result: {result})")
+        if not unmet:
+            return None
+        unmet_detail = "; ".join(unmet)
+        return {
+            "task_id": task_def["id"],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "phases": [],
+            "overall_success": False,
+            "skipped": True,
+            "skip_reason": "dependency_unmet",
+            "unmet_dependencies": unmet,
+            "hint": (f"unmet: {unmet_detail}. Run the dependencies first: "
+                     f"theteam run --only <dependency>"),
+        }
 
     def execute_phase(self, phase: Dict, task: Optional[Dict] = None,
                       on_output=None) -> Dict:
@@ -372,6 +435,28 @@ class TaskExecutor:
         # orphan the request the session is about to read.
         if run_id:
             task_def = {**task_def, "_run_id": run_id}
+
+        # The dependency gate runs before anything else, including the audit
+        # event: a task that is waiting on a prerequisite has not been
+        # attempted, and recording a `task_start` for it would put a start on
+        # record with no matching finish — which is the same dangling-start
+        # shape the audit already has 64 of. `record_task_event` here would
+        # make it 65.
+        blocked = self._dependency_refusal(task_def)
+        if blocked:
+            record_task_event(str(self.project_root), "log_state_change",
+                              f"runnable:{task_id}", "dependency_unmet",
+                              f"waiting on {'; '.join(blocked['unmet_dependencies'])}")
+            return {**blocked,
+                    # The CLI reads `breaker` and `breaker_consecutive_failures`
+                    # off every execute_task result, skipped or not. A refusal
+                    # that omitted them raised `KeyError` in the caller's skip
+                    # branch — the gate would have turned a wait into a crash.
+                    # These are the real readings, unchanged: waiting on a
+                    # prerequisite is not an attempt, so nothing moves.
+                    "breaker": self._breaker(task_def["id"]).stats.state.value,
+                    "breaker_consecutive_failures":
+                        self._breaker(task_def["id"]).stats.consecutive_failures}
 
         # §1.2: an execution is in the chain before it runs, so a run that
         # kills the process still leaves the fact that it was attempted.

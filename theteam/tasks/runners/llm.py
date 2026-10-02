@@ -91,6 +91,38 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
     """
     name = phase.get("name", "?")
 
+    # A member named in a phase must be a member the project has. This
+    # runs before the prompt is read because it is a question about the
+    # task's own declaration, not about the phase's inputs: a phase that
+    # names a member nobody owns should be refused before anything is
+    # loaded.
+    #
+    # Without it, `root-organization/scan` named `scout`, which is not on
+    # the roster (`theteam.config` lists architect, pragmatist, skeptic,
+    # designer, devops), and the runner accepted it silently: the spawn
+    # carried a name nobody owns, the request was staged, and the task sat
+    # in `awaiting_member` forever because no member could answer it.
+    #
+    # The check fires only when the project declares a roster. A project
+    # with no theteam.config has no membership to validate against, and
+    # refusing there would break every test project that binds a stub
+    # provider without writing one — the config's absence is a separate
+    # concern, and it is the config's own loader that names it.
+    member_id = phase.get("member")
+    if member_id:
+        from theteam.core.member import load_config
+
+        config, _ = load_config(project_root)
+        if config is not None:
+            roster = {m["id"] for m in config.get("team", []) if m.get("id")}
+            if member_id not in roster:
+                return {
+                    "success": False,
+                    "error": (f"phase '{name}': member '{member_id}' is not on "
+                              f"the roster declared by theteam.config (members: "
+                              f"{', '.join(sorted(roster)) or 'none'})"),
+                }
+
     # A missing `prompt_file` is a named failure, not a traceback: the
     # executor reads `phase_result["success"]` and has no except clause for
     # a raised FileNotFoundError, so raising here would take down `theteam
@@ -99,6 +131,7 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
         prompt = _read_prompt(project_root, phase)
     except (FileNotFoundError, OSError) as error:
         return {"success": False, "error": f"phase '{name}': {error}"}
+
 
     import theteam
 
@@ -122,14 +155,6 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
                      f"and let the session drive the members:\n"
                      f"    theteam run --only {task_id} --run-id <id>"),
         }
-
-    member_id = phase.get("member")
-    if not member_id:
-        return {
-            "success": False,
-            "error": f"phase '{name}': runner is llm but names no member",
-        }
-
     api = getattr(theteam, PROVIDER)
     outcome = api.task(
         i=f"Task phase: {name}",

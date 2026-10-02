@@ -16,7 +16,7 @@ The value here is the *discipline* of three angles, not the illusion of a room.
 
 ## What to decide
 
-Every entry classified `ask` in `reports/root-organization-classify.md`. Read
+Every entry classified `ask` in `.omp/theteam/reports/root-organization-classify.md`. Read
 that file first; if it is missing, say so and stop.
 
 ## The three positions

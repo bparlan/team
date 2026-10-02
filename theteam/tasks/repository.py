@@ -55,6 +55,22 @@ def _check_task(data: Any, name: str) -> Dict[str, Any]:
     for field in REQUIRED_FIELDS:
         if not data.get(field):
             raise TaskDefinitionError(f"{name}: missing required field '{field}'")
+    # `depends_on` is a list of task ids, so a bare string is the mistake
+    # worth naming: `depends_on: project-integrity` iterates its characters,
+    # and the task silently waits on `p`, `r`, `o`, `j`, … forever.
+    depends = data.get("depends_on")
+    if depends is not None:
+        if isinstance(depends, str) or not isinstance(depends, list):
+            raise TaskDefinitionError(
+                f"{name}: 'depends_on' must be a list of task ids, "
+                f"got {type(depends).__name__}"
+            )
+        for dep in depends:
+            if not isinstance(dep, str) or not dep.strip():
+                raise TaskDefinitionError(
+                    f"{name}: 'depends_on' entries must be non-empty task ids, "
+                    f"got {dep!r}"
+                )
     # Reject paths that reference the deleted .mp/theteam directory,
     # since that layout was removed and any task pointing there is dead.
     for section in ("outputs", "phases"):
@@ -274,6 +290,12 @@ class TaskRepository:
             "id": task["id"],
             "name": task.get("name", task["id"]),
             "type": task.get("type"),
+            # `depends_on` is shown because a task that waits on another and
+            # says nothing reads as a task with no work to do. The gate
+            # itself lives in `TaskExecutor.execute_task`; this is the
+            # declaration surfacing in the listing so the reader can see
+            # why a task was or was not due.
+            "depends_on": task.get("depends_on", []) or [],
             "priority": _priority(task),
             "order": rank.get(task["id"]),
             "next_run": entry.get("next_run"),

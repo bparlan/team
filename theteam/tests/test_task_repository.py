@@ -667,3 +667,130 @@ def test_delete_of_an_unknown_id_reports_a_message_naming_only_the_id(tmp_path, 
     # exc.args[0] verbatim, so no outer wrapping quotes and no legacy-only.
     assert "legacy-only" not in err
     assert "'Task 'nope' not found'" not in err
+
+
+# ======= depends_on: the pipeline is declared, not implied =======
+
+
+def test_depends_on_must_be_a_list_not_a_bare_string(tmp_path):
+    """
+    `depends_on: project-integrity` iterates its characters, so the task
+    silently waits on `p`, `r`, `o`, `j` forever. That is worth naming at the
+    read, where the mistake is visible, rather than at the run, where it is
+    a task that mysteriously never proceeds.
+    """
+    root = _project(
+        tmp_path,
+        tasks={"consumer": {"depends_on": "producer"}},
+    )
+
+    with pytest.raises(TaskDefinitionError) as excinfo:
+        TaskRepository(str(root))
+
+    assert "must be a list" in str(excinfo.value)
+    assert "str" in str(excinfo.value)
+
+
+def test_a_dependency_that_never_ran_blocks_the_consumer(tmp_path, capsys):
+    """
+    A task with an unmet dependency is skipped, not run and not failed.
+
+    Nothing is wrong with the consumer — it is waiting. So it must not be
+    counted against its breaker, and `theteam run` must say why rather than
+    reporting a task with no work.
+    """
+    root = _project(
+        tmp_path,
+        order=["producer", "consumer"],
+        tasks={
+            "producer": {"name": "P", "phases": []},
+            "consumer": {"name": "C", "depends_on": ["producer"],
+                         "phases": []},
+        },
+        schedule={"scheduled_tasks": {}, "last_run": {}},
+    )
+
+    code, payload = _cli(root, "run", "--only", "consumer", capsys=capsys)
+
+    assert code == 0
+    result = payload["results"][0]
+    assert result["result"] == "skipped"
+    assert result["detail"] == "dependency_unmet"
+
+
+def test_a_dependency_that_last_ran_ok_lets_the_consumer_run(tmp_path, capsys):
+    """
+    The gate must not block forever: once the dependency has succeeded, the
+    consumer proceeds. This is the good path, and it is the one a gate that
+    always returns early would break.
+    """
+    root = _project(
+        tmp_path,
+        order=["producer", "consumer"],
+        tasks={
+            "producer": {"name": "P", "phases": []},
+            "consumer": {"name": "C", "depends_on": ["producer"],
+                         "phases": []},
+        },
+        schedule={
+            "scheduled_tasks": {},
+            "last_run": {"producer": {"result": "ok", "breaker": "closed"}},
+        },
+    )
+
+    code, payload = _cli(root, "run", "--only", "consumer", capsys=capsys)
+
+    assert code == 0
+    result = payload["results"][0]
+    # `detail` is omitted when empty on the success path, so the gate is
+    # checked by its absence rather than by a sentinel value.
+    assert result.get("detail") != "dependency_unmet", result
+
+
+def test_a_skipped_dependency_does_not_count_as_ok(tmp_path, capsys):
+    """
+    A dependency that was skipped did not do its work, so whatever it would
+    have written is not on disk. Reading `skipped` as success is how a
+    consumer ends up building on an input that was never produced.
+    """
+    root = _project(
+        tmp_path,
+        order=["producer", "consumer"],
+        tasks={
+            "producer": {"name": "P", "phases": []},
+            "consumer": {"name": "C", "depends_on": ["producer"],
+                         "phases": []},
+        },
+        schedule={
+            "scheduled_tasks": {},
+            "last_run": {"producer": {"result": "skipped",
+                                      "breaker": "closed"}},
+        },
+    )
+
+    code, payload = _cli(root, "run", "--only", "consumer", capsys=capsys)
+
+    assert code == 0
+    assert payload["results"][0]["detail"] == "dependency_unmet"
+
+
+def test_depends_on_is_visible_in_the_task_listing(tmp_path, capsys):
+    """
+    A task that waits on another and says nothing reads as a task with no
+    work to do. The declaration surfaces in `theteam tasks` so a reader can
+    see why a task was or was not due.
+    """
+    root = _project(
+        tmp_path,
+        order=["producer", "consumer"],
+        tasks={
+            "producer": {"name": "P"},
+            "consumer": {"name": "C", "depends_on": ["producer"]},
+        },
+    )
+
+    code, payload = _cli(root, "tasks", capsys=capsys)
+
+    rows = {t["id"]: t for t in payload["tasks"]}
+    assert rows["consumer"]["depends_on"] == ["producer"]
+    assert rows["producer"]["depends_on"] == []

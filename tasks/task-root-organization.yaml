@@ -11,18 +11,23 @@ description: >-
 
 failure_handling: abort
 expected_output: >-
-  reports/root-organization.md — one section per root entry: classification
-  (keep / move / delete / ask / skip), confidence, destination, reason. Grouped
-  ask section. Plus reports/root-organization-decision.md with the three
-  positions and where they agreed or split.
+  .omp/theteam/reports/root-organization.md — one section per root entry:
+  classification (keep / move / delete / ask / skip), confidence, destination,
+  reason. Grouped ask section. Plus .omp/theteam/reports/root-organization-decision.md
+  with the three positions and where they agreed or split.
 memory_limit_mb: 64
+
+# The tree must be intact before anything classifies it: a scan of a broken
+# checkout reports the breakage as clutter and proposes to move it. Declared
+# rather than assumed, because `order` sorts a listing and gates nothing.
+depends_on: [project-integrity]
 
 phases:
   - name: scan
     runner: llm
-    member: scout
+    member: devops
     prompt_file: prompts/root-organization-scan.md
-    output: reports/root-organization-scan.md
+    output: .omp/theteam/reports/root-organization-scan.md
     memory_limit_mb: 32
     order: 1
 
@@ -30,7 +35,7 @@ phases:
     runner: llm
     member: architect
     prompt_file: prompts/root-organization-classify.md
-    output: reports/root-organization-classify.md
+    output: .omp/theteam/reports/root-organization-classify.md
     memory_limit_mb: 32
     order: 2
 
@@ -38,7 +43,7 @@ phases:
     runner: llm
     member: skeptic
     prompt_file: prompts/root-organization-decide.md
-    output: reports/root-organization-decision.md
+    output: .omp/theteam/reports/root-organization-decision.md
     memory_limit_mb: 32
     order: 3
 
@@ -46,7 +51,7 @@ phases:
     runner: llm
     member: pragmatist
     prompt_file: prompts/root-organization-report.md
-    output: reports/root-organization.md
+    output: .omp/theteam/reports/root-organization.md
     order: 4
 
 coverage:
@@ -97,3 +102,5 @@ rules:
     examples/ and are candidate leftovers
   - self-improvement — record what was uncertain, what was decided, and what
     the next run should check differently
+
+order: 6

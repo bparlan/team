@@ -6,7 +6,7 @@ do not edit, move, or delete anything.
 
 ## What to classify
 
-Every entry in `reports/root-organization-scan.md`. Read the scan first; if it
+Every entry in `.omp/theteam/reports/root-organization-scan.md`. Read the scan first; if it
 is missing, say so and stop.
 
 ## Classification

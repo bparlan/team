@@ -1,0 +1,82 @@
+id: doc-truth
+name: Doc Truth
+type: analysis
+priority: 9
+description: >-
+  Two phases, one task. The architect audits the project's own documents
+  against the code and writes findings; the pragmatist turns the confirmed
+  ones into the smallest set of edits that makes the documentation true.
+  Both phases were separate tasks and had to be: nothing connected them, so
+  the consumer could run before, during, or instead of the audit it consumes,
+  and its only guard was a sentence in a prompt file saying "read it, and if
+  it does not exist, stop". One task makes the ordering the executor's job.
+
+  MEASURED, and the measurement did not go the way the bound was meant to make
+  it go. The unbounded audit prompt ran 34m41s. Bounding the scope — three
+  named documents, an 8-finding cap, an explicit rule that an empty report is
+  sufficient — then ran 1h27m on the same agent. Bounding made the phase
+  SLOWER, not faster.
+
+  The reading this supports: wall time here is dominated by reasoning and
+  verification, not by breadth. Narrowing what may be read left the member
+  reading fewer files and then checking each one harder, and "check each one
+  harder" is the expensive term. So a tighter prompt is NOT the fix, and this
+  manifest does not claim it is. The fix is the mechanical/judgement split:
+  a `script:` phase extracts claims and reports mismatches mechanically, and
+  the llm phase adjudicates only those mismatches. Until that exists, the
+  honest statement of this phase's cost is the two measurements above.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/doc-truth-audit.md — one section per finding, each with
+  the verbatim claim, what the code says, the user-visible difference, and
+  whether it was verified. Plus .omp/theteam/reports/doc-truth-harmonize.md:
+  the document edits that made those verified findings true, each with the
+  text it replaced and why the replacement is enough.
+
+gates: >-
+  scope: the audit prompt names the three documents to read and forbids
+  reading the test suite, `check_invariants.sh`, or the `theteam/` package
+  tree. cap: 8 findings. overflow: a run that stops at the cap ends with
+  `Not reported: N further findings.`, so the reader can tell a bounded
+  result from a finished search. empty_is_success: an empty findings list
+  naming what was read is a complete audit, not a failed one — and then the
+  harmonize phase changes nothing, which is also a success.
+  verified_only: the harmonize phase edits for `Confidence: verified`
+  findings only. Passing a guess into a document is the failure mode this
+  whole system exists to prevent.
+  measurement: RESOLVED, and negatively. A run that hits the cap and still
+  takes longer than the baseline means the bounding did its job and the cost
+  is elsewhere. That is what happened: the bounded run took 1h27m against a
+  34m41s unbounded baseline. The prompt is no longer proposed as the fix, and
+  a future run that is slow again is not evidence the cap should be raised —
+  the cap stays at 8.
+
+rules:
+  - the audit phase reads documents; it never runs the tests or the gates
+  - a claim that can only be settled by running something is reported as
+    could-not-verify, with the command that would settle it
+  - an empty report is a successful run and must not be padded
+  - the harmonize phase decides whether the DOCUMENT is wrong or the CODE is;
+    wrong code is reported for a task, not fixed here
+  - delete a false claim rather than hedging it into vagueness
+  - do not edit a file that no finding names
+
+phases:
+  - name: audit
+    runner: llm
+    member: architect
+    prompt_file: prompts/doc-truth-audit.md
+    output: .omp/theteam/reports/doc-truth-audit.md
+    memory_limit_mb: 64
+    order: 1
+
+  - name: harmonize
+    runner: llm
+    member: pragmatist
+    prompt_file: prompts/doc-truth-harmonize.md
+    output: .omp/theteam/reports/doc-truth-harmonize.md
+    memory_limit_mb: 64
+    order: 2
+
+order: 5

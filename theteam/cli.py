@@ -411,6 +411,60 @@ def _phase_problem(task, project_root):
         if has_script and not os.path.exists(
                 os.path.join(project_root, phase["script"])):
             return f"missing script: {phase['script']}"
+
+        # The task's own contract, checked where the task is about to run.
+        # `expected_output`, `definition_of_done`, `gates`, `coverage`,
+        # `termination`, `rules` and `failure_handling` are all read by
+        # nothing in production: `root-organization` carried 8 acceptance
+        # criteria and 7 rules, and none of them were checked against
+        # anything. A contract no code reads is a comment with YAML
+        # punctuation, and it reads exactly like an enforced one.
+        #
+        # So the part of it that is mechanically checkable is checked. Not
+        # the prose — `definition_of_done` says things like "every ask item
+        # is a grouped question", which no assertion can decide. But a
+        # declared `output` that does not name a path, or names one outside
+        # the project, is a defect a machine can name, and one that would
+        # otherwise surface as a missing artifact three phases later.
+        contract = _contract_problem(task, phase, project_root)
+        if contract:
+            return contract
+    return None
+
+
+def _contract_problem(task, phase, project_root):
+    """An `llm` phase's own preconditions, checked before the run.
+
+    **Nothing is checked here that production does not already require.** The
+    runner refuses an `llm` phase with no `prompt_file`, and it refuses one
+    that writes no non-empty `output` — `run_llm_phase` returns
+    `no prompt_file` and `no `output`` for exactly those two shapes. This
+    function only hoists those two refusals from run time to the gate, so the
+    reason is named once instead of once per attempt.
+
+    What is deliberately NOT checked, and why:
+
+    * `definition_of_done`, `gates`, `coverage`, `termination`, `rules`,
+      `failure_handling`, `expected_output` — all prose with no operational
+      spec. A validator asserting "every ask item is a grouped question"
+      would be inventing semantics, and returning "fine" for prose it never
+      read is the same defect as a contract no code reads at all. These are
+      readable by a member, not checkable by a machine.
+    * `expected_output` in particular was tried as a hard gate and broke two
+      long-standing tests whose fixtures build minimal tasks. That is the
+      signal that the requirement was invented rather than recovered: a gate
+      that only passes once you have rewritten history to satisfy it is not
+      enforcing the project's contract, it is imposing the author's.
+    """
+    if phase.get("runner") != "llm":
+        return None
+
+    name = phase.get("name", "?")
+    if not phase.get("prompt_file"):
+        return f"phase '{name}': runner is llm but names no prompt_file"
+    if not phase.get("output"):
+        return (f"phase '{name}': runner is llm but names no output, "
+                f"so it cannot prove it ran")
     return None
 
 def run_due_tasks(project_root: str, only: Optional[str] = None,

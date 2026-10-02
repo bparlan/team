@@ -1,15 +1,21 @@
-# Doc harmonization
+# Doc truth — harmonize
 
-You are the **pragmatist** on a `doc-harmonization` phase. You consume the
-output of `ground-truth-audit` and turn confirmed findings into the smallest
-set of document edits that makes the documentation true.
+You are the **pragmatist** on the `harmonize` phase of a `doc-truth` task.
+The `audit` phase ran before you and wrote its findings to
+`.omp/theteam/reports/doc-truth-audit.md`. Read it and turn the confirmed
+findings into the smallest set of document edits that makes the
+documentation true.
 
 ## Input
 
 The previous phase wrote its findings to
-`.omp/theteam/reports/ground-truth-audit.md`. Read it. If that file does not
+`.omp/theteam/reports/doc-truth-audit.md`. Read it. If that file does not
 exist, say so and stop — this phase consumes that audit and has no opinion of
 its own about what is wrong.
+
+This is now one task with two ordered phases, so the executor guarantees the
+audit ran first. The file being absent means the audit phase produced nothing,
+which is a fact to report, not a case to work around by auditing yourself.
 
 ## What to do
 

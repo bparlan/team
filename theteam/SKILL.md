@@ -29,25 +29,43 @@ Every invocation of this skill starts here:
 `ground-truth-audit`, `doc-harmonization`, `native-feature-loop`) need a task
 provider bound into `theteam` as `default_api` in order to spawn a member.
 
-**No such provider exists, in any environment.** `default_api` is the
-namespace Gemini-family models use to spell a tool call in generated text
-(`default_api.read(path="x")` inside a ```` ```tool_code ```` block). It is a
-wire format OMP parses — not a Python object, and nothing in the OMP runtime
-injects one into an imported module. Verified two ways:
+**No subprocess binds it.** `default_api` is the namespace Gemini-family
+models use to spell a tool call in generated text (`default_api.read(path="x")`
+inside a ```` ```tool_code ```` block). It is a wire format OMP parses — not a
+Python object — and the OMP runtime does not inject one into an imported
+module. Verified two ways:
 
 ```bash
 python3 -c "import theteam; print(hasattr(theteam,'default_api'))"   # -> False
 theteam discuss "anything"   # -> ProviderUnavailable
 ```
 
+The import check was also run in an OMP eval kernel — the one place a live
+session's Python runs — and `default_api` was absent there too. So "the
+runtime does not inject it" is measured, not inferred.
+
+Scope the claim carefully, because the narrower version is the true one:
+**nothing binds it automatically.** A host that *chooses* to bind a value at
+that name is a different thing, and the refusal's own wording ("or import it
+from an OMP-hosted agent") points at that. No shipped code path does it, and
+no OMP flag is documented to.
+
 So the bare CLI returns a **named refusal** (`no_task_provider`) rather than a
 fabricated result, and that refusal must be reported as-is. Do not search for
-a session flag that enables it — none exists.
+a session flag that enables it — none exists. The refusal now names the
+command that runs the task instead: `theteam run --only <id> --run-id <id>`.
 
 For `runner: llm` **tasks** there is a supported path that needs no provider,
 described in the next section. `theteam discuss` has no such path yet: it
 calls `default_api` directly, so it still refuses. Report that refusal; do not
 retry it or synthesize the notes a discussion would have produced.
+
+**Where the provider *can* exist.** `default_api` is a global in the
+importing interpreter, so a session that `import theteam` in-process can bind
+it and `discuss` works — that is what "or import it from an OMP-hosted agent"
+in the refusal means. A shell (`!`/`bash`) is always a fresh subprocess and can
+never have it, in a live session or a dead one. This is not a workaround to
+find; it is why the task path exists in files rather than in a bound symbol.
 
 `tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 

@@ -384,12 +384,14 @@ class TaskExecutor:
 
         results = []
         refusal: Optional[str] = None
+        skip_hint: Optional[str] = None
         for phase in task_def.get("phases", []):
             phase_result = self.execute_phase(phase, task_def, on_output=on_output)
             phase_result["phase"] = phase["name"]
             results.append(phase_result)
             if phase_result.get("skip_reason"):
                 refusal = phase_result["skip_reason"]
+                skip_hint = phase_result.get("hint")
                 break
             if not phase_result["success"]:
                 break
@@ -409,6 +411,7 @@ class TaskExecutor:
                 "skipped": True,
                 "skip_reason": refusal,
                 "breaker": breaker.stats.state.value,
+                "skip_hint": skip_hint,
                 "breaker_consecutive_failures": breaker.stats.consecutive_failures,
             }
 

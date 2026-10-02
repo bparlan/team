@@ -35,31 +35,46 @@ def task_readiness():
     Two independent gates decide it, and neither is inferred:
 
       * a `script` phase needs Docker (`AgentIsolation.available()`);
-      * an `llm` phase needs a bound OMP provider (`theteam.default_api`).
+      * an `llm` phase needs a session to spawn the member, which the
+        `--run-id` handoff provides.
 
-    A task that cannot run here is reported as a named refusal, which is the
-    same pass condition the command checks use — §3.3. What is NOT done is
-    reporting an unrunnable task as though it had run.
+    The second gate used to read `hasattr(theteam, "default_api")` and report
+    "needs a bound OMP provider", which was true of the code and useless to a
+    reader: no environment binds that symbol, so the column said every `llm`
+    task was permanently unrunnable and a session had no way to learn the
+    command that runs it. The handoff replaced that precondition, so the gate
+    now names what is actually required — a run id, and a session to drive
+    the members — and reports those tasks as runnable.
+
+    A task that genuinely cannot run here is still reported as a named
+    refusal, which is the same pass condition the command checks use — §3.3.
+    What is NOT done is reporting an unrunnable task as though it had run.
+
+    `runnable_here` deliberately means "the bare CLI can execute this without a
+    session", so it keys on the phase kinds and the Docker daemon only. Nothing
+    here is derived from the calling process, because a column that changed
+    with the environment would make this listing a per-process reading rather
+    than a statement about the task.
     """
     from theteam.core.agent_isolation import AgentIsolation
-    import theteam
 
     docker = AgentIsolation.available()
-    omp = hasattr(theteam, "default_api")
     repo = TaskRepository(str(REPO))
 
     rows = []
     for task in repo.all_tasks():
         phases = task.get("phases", [])
         needs_docker = any(p.get("runner") != "llm" for p in phases)
-        needs_omp = any(p.get("runner") == "llm" for p in phases)
+        needs_session = any(p.get("runner") == "llm" for p in phases)
 
         if not phases:
             ready, why = False, "no phases"
         elif needs_docker and not docker:
             ready, why = False, "needs Docker (no daemon answering)"
-        elif needs_omp and not omp:
-            ready, why = False, "needs a bound OMP provider"
+        elif needs_session:
+            # Runnable, with a stated precondition. The bare command refuses
+            # by name; the run-id form does not.
+            ready, why = True, "runnable here (llm phases need --run-id + a session)"
         else:
             ready, why = True, "runnable here"
 
@@ -69,9 +84,20 @@ def task_readiness():
             "kinds": ["llm" if p.get("runner") == "llm" else "script" for p in phases],
             "worst_case_seconds": repo.worst_case_seconds(task),
             "runnable_here": ready,
+            "needs_session_spawn": needs_session,
             "reason": why,
         })
-    return rows, docker, omp
+    return rows, docker, needs_session_rows(rows)
+
+
+def needs_session_rows(rows):
+    """True when at least one task needs a session to spawn its members.
+
+    Replaces the `omp_provider` environment figure, which measured
+    `hasattr(theteam, "default_api")` — always False, in every environment,
+    so it was a constant printed as though it were a measurement.
+    """
+    return any(r["needs_session_spawn"] for r in rows)
 
 
 def run(root, *args, expect_json=False):
@@ -170,12 +196,13 @@ def main():
 
         failed = [r for r in results if not r["ok"]]
 
-        rows, docker, omp = task_readiness()
+        rows, docker, session_spawn = task_readiness()
         if args.json:
             print(json.dumps({
                 "passed": len(results) - len(failed),
                 "failed": len(failed),
-                "environment": {"docker": docker, "omp_provider": omp},
+                "environment": {"docker": docker,
+                                "session_spawn_required": session_spawn},
                 "task_readiness": rows,
                 "results": results,
             }, indent=2))
@@ -183,7 +210,8 @@ def main():
             print(f"\n{len(results) - len(failed)}/{len(results)} passed")
             if failed:
                 print("failed: " + ", ".join(r["check"] for r in failed))
-            print(f"\nenvironment: docker={docker} omp_provider={omp}")
+            print(f"\nenvironment: docker={docker} "
+                  f"session_spawn_required={session_spawn}")
             print(f"{'task':<24} {'phases':<7} {'kinds':<26} {'worst':<7} readiness")
             for row in rows:
                 kinds = ",".join(k[:3] for k in row["kinds"])

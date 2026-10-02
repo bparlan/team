@@ -224,3 +224,153 @@ class TestEveryShippedTask:
         assert kinds == ["llm", "llm", "script", "llm"]
         test_phase = next(p for p in task["phases"] if p["name"] == "test")
         assert (REPO_ROOT / test_phase["script"]).exists()
+
+
+class TestRefusalNamesTheWayOut:
+    """A refusal that names a condition the reader cannot change is a dead end.
+
+    The bare-CLI refusal used to say "run this inside an OMP session, where a
+    task provider is bound" — advice that cannot be followed from inside an OMP
+    session, because no environment binds that symbol. A reader who took it at
+    face value went looking for a flag that does not exist. The refusal now
+    names the command that runs the task, which is `theteam run --only <id>
+    --run-id <id>`.
+    """
+
+    def test_refusal_carries_a_hint_naming_the_run_id_form(self, tmp_path):
+        task = {"id": "x", "phases": [{"name": "audit", "runner": "llm",
+                                       "member": "architect",
+                                       "prompt_file": "p.md",
+                                       "output": "out.md"}]}
+        (tmp_path / "p.md").write_text("do the thing")
+        result = run_llm_phase(task, task["phases"][0], str(tmp_path))
+        assert result["skip_reason"] == "no_task_provider"
+        assert "--run-id" in result["hint"], result
+        assert "theteam run --only x" in result["hint"], result
+
+    def test_hint_does_not_promise_a_session_flag(self, tmp_path):
+        # The old text is exactly the failure this replaces. Asserting its
+        # absence is the point: it must never come back.
+        task = {"id": "x", "phases": [{"name": "audit", "runner": "llm",
+                                       "member": "architect",
+                                       "prompt_file": "p.md",
+                                       "output": "out.md"}]}
+        (tmp_path / "p.md").write_text("do the thing")
+        result = run_llm_phase(task, task["phases"][0], str(tmp_path))
+        assert "task provider is bound" not in result["hint"], result
+
+    def test_readiness_is_derived_from_phase_kinds_not_the_process(self):
+        """`smoke_cli` used to gate on `hasattr(theteam, "default_api")`.
+
+        That symbol is bound in no environment, so the column read "refused:
+        needs a bound OMP provider" for four of six tasks and told the reader
+        nothing about `--run-id`. The replacement must key on phase kinds
+        alone, so a listing cannot change with the calling interpreter.
+
+        The assertion is on `runnable_here` being TRUE for an llm task, not on
+        the old wording being absent. An earlier version of this test asserted
+        the string was gone, and mutation proved it blind: restoring the stale
+        gate replaced the wording wholesale and the test still passed. A test
+        that checks a message cannot see a behaviour change that also changes
+        the message.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "smoke_cli", REPO_ROOT / "scripts" / "smoke_cli.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        rows, _docker, session_spawn = module.task_readiness()
+        assert rows, "no tasks read"
+        for row in rows:
+            llm_phases = row["kinds"].count("llm")
+            assert row["needs_session_spawn"] == (llm_phases > 0), row
+            if llm_phases and row["runnable_here"]:
+                # Docker is present on CI and on this box; when it is absent
+                # the row is legitimately refused for the Docker reason, which
+                # is a different refusal and not the one under test.
+                assert row["reason"] == "needs Docker (no daemon answering)" \
+                    or "--run-id" in row["reason"], row
+            if llm_phases:
+                assert "--run-id" in row["reason"], row
+        assert session_spawn is True, "the shipped tasks all have llm phases"
+
+
+class TestProviderContract:
+    """A bound provider is not automatically a well-behaved one.
+
+    `run_llm_phase` reads a fixed envelope: `api.task(...)` returns a dict with
+    a `tasks` list of `{"name", "handle"}` entries. A provider that answers
+    something else used to raise `AttributeError` straight out of the phase
+    loop — a crash where §3.3 requires a named refusal, and the worse trade
+    because a crash takes `theteam run` down with a traceback rather than
+    reporting the task as unrunnable.
+
+    These shapes are the real ones, not invented: `{"text", "details"}` is
+    what OMP's `tool.task` returns in the eval kernel, and a bare string is
+    what a thin adapter over it plausibly returns.
+    """
+
+    @staticmethod
+    def _task():
+        return {"id": "x", "phases": [{"name": "audit", "runner": "llm",
+                                       "member": "architect",
+                                       "prompt_file": "p.md",
+                                       "output": "out.md"}]}
+
+    @pytest.fixture
+    def bound(self, tmp_path, monkeypatch):
+        """A project with a prompt, and a provider bound as the runner reads it."""
+        import theteam
+        (tmp_path / "p.md").write_text("do the thing")
+        monkeypatch.setattr(theteam, "default_api", object(), raising=False)
+        return tmp_path
+
+    @pytest.mark.parametrize("outcome,shown", [
+        ({"text": "Spawned", "details": {}}, "no 'tasks' list"),
+        ("plain text", "not a result envelope"),
+        (None, "not a result envelope"),
+        ({"tasks": ["a string, not a dict"]}, "in 'tasks', not a dict"),
+        ({"tasks": {"not": "a list"}}, "no 'tasks' list"),
+    ])
+    def test_malformed_provider_response_is_a_named_refusal(self, bound, monkeypatch,
+                                                            outcome, shown):
+        """The contract check, across every shape measured to be plausible."""
+        import theteam
+        task = self._task()
+        monkeypatch.setattr(theteam, "default_api",
+                            type("P", (), {"task": staticmethod(lambda **kw: outcome)})(),
+                            raising=False)
+        result = run_llm_phase(task, task["phases"][0], str(bound))
+        assert result["success"] is False
+        assert result["skip_reason"] == "provider_contract_violated", result
+        assert shown in result["error"], result
+        # A refusal, not a failure: counting it would walk the task toward a
+        # breaker trip that nothing can clear, which is the M0 defect.
+        assert "error" in result and result["hint"], result
+
+    def test_a_well_formed_envelope_reaches_output(self, bound, monkeypatch):
+        """The guard must not swallow the good path.
+
+        Without this, a contract check that always returned early would pass
+        every test above and break every real phase.
+        """
+        import theteam
+        task = self._task()
+        written = {}
+
+        class Provider:
+            @staticmethod
+            def task(**kw):
+                return {"tasks": [{"name": "audit_architect", "handle": "h1"}]}
+
+            @staticmethod
+            def output(handle):
+                return "the member's report"
+
+        monkeypatch.setattr(theteam, "default_api", Provider(), raising=False)
+        result = run_llm_phase(task, task["phases"][0], str(bound))
+        assert result["success"] is True, result
+        target = bound / "out.md"
+        assert target.read_text() == "the member's report"
+        assert written == {}

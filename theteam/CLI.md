@@ -93,25 +93,31 @@ python3 -m theteam.cli --json run --only doc-harmonization
 python3 -m theteam.cli --json run --only native-feature-loop
 ```
 
-**`smoke_cli.py` reports which tasks can actually run on your machine.** It reads the two gates
-directly — `AgentIsolation.available()` for Docker, `hasattr(theteam, "default_api")` for the OMP
-provider — and prints a readiness line per task. An unrunnable task is a *named refusal*
-(`refused: needs Docker (no daemon answering)` / `needs a bound OMP provider`), never reported as
-though it ran:
+**`smoke_cli.py` reports which tasks can actually run on your machine.** It reads the Docker
+gate directly — `AgentIsolation.available()` — and derives the spawn requirement from each task's
+own phase kinds, then prints a readiness line per task. An unrunnable task is a *named refusal*
+(`refused: needs Docker (no daemon answering)`), never reported as though it ran.
+
+It used to read `hasattr(theteam, "default_api")` and report every `llm` task as `refused:
+needs a bound OMP provider`. That was true of the code and useless to a reader: no environment
+binds that symbol, so the column said four of six tasks were permanently unrunnable and gave no
+way to learn the command that runs them. The `--run-id` handoff removed the precondition, so the
+gate now names what is actually required and those tasks report runnable.
 
 ```
-environment: docker=True omp_provider=False
+environment: docker=True session_spawn_required=True
 task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
-ground-truth-audit       1       llm                        300     refused: needs a bound OMP provider
-doc-harmonization        1       llm                        300     refused: needs a bound OMP provider
-native-feature-loop      4       llm,llm,scr,llm            1800    refused: needs a bound OMP provider
+ground-truth-audit       1       llm                        300     runnable: runnable here (llm phases need --run-id + a session)
+doc-harmonization        1       llm                        300     runnable: runnable here (llm phases need --run-id + a session)
+native-feature-loop      4       llm,llm,scr,llm            1800    runnable: runnable here (llm phases need --run-id + a session)
+root-organization        4       llm,llm,llm,llm            1200    runnable: runnable here (llm phases need --run-id + a session)
 ```
 
 Read this first. It tells you what the rest of the table can and cannot demonstrate on your box.
 
-Measured on this machine, Docker 28.1.1:
+Measured on this machine, Docker 28.1.1, **bare** `theteam run` with no run id:
 
 | task | phases | kind | worst case | result |
 |---|---|---|---|---|
@@ -120,11 +126,28 @@ Measured on this machine, Docker 28.1.1:
 | `ground-truth-audit` | 1 | llm | 300s | `skipped: no_task_provider` |
 | `doc-harmonization` | 1 | llm | 300s | `skipped: no_task_provider` |
 | `native-feature-loop` | 4 | llm ×3 + script | 1800s | `skipped: no_task_provider` |
+| `root-organization` | 4 | llm ×4 | 1200s | `skipped: no_task_provider` |
 
-**A skip is not a failure.** Outside an OMP session an `llm` task reports
-`skipped` with `detail: no_task_provider`, and the breaker neither advances nor
-resets. That is the M0 rule applied to tasks: no provider is a named absence, not
-a synthesized result. Inside an OMP session the same command runs the member.
+**A skip is not a failure.** An `llm` task run without a run id reports `skipped` with `detail:
+no_task_provider`, and the breaker neither advances nor resets. That is the M0 rule applied to
+tasks: no provider is a named absence, not a synthesized result.
+
+**The skip now says what to run instead.** A bare refusal names a condition the reader cannot
+change, which reads as a dead end — and the message that used to accompany it ("run this inside an
+OMP session, where a task provider is bound") was advice that could not be followed from inside
+an OMP session, sending the reader hunting for a flag that does not exist. The refusal now carries
+the command that runs the task:
+
+```
+$ theteam run --only root-organization
+root-organization: skipped (0.01s) (no_task_provider)
+  hint: root-organization — this task is unspawned, not blocked. Re-run with a run id and let the session drive the members:
+    theteam run --only root-organization --run-id <id>
+0 ran, 1 skipped, 0 failed in 0.01s
+```
+
+With a run id the same task stages a request and pauses instead of refusing; see `SKILL.md` for
+the spawn/stage/re-enter loop and `tasks/handoff.py` for what the collector refuses.
 
 **Check `context` in every payload.** Each run reports
 `context: {written: true, context_bytes: N}` — the per-run context file (§5.6). A

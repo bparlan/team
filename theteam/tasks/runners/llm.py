@@ -103,6 +103,7 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
     import theteam
 
     if not hasattr(theteam, PROVIDER):
+        task_id = task.get("id", "?")
         return {
             "success": False,
             # `skip_reason`, not just `error`: the task did not fail, it never
@@ -110,8 +111,16 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
             # attempt, so a machine with no OMP session does not walk three
             # tasks into a breaker trip that can never be cleared.
             "skip_reason": "no_task_provider",
-            "error": (f"{NO_PROVIDER} (phase '{name}'). Run this inside an OMP "
-                      f"session, where a task provider is bound."),
+            "error": (f"{NO_PROVIDER} (phase '{name}')."),
+            # The old text said "run this inside an OMP session, where a task
+            # provider is bound" — advice that cannot be followed. A session
+            # reading it while already inside an OMP session is told to find a
+            # flag that does not exist, which `SKILL.md` explicitly warns
+            # against. The spawn is still the session's job; the only thing
+            # that changed is that the message now says which command does it.
+            "hint": (f"this task is unspawned, not blocked. Re-run with a run id "
+                     f"and let the session drive the members:\n"
+                     f"    theteam run --only {task_id} --run-id <id>"),
         }
 
     member_id = phase.get("member")
@@ -132,7 +141,54 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
             "isolated": True,
         }],
     )
-    handles = {r.get("name"): r.get("handle") for r in outcome.get("tasks", [])}
+
+    # A bound provider is not automatically a well-behaved one. `tool.task`
+    # in an OMP eval kernel returns `{"text", "details"}` — no `tasks` key at
+    # all — and a provider that returned a bare string raised
+    # `AttributeError: 'str' object has no attribute 'get'` out of the phase
+    # loop, which is a crash where §3.3 requires a named refusal. Measured,
+    # not assumed: all three shapes are in the test that guards this.
+    #
+    # It is a refusal, not a failure, for the reason `no_task_provider` is
+    # one: a provider that cannot answer the contract it was bound to is
+    # structurally incapable of running this task, so counting it would walk
+    # the task toward a breaker trip that nothing can clear.
+    if not isinstance(outcome, dict):
+        return {
+            "success": False,
+            "skip_reason": "provider_contract_violated",
+            "error": (f"phase '{name}': provider returned "
+                      f"{type(outcome).__name__}, not a result envelope"),
+            "hint": ("the bound provider did not answer the contract "
+                     f"`run_llm_phase` reads. Expected a dict with a 'tasks' "
+                     f"list of {{'name', 'handle'}} entries."),
+        }
+    if not isinstance(outcome.get("tasks"), list):
+        return {
+            "success": False,
+            "skip_reason": "provider_contract_violated",
+            "error": (f"phase '{name}': provider returned no 'tasks' list "
+                      f"(keys: {sorted(outcome)})"),
+            "hint": ("the bound provider did not answer the contract "
+                     f"`run_llm_phase` reads. Expected a dict with a 'tasks' "
+                     f"list of {{'name', 'handle'}} entries."),
+        }
+    # Each entry is read defensively for the same reason: a list of strings is
+    # a plausible provider response and `r.get` on a str is the crash above
+    # one level down.
+    handles = {}
+    for entry in outcome["tasks"]:
+        if isinstance(entry, dict):
+            handles[entry.get("name")] = entry.get("handle")
+        else:
+            return {
+                "success": False,
+                "skip_reason": "provider_contract_violated",
+                "error": (f"phase '{name}': provider returned a "
+                          f"{type(entry).__name__} in 'tasks', not a dict"),
+                "hint": ("expected each entry to be "
+                         f"{{'name': ..., 'handle': ...}}"),
+            }
     handle = handles.get(f"{name}_{member_id}")
     if not handle:
         return {

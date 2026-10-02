@@ -7,12 +7,21 @@ description: >-
   prompt, and reports places where a documented claim is contradicted by the
   code or cannot be checked. Writes findings; changes nothing.
 
-  The scope is bounded deliberately. An earlier version asked the member to
-  find "every place" a claim was contradicted across the whole repository,
-  with no file list and no cap, and permitted it to read the test suite and
-  `check_invariants.sh`. Measured: 34m41s on the scout agent, returning
-  findings no narrower than a bounded pass produces. Executable claims are
-  excluded because the way to check one is to run it, not to read it.
+  MEASURED, and the measurement did not go the way the bound was meant to
+  make it go. The unbounded prompt ran 34m41s. Bounding the scope — three
+  named documents, an 8-finding cap, an explicit rule that an empty report is
+  sufficient — then ran 1h27m on the same agent. Bounding the search made the
+  phase SLOWER, not faster.
+
+  The reading this supports: wall time here is dominated by reasoning and
+  verification, not by breadth. Narrowing what may be read left the member
+  reading fewer files and then checking each one harder, and "check each one
+  harder" is the expensive term. So a tighter prompt is NOT the fix, and this
+  manifest does not claim it is. The fix is the mechanical/judgement split:
+  a `script:` phase extracts claims and reports mismatches mechanically, and
+  the llm phase adjudicates only those mismatches. Until that exists, the
+  honest statement of this phase's cost is the two measurements above.
+
 
 failure_handling: retry
 expected_output: >-
@@ -27,11 +36,12 @@ gates: >-
   `Not reported: N further findings.`, so the reader can tell a bounded
   result from a finished search. empty_is_success: an empty findings list
   naming what was read is a complete audit, not a failed one.
-  measurement: wall time alone does not prove the bound worked. A run that
-  hits the cap and reports overflow in about the baseline time means the
-  bounding did what it was for; a run that stops at the cap AND still takes
-  25 minutes means the cost is reasoning, not search breadth, and the fix is
-  the mechanical/judgement split, not a tighter prompt.
+  measurement: RESOLVED, and negatively. A run that hits the cap and still
+  takes longer than the baseline means the bounding did its job and the cost
+  is elsewhere. That is what happened: the bounded run took 1h27m against a
+  34m41s unbounded baseline. The prompt is no longer proposed as the fix, and
+  a future run that is slow again is not evidence the cap should be raised —
+  the cap stays at 8.
 
 rules:
   - this phase reads documents; it never runs the tests or the invariant gates

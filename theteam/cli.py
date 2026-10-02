@@ -512,8 +512,16 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
             reason = outcome["skip_reason"]
             repo.record_skip(task["id"], reason, breaker=breaker,
                              consecutive_failures=consecutive)
-            results.append({"id": task["id"], "result": "skipped", "detail": reason,
-                            "elapsed": round(time.monotonic() - phase_started, 2)})
+            entry = {"id": task["id"], "result": "skipped", "detail": reason,
+                     "elapsed": round(time.monotonic() - phase_started, 2)}
+            # The hint names the command that would unblock this run. It is
+            # carried, not printed here: `cmd_run` owns the line layout, and
+            # two renderers for one payload is how `details` and `detail` came
+            # to disagree.
+            hint = outcome.get("skip_hint")
+            if hint:
+                entry["hint"] = hint
+            results.append(entry)
             continue
         ok = outcome["overall_success"]
         # A check that ran and reported findings is a success with something to
@@ -634,6 +642,14 @@ def cmd_run(args: argparse.Namespace) -> int:
              + (" (findings)" if r.get("findings") else "")
              + (f" ({r['detail']})" if r.get("detail") else "")
              for r in payload["results"]]
+    # A skip that names the command that would unblock it is actionable; one
+    # that only names itself is a dead end. Printed after the tally, indented,
+    # so it is read as guidance about the run above rather than as another
+    # result — and only in the human rendering, because a machine reader gets
+    # it in the payload where it already was.
+    for r in payload["results"]:
+        if r.get("hint"):
+            lines.append(f"  hint: {r['id']} — {r['hint']}")
     # Findings are named rather than folded into either total. "0 failed" on a
     # sweep where a check reported a problem reads as a clean project, and the
     # point of the taxonomy is that those are two different facts — a check

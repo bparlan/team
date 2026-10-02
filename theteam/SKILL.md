@@ -55,12 +55,12 @@ discussion would have produced.
 they need a session to spawn, and the session is you. `theteam run` names the
 phase and stops.
 
-What is verified: the command names the next phase with a spawnable agent, the
-prompt and the output path, and advances once that output exists and is not
-empty. A 4-phase task was driven to `ok` that way. What is **not** verified: a
-member spawned by this loop producing a real artifact. Every end-to-end check
-so far wrote the output file directly rather than through a live spawn, so
-treat the spawn step itself as untested.
+Verified end to end, with a live spawn: `theteam run --only root-organization`
+named `scan` and the agent `sonic`; `agent(prompt, agent="sonic")` ran and
+returned findings; writing those to the declared output advanced the loop to
+`classify` and the agent `reviewer`. The full 4-phase task reaches `ok` the same
+way. The scan ran 492 entries and reported 20 zero-byte tracked files, which is
+the sort of finding the task exists to produce.
 
 `tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 

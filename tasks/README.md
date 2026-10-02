@@ -90,10 +90,12 @@ scheduled: naming it *is* the request.
 | **Routine** | `project-integrity`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
 | **On-call** | `doc-truth`, `root-organization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
 
-The three on-call tasks are `runner: llm`. Outside an OMP session they report
-`skipped (no_task_provider)` — a **skip, not a failure**, so they never count
-against the breaker and cannot trip it. Previously each refusal counted, and
-all three were one bad run from a permanent trip they could never clear.
+The three on-call tasks are `runner: llm`. `theteam run` does not spawn: it
+names the next phase and the agent type to spawn, and reports `awaiting` until
+the declared output file exists and is non-empty. That is an **awaiting state,
+not a skip or a failure** — nothing is counted against the breaker, so an
+unfinished task cannot walk to a permanent trip. Previously each refusal
+counted, and all three were one bad run from a trip they could never clear.
 
 ### Watch it run
 
@@ -164,8 +166,9 @@ Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 | `project-integrity` | **ok** | both phases reported, `rc=0` |
 | `system-awareness` | **ok** — score **0.5545**, grade **D**; five reports + `.loop-state.json` written | artifacts on disk with fresh mtimes; its own `self-check` reports one output missing (below) |
 | `maintenance` | **ok** | single phase, `rc=0` |
-| `doc-truth` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
-| `native-feature-loop` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
+| `doc-truth` | **awaiting** — names the `audit` phase | spawn request printed, breaker not advanced |
+| `native-feature-loop` | **awaiting** — names `recon` | spawn request printed, breaker not advanced |
+| `root-organization` | **awaiting** → **ok** after 4 phases | each phase advanced on its declared output; `ok` in 0.01s |
 
 Run counts and success rates are deliberately absent. They are not stable: every
 rerun changes them, and a rate that has not been refreshed reads as current

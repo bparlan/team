@@ -164,11 +164,10 @@ has not been attempted. `order` is unaffected — it still only sorts a listing.
 
 ```
 $ theteam run --only root-organization --json
-{"ran": 0, "skipped": 1, "results": [{"id": "root-organization",
+{"ran": 0, "skipped": 1, "awaiting": 0, "results": [{"id": "root-organization",
   "result": "skipped", "detail": "dependency_unmet",
-  "hint": "unmet: project-integrity (last result: failed). ..."}]}
+  "hint": "unmet: project-integrity (last result: failed). Run the dependencies first: theteam run --only <dependency>"}]}
 ```
-
 
 **Check `context` in every payload.** Each run reports
 `context: {written: true, context_bytes: N}` — the per-run context file (§5.6). A

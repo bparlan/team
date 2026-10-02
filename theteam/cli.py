@@ -591,7 +591,11 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
             # carried, not printed here: `cmd_run` owns the line layout, and
             # two renderers for one payload is how `details` and `detail` came
             # to disagree.
-            hint = outcome.get("skip_hint")
+            # Both key spellings are read. The dependency gate emits `hint`
+            # and the breaker-open refusal emits `skip_hint`, and reading only
+            # one silently dropped the other's guidance — a skip whose whole
+            # point is to name what would unblock it, saying nothing instead.
+            hint = outcome.get("skip_hint") or outcome.get("hint")
             if hint:
                 entry["hint"] = hint
             results.append(entry)

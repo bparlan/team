@@ -147,9 +147,9 @@ the gate fails and the break is invisible.
 These are the user-visible outcome. If they do not work, the phase is not done.
 
 ```
-theteam run --only ground-truth-audit
-theteam run --only doc-harmonization
+theteam run --only doc-truth
 theteam run --only native-feature-loop --topic "..."
+theteam run --only root-organization
 ```
 
 Plus the new surface:

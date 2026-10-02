@@ -26,8 +26,8 @@ Every invocation of this skill starts here:
 ## The `default_api` gate — why the CLI cannot spawn
 
 `discuss` and every task whose phases are `runner: llm` (`root-organization`,
-`ground-truth-audit`, `doc-harmonization`, `native-feature-loop`) need a task
-provider bound into `theteam` as `default_api` in order to spawn a member.
+`doc-truth`, `native-feature-loop`) need a task provider bound into `theteam`
+as `default_api` in order to spawn a member.
 
 **No subprocess binds it.** `default_api` is the namespace Gemini-family
 models use to spell a tool call in generated text (`default_api.read(path="x")`

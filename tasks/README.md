@@ -88,7 +88,7 @@ scheduled: naming it *is* the request.
 | kind | tasks | how they run |
 |---|---|---|
 | **Routine** | `project-integrity`, `maintenance` | schedule them; `theteam serve` picks them up on a tick |
-| **On-call** | `ground-truth-audit`, `doc-harmonization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
+| **On-call** | `doc-truth`, `root-organization`, `native-feature-loop` | `theteam run --only <id>`, inside an OMP session |
 
 The three on-call tasks are `runner: llm`. Outside an OMP session they report
 `skipped (no_task_provider)` — a **skip, not a failure**, so they never count
@@ -142,7 +142,7 @@ python3 scripts/run_pytest.py
 ```
 
 `llm` phases have no direct equivalent — they need an OMP session, so
-`theteam run --only ground-truth-audit` must be run inside one.
+`theteam run --only doc-truth` must be run inside one.
 
 ## Phase kinds
 
@@ -164,8 +164,7 @@ Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 | `project-integrity` | **ok** | both phases reported, `rc=0` |
 | `system-awareness` | **ok** — score **0.5545**, grade **D**; five reports + `.loop-state.json` written | artifacts on disk with fresh mtimes; its own `self-check` reports one output missing (below) |
 | `maintenance` | **ok** | single phase, `rc=0` |
-| `ground-truth-audit` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
-| `doc-harmonization` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
+| `doc-truth` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
 | `native-feature-loop` | **skipped** — `no_task_provider` | named skip, breaker not advanced |
 
 Run counts and success rates are deliberately absent. They are not stable: every
@@ -346,20 +345,27 @@ orphans, not two.
 |---|---|---|
 | `project-integrity` | **yes** | needs only the project tree |
 | `maintenance` | **yes** | no inputs |
-| `ground-truth-audit` | **no** | needs an OMP session |
-| `doc-harmonization` | **no** | needs an OMP session **and** the audit's output |
+| `doc-truth` | **no** | needs an OMP session; `harmonize` consumes `audit`'s output, but as a *phase* of the same task, so the ordering is the executor's |
+| `root-organization` | **no** | needs an OMP session; phases 2-4 consume files from earlier phases; `depends_on: [project-integrity]` |
 | `native-feature-loop` | **no** | needs an OMP session; phases 2-4 consume files from earlier phases |
 
-Two ordering facts that are **not enforced by the executor**:
+Ordering facts, and **which of them the executor enforces**:
 
-1. `doc-harmonization` reads `ground-truth-audit`'s output. Its prompt says to
-   stop if the file is missing — that is a prompt-level guard, not a code one.
-2. `native-feature-loop` recon → implement → test → docs is sequential, and the
-   handoff is by file. `execute_task` breaks on `phase_result["success"]` and
-   nothing else, so a phase that "succeeds" without writing still lets the next
-   one run.
-
-Both are recorded, not fixed — see *Deliberate gaps* below.
+1. `doc-truth`'s `audit` → `harmonize` is a *phase* boundary inside one task.
+   `execute_task` runs phases in order and breaks on a failed one, so this
+   ordering is code, not prose. It was not always: `ground-truth-audit` and
+   `doc-harmonization` were separate tasks whose only sequence was a sentence
+   in a prompt file, and the two could run in either order or concurrently.
+   Merging them into one task is what moved the guarantee into code.
+2. `root-organization` → anything that needs the tree intact is a
+   *task* boundary, and it is declared `depends_on: [project-integrity]`.
+   `TaskExecutor._dependency_refusal` holds the task until every dependency's
+   last result is `ok`; a never-run dependency and a non-`ok` one both refuse,
+   and the refusal counts against no breaker.
+3. `native-feature-loop` recon → implement → test → docs is sequential within
+   one task, and the handoff is by file. `execute_task` breaks on
+   `phase_result["success"]` and nothing else, so a phase that "succeeds"
+   without writing still lets the next one run. That remains a recorded gap.
 
 ## Optimisation and modularisation
 
@@ -381,16 +387,14 @@ Both are recorded, not fixed — see *Deliberate gaps* below.
 - **Merging `project-integrity`'s two phases.** Their `REQUIRED_DIRS` overlap,
   but only phase 1 JSON-parses the configs — merging would silently drop config
   validation. Kept separate, with the reason in the task file.
-- **Merging `system-awareness` into `ground-truth-audit`.** SA counts files and
-  headings; GTA compares claims against code. Different questions.
+- **Merging `system-awareness` into `doc-truth`.** SA counts files and
+  headings; `doc-truth` compares claims against code. Different questions.
 - **Splitting `system-awareness`.** It runs four analyses in one process, which
   is why it needs 384MB. Splitting is the right move when it outgrows that, not
   before.
 
 **Deliberate gaps, recorded not fixed:**
 
-- No `depends_on:` field. Exactly one handoff exists between `llm` phases; a
-  general mechanism for one case is the abstraction this repo keeps rejecting.
 - Four orphan scripts totalling 1003 lines — `security_policy.py`,
   `task_executor.py`, `loop_state.py`, `loop_reporter.py` — imported by nothing,
   one of them unable to import at all. `loop_state.py` and `loop_reporter.py`

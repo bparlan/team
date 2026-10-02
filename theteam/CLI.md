@@ -87,10 +87,10 @@ claims, and the second one needs Docker. Run these from the repo root, against t
 python3 -m theteam.cli --json run --only project-integrity
 python3 -m theteam.cli --json run --only maintenance
 
-# The three LLM tasks. Outside an OMP session each is *skipped*, not failed.
-python3 -m theteam.cli --json run --only ground-truth-audit
-python3 -m theteam.cli --json run --only doc-harmonization
+# The LLM tasks. Outside an OMP session each is *skipped*, not failed.
+python3 -m theteam.cli --json run --only doc-truth
 python3 -m theteam.cli --json run --only native-feature-loop
+python3 -m theteam.cli --json run --only root-organization
 ```
 
 **`smoke_cli.py` reports which tasks can actually run on your machine.** It reads the Docker
@@ -109,8 +109,7 @@ environment: docker=True session_spawn_required=True
 task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
-ground-truth-audit       1       llm                        300     runnable: runnable here (llm phases need --run-id + a session)
-doc-harmonization        1       llm                        300     runnable: runnable here (llm phases need --run-id + a session)
+doc-truth                2       llm,llm                    600     runnable: runnable here (llm phases need --run-id + a session)
 native-feature-loop      4       llm,llm,scr,llm            1800    runnable: runnable here (llm phases need --run-id + a session)
 root-organization        4       llm,llm,llm,llm            1200    runnable: runnable here (llm phases need --run-id + a session)
 ```
@@ -123,17 +122,16 @@ Measured on this machine, Docker 28.1.1, **bare** `theteam run` with no run id:
 |---|---|---|---|---|
 | `project-integrity` | 2 | script ×2 | 600s | `ok` in 0.97s |
 | `maintenance` | 1 | script | 300s | `ok` in 1.53s |
-| `ground-truth-audit` | 1 | llm | 300s | `skipped: no_task_provider` |
-| `doc-harmonization` | 1 | llm | 300s | `skipped: no_task_provider` |
-| `native-feature-loop` | 4 | llm ×3 + script | 1800s | `skipped: no_task_provider` |
+| `doc-truth` | 2 | llm ×2 | 600s | `skipped: no_task_provider` |
 | `root-organization` | 4 | llm ×4 | 1200s | `skipped: no_task_provider` |
+| `native-feature-loop` | 4 | llm ×3 + script | 1800s | `skipped: no_task_provider` |
 
 **A skip is not a failure.** An `llm` task run without a run id reports `skipped` with `detail:
 no_task_provider`, and the breaker neither advances nor resets. That is the M0 rule applied to
 tasks: no provider is a named absence, not a synthesized result.
 
-**There are two skip reasons for an `llm` phase, and they are not the same
-problem.** `no_task_provider` means no provider is bound — the normal shell case,
+**Three skip reasons for an `llm` phase, and they are not the same problem.**
+`no_task_provider` means no provider is bound — the normal shell case,
 and the one `--run-id` exists to route around. `provider_contract_violated`
 means a provider *is* bound and answered something the runner cannot read. It
 fires when `api.task(...)` returns a non-dict, a dict with no `tasks` list, or
@@ -143,6 +141,23 @@ binding over the session's task tool clears the gate and then fails the shape.
 Both are refusals rather than failures, so neither advances the breaker — a
 provider that cannot answer the contract is structurally incapable of running
 the task, and counting it would walk the task toward a trip nothing can clear.
+
+**A third skip reason, `dependency_unmet`, and it is not about the provider.** A task may declare
+`depends_on: [<task id>, ...]` and runs only when every dependency's last recorded result is `ok`.
+Two cases refuse: the dependency has **never run** (no evidence it succeeded) or it last came back
+anything but `ok` — including `skipped`, because a skipped dependency did not do its work and
+whatever it would have written is not on disk. A dependency that ran and reported *findings* is
+`ok`; whether the project has problems is a different question.
+
+The refusal counts against no breaker and writes no `task_start`: a task waiting on a prerequisite
+has not been attempted. `order` is unaffected — it still only sorts a listing.
+
+```
+$ theteam run --only root-organization --json
+{"ran": 0, "skipped": 1, "results": [{"id": "root-organization",
+  "result": "skipped", "detail": "dependency_unmet",
+  "hint": "unmet: project-integrity (last result: failed). ..."}]}
+```
 
 **The skip now says what to run instead.** A bare refusal names a condition the reader cannot
 change, which reads as a dead end — and the message that used to accompany it ("run this inside an

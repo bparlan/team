@@ -146,10 +146,27 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
         return {"success": False, "error": f"phase '{name}': {error}"}
 
     target = _output_path(project_root, phase)
-    if target:
-        os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
-        with open(target, "w", encoding="utf-8") as handle_out:
-            handle_out.write(_render(produced))
+
+    # Validate before writing: a phase must declare an output to be considered successful
+    if not target:
+        return {
+            "success": False,
+            "error": (f"phase '{name}': runner is llm but names no `output`, "
+                      f"so it cannot prove it ran"),
+        }
+
+    # Write the produced content to the target file
+    os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+    with open(target, "w", encoding="utf-8") as handle_out:
+        handle_out.write(_render(produced))
+
+    # After writing, verify the file is not empty. This closes the fabrication hole
+    # where a session could handwrite a file and have it accepted as success.
+    if os.path.getsize(target) == 0:
+        return {
+            "success": False,
+            "error": f"phase '{name}': declared output {target} is empty",
+        }
 
     return {
         "success": True,

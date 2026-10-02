@@ -132,6 +132,18 @@ Measured on this machine, Docker 28.1.1, **bare** `theteam run` with no run id:
 no_task_provider`, and the breaker neither advances nor resets. That is the M0 rule applied to
 tasks: no provider is a named absence, not a synthesized result.
 
+**There are two skip reasons for an `llm` phase, and they are not the same
+problem.** `no_task_provider` means no provider is bound — the normal shell case,
+and the one `--run-id` exists to route around. `provider_contract_violated`
+means a provider *is* bound and answered something the runner cannot read. It
+fires when `api.task(...)` returns a non-dict, a dict with no `tasks` list, or
+a list whose entries are not `{"name", "handle"}` dicts. That is not
+hypothetical: OMP's own `tool.task` returns `{"text", "details"}`, so a naive
+binding over the session's task tool clears the gate and then fails the shape.
+Both are refusals rather than failures, so neither advances the breaker — a
+provider that cannot answer the contract is structurally incapable of running
+the task, and counting it would walk the task toward a trip nothing can clear.
+
 **The skip now says what to run instead.** A bare refusal names a condition the reader cannot
 change, which reads as a dead end — and the message that used to accompany it ("run this inside an
 OMP session, where a task provider is bound") was advice that could not be followed from inside

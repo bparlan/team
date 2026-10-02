@@ -374,3 +374,24 @@ class TestProviderContract:
         target = bound / "out.md"
         assert target.read_text() == "the member's report"
         assert written == {}
+
+    def test_a_malformed_dict_with_mixed_key_types_is_still_named(self, bound,
+                                                                monkeypatch):
+        """The error path used to crash on the input it was describing.
+
+        `sorted(outcome)` raised `TypeError: '<' not supported between
+        instances of 'int' and 'str'` for a dict with mixed keys — so the
+        branch whose entire job is to name a bad provider response was the one
+        branch that died on a bad provider response. Every other case in this
+        class used homogeneous keys and sailed past it.
+        """
+        import theteam
+        task = self._task()
+        outcome = {"text": "Spawned", 7: "numeric key", "tasks": "not a list"}
+        monkeypatch.setattr(theteam, "default_api",
+                            type("P", (), {"task": staticmethod(lambda **kw: outcome)})(),
+                            raising=False)
+        result = run_llm_phase(task, task["phases"][0], str(bound))
+        assert result["success"] is False
+        assert result["skip_reason"] == "provider_contract_violated", result
+        assert "'7'" in result["error"] and "'text'" in result["error"], result

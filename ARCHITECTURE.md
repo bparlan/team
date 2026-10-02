@@ -672,6 +672,15 @@ Three rules, each enforced rather than documented:
 3. **A test suite stays a `script:` phase.** `native-feature-loop` runs its
    tests through `scripts/run_pytest.py`, not a prompt: a test suite is
    deterministic and must not be judged by a model.
+4. **A bound provider that answers wrongly is a named refusal, not a crash.**
+   `run_llm_phase` reads a fixed envelope — `api.task(...)` returning a dict
+   with a `tasks` list of `{"name", "handle"}` entries. A provider that returns
+   something else is refused with `skip_reason: provider_contract_violated`,
+   and the breaker neither advances nor resets. This is not hypothetical: OMP's
+   own `tool.task` returns `{"text", "details"}` with no `tasks` key, so a naive
+   binding clears the gate and then fails the shape. Three levels are checked —
+   a non-dict return, a missing `tasks` key, and a non-dict entry inside the
+   list — because each was a measured crash before the guard existed.
 
 Task **filenames** keep the `task-` prefix the directory already uses
 (`repository.py:148`). `tasks/ground-truth-audit.yaml` is invisible to the

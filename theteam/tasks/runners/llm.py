@@ -167,8 +167,13 @@ def run_llm_phase(task: Dict[str, Any], phase: Dict[str, Any],
         return {
             "success": False,
             "skip_reason": "provider_contract_violated",
+            # `sorted(outcome)` was the defect: a provider returning a dict
+            # with mixed key types raised `TypeError: '<' not supported
+            # between instances of 'int' and 'str'` from inside the error
+            # path, so the one branch meant to NAME a bad response crashed
+            # instead of naming it. Coerce first, then sort.
             "error": (f"phase '{name}': provider returned no 'tasks' list "
-                      f"(keys: {sorted(outcome)})"),
+                      f"(keys: {sorted(map(str, outcome))})"),
             "hint": ("the bound provider did not answer the contract "
                      f"`run_llm_phase` reads. Expected a dict with a 'tasks' "
                      f"list of {{'name', 'handle'}} entries."),

@@ -18,5 +18,4 @@ phases:
     prompt_file: prompts/ground-truth-audit.md
     output: .omp/theteam/reports/ground-truth-audit.md
     memory_limit_mb: 64
-    timeout_seconds: 900
 order: 5

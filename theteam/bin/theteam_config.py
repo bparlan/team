@@ -16,6 +16,18 @@ try:
 except ImportError:
     yaml = None
 
+# `bin.utilities` is a sibling module, so it is importable only when this
+# file's PARENT directory is on `sys.path`. Python puts the script's own
+# directory (`bin/`) there, not the parent — so running this by absolute path
+# from anywhere but the skill root raised `ModuleNotFoundError: No module
+# named 'bin'`. `cd` to the skill root does not help either, because the
+# script's own directory shadows the parent. Insert the parent explicitly so
+# the script runs the same way regardless of who invoked it, or from where.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+
 from bin.utilities import _fatal
 
 # ======= CONFIGURATION DEFINITION =======

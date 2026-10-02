@@ -168,7 +168,7 @@ Observed 2026-10-01 by running each task with `theteam run --only <id>`.
 | `maintenance` | **ok** | single phase, `rc=0` |
 | `doc-truth` | **awaiting** — names the `audit` phase | spawn request printed, breaker not advanced |
 | `native-feature-loop` | **awaiting** — names `recon` | spawn request printed, breaker not advanced |
-| `root-organization` | **awaiting** → **ok** after 4 phases | each phase advanced on its declared output; `ok` in 0.01s |
+| `root-organization` | **awaiting** → **ok** after 4 phases | phase 1 driven by a live member (`sonic`, 492 entries); phases 2–4 advanced on directly-written artifacts — **not** verified through a spawn |
 
 Run counts and success rates are deliberately absent. They are not stable: every
 rerun changes them, and a rate that has not been refreshed reads as current

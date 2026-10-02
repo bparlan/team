@@ -1,0 +1,262 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "How an llm phase gets its member",
+    "output": "llm-phase-spawn-rendered.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "main-path",
+        "label": "The loop, three steps",
+        "focus": [
+          "cli",
+          "executor",
+          "runner",
+          "session",
+          "member"
+        ],
+        "note": "Python names the phase, the session spawns, the member writes the declared output. Nothing stages and nothing polls."
+      },
+      {
+        "id": "script-path",
+        "label": "Why script phases differ",
+        "focus": [
+          "cli",
+          "executor",
+          "isolation",
+          "script"
+        ],
+        "note": "A script phase runs in a container with a real exit code, so the same CLI can finish it alone."
+      },
+      {
+        "id": "boundary",
+        "label": "What the boundary forbids",
+        "focus": [
+          "runner",
+          "provider"
+        ],
+        "note": "The only capability the CLI cannot reach is spawning, and no adapter bridges it."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "cli",
+      "type": "backend",
+      "label": "theteam run",
+      "sublabel": "a bash subprocess",
+      "pos": [
+        60,
+        330
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "executor",
+      "type": "backend",
+      "label": "TaskExecutor",
+      "sublabel": "phase loop, breaker",
+      "pos": [
+        380,
+        330
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "runner",
+      "type": "backend",
+      "label": "llm runner",
+      "sublabel": "resolves, never spawns",
+      "pos": [
+        700,
+        330
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "session",
+      "type": "external",
+      "label": "OMP session",
+      "sublabel": "holds the task tool",
+      "pos": [
+        1020,
+        330
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "member",
+      "type": "external",
+      "label": "team member",
+      "sublabel": "sonic, reviewer, task",
+      "pos": [
+        1020,
+        570
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "output",
+      "type": "database",
+      "label": "declared output",
+      "sublabel": "the completion signal",
+      "pos": [
+        700,
+        570
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "isolation",
+      "type": "security",
+      "label": "AgentIsolation",
+      "sublabel": "container, exit code",
+      "pos": [
+        380,
+        90
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "script",
+      "type": "database",
+      "label": "script phase",
+      "sublabel": "loop_health_check.py",
+      "pos": [
+        60,
+        90
+      ],
+      "size": [
+        230,
+        80
+      ]
+    },
+    {
+      "id": "provider",
+      "type": "external",
+      "label": "default_api",
+      "sublabel": "NameError in a subprocess",
+      "pos": [
+        700,
+        90
+      ],
+      "size": [
+        230,
+        80
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "cli-executor",
+      "from": "cli",
+      "to": "executor",
+      "label": "due tasks"
+    },
+    {
+      "id": "executor-runner",
+      "from": "executor",
+      "to": "runner",
+      "label": "runner: llm"
+    },
+    {
+      "id": "runner-session",
+      "from": "runner",
+      "to": "session",
+      "label": "awaiting"
+    },
+    {
+      "id": "session-member",
+      "from": "session",
+      "to": "member",
+      "label": "spawns",
+      "labelDy": 48
+    },
+    {
+      "id": "member-output",
+      "from": "member",
+      "to": "output",
+      "label": "writes it",
+      "labelDy": 60
+    },
+    {
+      "id": "output-cli",
+      "from": "output",
+      "to": "cli",
+      "label": "non-empty, so the phase is done"
+    },
+    {
+      "id": "executor-isolation",
+      "from": "executor",
+      "to": "isolation",
+      "label": "script phases"
+    },
+    {
+      "id": "isolation-script",
+      "from": "isolation",
+      "to": "script",
+      "label": "runs"
+    },
+    {
+      "id": "runner-provider",
+      "from": "runner",
+      "to": "provider",
+      "label": "unreachable from a subprocess",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "The only thing Python cannot do",
+      "items": [
+        "Spawning lives in the session; a subprocess has no channel to it.",
+        "The runner resolves the next phase and stops. It never spawns.",
+        "The declared output existing and non-empty is the whole completion signal.",
+        "No request file, no hash sidecar, no run id, no collector."
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Why no adapter was written",
+      "items": [
+        "The host offers agent(prompt, agent=..., handle=True).",
+        "It is a builtin injected into the eval kernel only.",
+        "python3 -c \"print(callable(agent))\" raises NameError.",
+        "Every call site is bash-launched, so the gap is a process boundary."
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "The trade, stated plainly",
+      "items": [
+        "A stale artifact reads as a finished phase.",
+        "That is the simplest rule that can work, and it is the only gate there is.",
+        "To redo a phase, delete its output file.",
+        "A run manifest would remove the ambiguity and is the bookkeeping this design avoids."
+      ]
+    }
+  ]
+}

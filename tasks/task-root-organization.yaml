@@ -6,18 +6,23 @@ description: >-
   The project root at ~/devcode/team/ must stay thin and agentic-friendly: an
   agent working in this repo must be able to find where any file belongs
   without guessing. This task audits the root surface and its subfolders to
-  depth 3, classifies every entry, and reports the items that need a human
-  decision before moving. It does not move or delete anything.
+  depth 3, classifies every entry, relocates the high-confidence ones, and
+  reports the rest as grouped questions. It also runs a parallel theteam
+  discussion so the roster's decision is recorded alongside the human's.
 
-  Success is measured, not asserted: when the task ends, every file remaining
-  at root is either in the keep-list or in the ask-list, and every ask-list
-  item is a grouped question awaiting a human answer.
+  Deletion policy: a tracked file is never destroyed. Git is the recycle bin
+  — `git restore` recovers anything committed, so a tracked deletion costs one
+  command to undo and needs no separate folder. An untracked file has no such
+  safety net and is therefore never deleted by the agent; it goes to the ask
+  list or to `.loop-archive/` (out of root) if the human approves.
 
 failure_handling: abort
 expected_output: >-
   reports/root-organization.md — one section per root entry, its
-  classification (keep / move / ask / skip), its destination if moved, and the
-  reason. A grouped ask section for every item needing a human decision.
+  classification (keep / move / delete / ask / skip), its confidence, its
+  destination if moved, and the reason. A grouped ask section for every item
+  needing a human decision. A theteam discussion record capturing what the
+  roster decided, so the human sees both answers in one place.
 memory_limit_mb: 64
 
 phases:
@@ -37,13 +42,21 @@ phases:
     memory_limit_mb: 32
     order: 2
 
+  - name: decide
+    runner: hub
+    member: theteam
+    prompt_file: prompts/root-organization-decide.md
+    output: reports/root-organization-decision.md
+    memory_limit_mb: 32
+    order: 3
+
   - name: report
     runner: llm
     member: pragmatist
     prompt_file: prompts/root-organization-report.md
     output: reports/root-organization.md
     memory_limit_mb: 32
-    order: 3
+    order: 4
 
 coverage:
   - root depth 1 (files and directories)
@@ -55,26 +68,50 @@ coverage:
   - runtime artifacts identified by content, not by name
 
 definition_of_done:
-  - every root entry classified as keep / move / ask / skip
-  - every moved file relocated and verified present at destination
+  - every root entry classified as keep / move / delete / ask / skip
+  - every high-confidence move executed and verified present at destination
+  - every high-confidence delete executed and verified recoverable via git
   - every ask item is a grouped question, not a decision made by the agent
+  - the theteam discussion record exists and covers every ask item
   - `git status` clean after the task, or only the ask-list items uncommitted
-  - no file deleted without explicit human approval
+  - no untracked file deleted without explicit human approval
+  - the task writes its own learnings back, so the next run is better
 
 termination:
   - stop when every root entry is classified and every ask item is open
   - a second pass over the same root is expected if new entries appear
   - a third pass is a signal to widen scope, not to keep re-scanning
-  - never delete; deletion is a human decision, always surfaced in the ask list
+  - never delete an untracked file; that is always a human decision
+
+confidence_gates:
+  move:
+    high: the destination is unambiguous and the entry has no counterpart
+          already there; relocate without asking
+    ask: the entry is a duplicate, or two destinations are plausible
+  delete:
+    tracked: allowed at high confidence — git is the recycle bin and the
+             deletion is one `git restore` from undo
+    untracked: never — there is no safety net, so it is always an ask item
+  recyclebin:
+    tracked: git. No folder needed; `git restore <path>` recovers it.
+    untracked: `.loop-archive/` if the human approves. Deliberately NOT at
+               root — a recycle bin at root is itself root clutter, which
+               is the problem this task exists to solve.
 
 rules:
   - scout phase: inventory only, no edits, no moves
   - classify phase: categorize only, no edits, no moves
-  - report phase: write the report and the grouped ask, no edits, no moves
-  - the actual moves happen after the human answers the ask list
+  - decide phase: theteam discusses the ask list in parallel; the roster's
+    verdict is recorded, never silently dropped
+  - report phase: write the report and the consolidated ask, no edits, no
+    moves, no deletions
+  - the actual moves and tracked deletions happen after the human answers
   - runtime state (wal.json, *.db, *.jsonl, *_report.json) is untracked, never
     re-tracked after relocation
   - archive/ and theteam/ trees are out of scope unless the human widens it
   - the three duplicate projects (python-project/, bash-project/,
     typescript-project/) are in scope at depth 3 because they duplicate
     examples/ and are candidate leftovers
+  - self-improvement: after the run, record what was uncertain, what was
+    decided, and what the next run should check differently, so the task
+    learns across iterations

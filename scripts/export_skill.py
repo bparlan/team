@@ -237,9 +237,17 @@ def verify_runs() -> bool:
           "validate", str(config)], "theteam_config.py validate"),
         ([sys.executable, str(PRODUCTION / "bin/theteam_config.py"),
           "roster", str(config)], "theteam_config.py roster"),
-        ([sys.executable, str(PRODUCTION / "bin/theteam_report.py"), "--help"],
-         "theteam_report.py --help"),
     )
+
+    # `theteam_report.py` is checked by importability, not by invocation: both
+    # `--help` and a bare `build` exit 1 after printing usage, so neither can
+    # distinguish a working script from a broken one. Compiling it proves the
+    # module parses where it landed, which is the failure this check exists for.
+    checks = checks + ((
+        [sys.executable, "-m", "py_compile",
+         str(PRODUCTION / "bin/theteam_report.py")],
+        "theteam_report.py compiles",
+    ),)
     failures = []
     for command, label in checks:
         result = subprocess.run(command, cwd="/", capture_output=True, text=True)
@@ -279,6 +287,22 @@ def report_git() -> None:
 
 
 def main() -> int:
+    # Why this is NOT registered as a `script:` task.
+    #
+    # A `script:` phase runs inside a container that bind-mounts the project
+    # and nothing else, so `~/.omp/agent/skills/theteam/` does not exist in
+    # there. An override env var was tried and removed: pointed at a path the
+    # container CAN see, it would export six files into the container's own
+    # throwaway filesystem and report "export complete" — a green run that
+    # changed nothing on the host. That is strictly worse than failing.
+    #
+    # So the destination stays a module constant and the script is invoked
+    # directly, from the host, where the production directory actually is:
+    #
+    #     python3 scripts/export_skill.py
+    #
+    # `theteam run --only export-skill` is refused by name, because a task that
+    # cannot do its work should say so rather than appear to.
     if not PRODUCTION.exists():
         raise SystemExit(
             f"[export] FATAL: production skill directory not found: {PRODUCTION}")

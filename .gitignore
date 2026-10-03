@@ -157,7 +157,3 @@ test_events.jsonl
 test.db
 test.wal
 
-# Tracked directories holding zero tracked files — accidental empty commits.
-subskills/
-system/
-ui/

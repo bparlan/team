@@ -55,4 +55,36 @@ State the reason from evidence. "Looks out of place" is not a reason; "the
 same two files exist in `examples/python-project/`, which has no tracked files"
 is.
 
+## The consumer gate
+
+No confidence above `keep` without a located consumer. Run the grep first,
+then cite its result — a rating written before the search is a guess, and two
+such ratings were withdrawn in the run that produced this rule.
+
+For every candidate move or delete, sweep the whole tree — not the subtree —
+for:
+
+- `grep -rln "<name>" . --exclude-dir=.git` across code, tests, and config
+- compose and CI mounts: `grep -n "<name>" docker-compose*.yml .github/workflows/*.yml`
+- path resolution in the package itself: CLI entry points that build a path
+  from `project_root`, and any `REQUIRED_CONFIGS` / constant list naming it
+
+Then classify what you find:
+
+- **a live loader** → `keep`, and cite `file:line`. This is the common case
+  that a name-match misses. In this project `prometheus.yml` looks like a
+  stray root file but `docker-compose.yml:50` mounts it into the container;
+  `theteam.config` looks stray but `theteam/cli.py:100` resolves it and three
+  test modules open it. Both would have been destroyed by a name-match.
+- **a deliberate decision to keep** → `keep`, and cite the comment that says so.
+  `scripts/loop_health_check.py:25-33` documents why
+  `system-awareness-config.json` was retained; that comment outranks any
+  tidiness argument.
+- **only documentation and historical reports reference it** → genuinely
+  movable. `theteam/reports/*.md` and `archive/**` reference paths as prose;
+  they never load anything. Exclude them from the consumer count and say so.
+
+Report the grep output in the Reason line. Zero hits is a result worth
+recording; an unrun grep is not.
+
 Anything you did not read is not classified. If you cannot tell, it is `ask`.

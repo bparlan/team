@@ -144,3 +144,20 @@ theteam/reports/optimization_recommendations-*.md
 # existed; .gitignore only stops new ones. They stay tracked deliberately — they
 # are the analysis history, and a 2026-09-21 baseline is worth having. So
 # `git ls-files`, not this file, is the authority on what is tracked.
+
+# Harness-written runtime state, committed before the ignore rules existed.
+# Untracked with `git rm --cached`; the files stay on disk because
+# theteam/core/{state_manager,wal,event_log,event_bus}.py recreate them.
+wal.json
+events.jsonl
+test_events.jsonl
+
+# Test-harness SQLite: theteam/core/database.py recreates it. Committed empty
+# (no tables) — it was never a fixture, only a leftover.
+test.db
+test.wal
+
+# Tracked directories holding zero tracked files — accidental empty commits.
+subskills/
+system/
+ui/

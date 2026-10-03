@@ -2,10 +2,22 @@
 """
 Check that every task in `tasks/` is one the executor can actually run.
 
-Six tasks audit content -- files, docs, features. None audits the task
-registry, which is the layer that drives all of them. The cost is concrete:
-`scripts/sa_runner.py` declares six outputs and writes two, and nothing
-noticed. That is not a judgement call, so it does not need an LLM to find.
+Seven other tasks audit content -- files, docs, features, citations. None of
+them audits the task registry, which is the layer that drives all of them.
+Nothing checked it: an
+llm phase can name a prompt that does not exist, an agent type no session can
+spawn, or an output its own script never writes, and the task still reports
+itself runnable. Those are not judgement calls, so they do not need an LLM to
+find.
+
+The concrete case that prompted this was wrong in an instructive way. A
+discussion note claimed `scripts/sa_runner.py` "ships a declared output it
+never writes". It declares six and writes all six -- five of them through
+`generic_writer("key", ...)`, which resolves the path from the key rather than
+from `OUTPUT_PATHS["key"]`. A checker that understood only the subscript form
+reported five never-written outputs, all five false. The lesson is in check 4
+and in `test_task_contract.py`, which pins that negative on purpose: a check
+that reports working code as broken gets tuned out and then catches nothing.
 
 Every check here is mechanical. A check that needs interpretation belongs in
 `doc-truth`, which audits prose against code; this audits structure against

@@ -6,11 +6,12 @@ anything — you record what each position implies.
 
 ## Why this phase is one voice
 
-The executor runs **one subagent per phase** (`llm.py:117-136` passes
-`agent: "task"` regardless of `member`). So you are one author writing three
-positions, not three agents debating. Write them as arguments you are making,
-not as a transcript of a discussion that happened. Do not claim consensus you
-did not reach; do not invent quotes or votes.
+The executor runs **one subagent per phase** (`theteam/tasks/runners/llm.py:86`
+sets `DEFAULT_AGENT_TYPE = "task"`, used only when a phase names neither
+`agent_type:` nor `agent:`; `member:` is never consulted). So you are one author
+writing three positions, not three agents debating. Write them as arguments you
+are making, not as a transcript of a discussion that happened. Do not claim
+consensus you did not reach; do not invent quotes or votes.
 
 The value here is the *discipline* of three angles, not the illusion of a room.
 

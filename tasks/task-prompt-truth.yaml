@@ -1,0 +1,40 @@
+id: prompt-truth
+name: Prompt Truth Check
+type: monitoring
+priority: 5
+description: >-
+  Checks that the file:line claims in prompts/*.md still point at what they
+  claim to point at. A prompt is read by a member who cannot see the code it
+  describes, so a stale citation makes the member reason from a fiction, and
+  nothing reports it because prose is not code and no test reads it.
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/prompt-truth.json — prompts_checked, claims_checked,
+  findings, and one entry per drifted claim naming the prompt, the line, the
+  claim text, and the fix. reports/prompt-truth.html is the human page,
+  rendered by the `publish` phase.
+phases:
+  # Mechanical, not editorial. `doc-truth` audits the human-facing documents
+  # and deliberately excludes the prompts (prompts/doc-truth-audit.md:20) --
+  # this is the excluded layer. Whether a cited line still exists is a fact
+  # about two files, so it needs no model: a deterministic answer that costs
+  # nothing is worth more here than a probabilistic one that costs a spawn.
+  #
+  # What it deliberately does NOT do is judge whether the cited line *means*
+  # what the prose says. That needs a reader, and a reader that guesses is
+  # worse than no reader. A claim can pass here and still misdescribe the code.
+  - name: check
+    script: scripts/check_prompt_truth.py
+    args: []
+    timeout_seconds: 120
+    memory_limit_mb: 128
+
+  - name: publish
+    runner: llm
+    member: skeptic
+    agent_type: reviewer
+    prompt_file: prompts/prompt-truth-publish.md
+    output: reports/prompt-truth.html
+    memory_limit_mb: 64
+
+order: 10

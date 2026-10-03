@@ -92,6 +92,7 @@ python3 -m theteam.cli --json run --only doc-truth
 python3 -m theteam.cli --json run --only native-feature-loop
 python3 -m theteam.cli --json run --only root-organization
 python3 -m theteam.cli --json run --only task-contract
+python3 -m theteam.cli --json run --only prompt-truth
 ```
 
 **`task-contract` audits the task registry itself**, so it can be run before anything else: its
@@ -117,6 +118,7 @@ task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
 task-contract            2       scr,llm                    420     runnable: runnable here (llm phases need a session to spawn)
+prompt-truth             2       scr,llm                    420     runnable: runnable here (llm phases need a session to spawn)
 doc-truth                3       llm,llm,llm                  900    runnable: runnable here (llm phases need a session to spawn)
 root-organization        5       llm,llm,llm,llm,llm            1500    runnable: runnable here (llm phases need a session to spawn)
 native-feature-loop      5       llm,llm,scr,llm,llm        2100    runnable: runnable here (llm phases need a session to spawn)
@@ -131,6 +133,7 @@ Measured on this machine, Docker 28.1.1:
 | `project-integrity` | 2 | script ×2 | 600s | `ok` — both phases `rc=0` |
 | `maintenance` | 1 | script | 300s | `ok` — cache cleaned, logs rotated |
 | `task-contract` | 2 | script + llm | 420s | `awaiting` at `publish` — `check` completes, then the session spawns the member |
+| `prompt-truth` | 2 | script + llm | 420s | `awaiting` at `publish` — `check` completes, then the session spawns the member |
 | `doc-truth` | 3 | llm ×3 | 900s | `awaiting` — names the `audit` phase |
 | `root-organization` | 5 | llm ×5 | 1500s | `awaiting` — names the `scan` phase |
 | `native-feature-loop` | 5 | llm ×4 + script | 2100s | `awaiting` at `recon` |

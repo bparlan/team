@@ -6,10 +6,10 @@ it. You do not move, delete, or classify any files.
 
 ## Inputs
 
-- `reports/root-organization.md` — the consolidated classification report
-  written by the `report` phase.
-- `reports/root-organization-decision.md` — the three positions per ask item
-  and where they agreed or split.
+- `reports/.handoff/root-organization.md` — the consolidated classification
+  report written by the `report` phase.
+- `reports/.handoff/root-organization-decision.md` — the three positions per ask
+  item and where they agreed or split.
 
 ## What to produce
 

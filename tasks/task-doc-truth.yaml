@@ -81,4 +81,13 @@ phases:
     memory_limit_mb: 64
     order: 2
 
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/doc-truth-publish.md
+    output: reports/doc-truth.html
+    memory_limit_mb: 64
+    order: 3
+
 order: 5

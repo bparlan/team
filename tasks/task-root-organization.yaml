@@ -11,14 +11,13 @@ description: >-
 
 failure_handling: abort
 expected_output: >-
-  reports/root-organization.md — one section per root entry: classification
-  (keep / move / delete / ask / skip), confidence, destination, reason. Grouped
-  ask section. Plus reports/root-organization-decision.md with the three
-  positions and where they agreed or split. Reports land in the tracked
-  `reports/` directory, never `.omp/theteam/reports/` — that tree is runtime
-  state and is untracked, so a report written there is lost on a fresh clone.
-  An additional reports/root-organization.html is produced by the `publish`
-  phase for human reading.
+  reports/root-organization.html — the human deliverable, one page per run.
+  Two consumers, two roots. Phase handoffs (scan, classify, decision, report)
+  are machine state and land in reports/.handoff/, tracked but not for human
+  reading. The `publish` phase is the only phase that writes reports/ proper,
+  and what it writes is HTML. `.omp/theteam/reports/` is the harness's own state
+  root — `state.py` exposes it, `__init__.py` builds discussion reports from
+  `report_dir`, and a test asserts it is created — so nothing here moves it.
 
 memory_limit_mb: 64
 
@@ -33,7 +32,7 @@ phases:
     member: devops
     agent_type: sonic
     prompt_file: prompts/root-organization-scan.md
-    output: reports/root-organization-scan.md
+    output: reports/.handoff/root-organization-scan.md
     memory_limit_mb: 32
     order: 1
 
@@ -42,7 +41,7 @@ phases:
     member: architect
     agent_type: reviewer
     prompt_file: prompts/root-organization-classify.md
-    output: reports/root-organization-classify.md
+    output: reports/.handoff/root-organization-classify.md
     memory_limit_mb: 32
     order: 2
 
@@ -51,7 +50,7 @@ phases:
     member: skeptic
     agent_type: reviewer
     prompt_file: prompts/root-organization-decide.md
-    output: reports/root-organization-decision.md
+    output: reports/.handoff/root-organization-decision.md
     memory_limit_mb: 32
     order: 3
 
@@ -60,7 +59,7 @@ phases:
     member: pragmatist
     agent_type: task
     prompt_file: prompts/root-organization-report.md
-    output: reports/root-organization.md
+    output: reports/.handoff/root-organization.md
     memory_limit_mb: 32
     order: 4
 

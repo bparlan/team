@@ -101,6 +101,21 @@ directory was present.
 | `permitted_skills` | Hard boundary on what members may invoke (default `ponytail`, `evolve-skills`, `code-search`) |
 | `output.*` | `report_dir` (default `.omp/theteam/reports`), `keep_last` |
 
+`report_dir` governs **discussion reports only** — the `{conversation-id}-discussion-report.md`
+that `theteam discuss` renders. It is the harness's state root and is deliberately
+separate from task output:
+
+| Consumer | Path | Holds | Tracked |
+|---|---|---|---|
+| Harness state | `.omp/theteam/reports/` (`report_dir`) | discussion reports, audit chain, ledger | no |
+| Phase handoffs | `reports/.handoff/` | scan/classify/decide markdown a later phase reads | yes |
+| Human reading | `reports/` | one HTML page per task, written only by a `publish` phase | yes |
+
+The last row is the only one meant for you. A markdown file directly under `reports/`
+is a defect: `test_llm_outputs_land_in_one_of_the_two_named_roots` in
+`theteam/tests/test_m9_llm_runner.py` enforces both that rule and the one that only a
+task's final phase may write there.
+
 Regenerate it with `PYTHONPATH=theteam python3 theteam/bin/theteam_config.py init ...`, never by
 hand-editing, so validation runs before anything reaches disk.
 

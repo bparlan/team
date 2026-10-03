@@ -287,16 +287,41 @@ class TestEveryShippedTask:
                     continue
                 assert (root / phase["prompt_file"]).exists(), phase
 
-    def test_every_llm_output_lands_under_the_state_directory(self):
-        """One report root, so a reader has one place to look and the TUI
-        does not need per-task path knowledge.
+    def test_llm_outputs_land_in_one_of_the_two_named_roots(self):
+        """Two consumers, two roots, and the split is deliberate.
+
+        `.omp/theteam/reports/` is harness state: `state.py` exposes it as
+        `reports`, `__init__.py` builds discussion reports from `report_dir`,
+        and `test_stability_fixes` asserts it gets created. Phase handoffs land
+        there because the next phase reads them.
+
+        `reports/` is the tracked human surface, and only ever holds the final
+        human deliverable — one HTML page per task. Machine intermediates go to
+        `reports/.handoff/` so a reader looking in `reports/` finds documents,
+        not scratch files.
+
+        Accepting either prefix for any phase (the previous version of this
+        test) is what let the split grow unnoticed: nothing checked that the
+        human surface stayed human-only.
         """
         root = REPO_ROOT
+        MACHINE = (".omp/theteam/reports/", "reports/.handoff/")
         for task in TaskRepository(str(root)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
-                assert phase["output"].startswith((".omp/theteam/reports/", "reports/")), phase
+                output = phase["output"]
+                assert output.startswith(MACHINE + ("reports/",)), phase
+                # `reports/.handoff/` also starts with `reports/`, so the
+                # human-surface branch has to exclude it explicitly.
+                if output.startswith("reports/") and not output.startswith(
+                    "reports/.handoff/"
+                ):
+                    # The human surface is HTML, and only the last phase of a
+                    # task may write it.
+                    assert output.endswith(".html"), phase
+                    names = [p["name"] for p in task["phases"]]
+                    assert names[-1] == phase["name"], phase
 
     def test_every_script_phase_names_an_existing_script(self):
         root = REPO_ROOT

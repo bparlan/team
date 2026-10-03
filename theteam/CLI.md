@@ -109,9 +109,9 @@ environment: docker=True session_spawn_required=True
 task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
-doc-truth                2       llm,llm                    600     runnable: runnable here (llm phases need a session to spawn)
+doc-truth                3       llm,llm,llm                  900    runnable: runnable here (llm phases need a session to spawn)
 root-organization        5       llm,llm,llm,llm,llm            1500    runnable: runnable here (llm phases need a session to spawn)
-native-feature-loop      4       llm,llm,scr,llm            1800    runnable: runnable here (llm phases need a session to spawn)
+native-feature-loop      5       llm,llm,scr,llm,llm        2100    runnable: runnable here (llm phases need a session to spawn)
 ```
 
 Read this first. It tells you what the rest of the table can and cannot demonstrate on your box.
@@ -122,9 +122,9 @@ Measured on this machine, Docker 28.1.1:
 |---|---|---|---|---|
 | `project-integrity` | 2 | script ×2 | 600s | `ok` — both phases `rc=0` |
 | `maintenance` | 1 | script | 300s | `ok` — cache cleaned, logs rotated |
-| `doc-truth` | 2 | llm ×2 | 600s | `awaiting` — names the `audit` phase |
+| `doc-truth` | 3 | llm ×3 | 900s | `awaiting` — names the `audit` phase |
 | `root-organization` | 5 | llm ×5 | 1500s | `awaiting` — names the `scan` phase |
-| `native-feature-loop` | 4 | llm ×3 + script | 1800s | `awaiting` at `recon` |
+| `native-feature-loop` | 5 | llm ×4 + script | 2100s | `awaiting` at `recon` |
 
 **Two outcomes for an `llm` task, and neither is a failure.** `theteam run` does not spawn. It
 resolves which phase is next and reports `awaiting` with everything the session needs. A phase is
@@ -137,7 +137,7 @@ root-organization: awaiting (0.01s) (session must spawn the next phase)
   root-organization: awaiting a member
     spawn:  sonic (as devops)
     prompt: prompts/root-organization-scan.md
-    write:  reports/root-organization-scan.md
+    write:  reports/.handoff/root-organization-scan.md
 0 ran, 0 skipped, 0 failed in 0.01s
 ```
 

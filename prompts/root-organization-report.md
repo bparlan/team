@@ -6,16 +6,16 @@ anything.
 
 ## Inputs
 
-- `reports/root-organization-scan.md`
-- `reports/root-organization-classify.md`
-- `reports/root-organization-decision.md`
+- `reports/.handoff/root-organization-scan.md`
+- `reports/.handoff/root-organization-classify.md`
+- `reports/.handoff/root-organization-decision.md`
 
 Read all three. If any is missing, say which and stop — a report built on a
 missing classification is worse than no report.
 
 ## What to produce
 
-One report, four sections.
+One report, four sections. Write it to `reports/.handoff/root-organization.md` — the human-facing page is the `publish` phase output, not this file.
 
 **1. Planned** — high-confidence moves and tracked deletions this run is
 recommending, each with the destination and the command that will prove it

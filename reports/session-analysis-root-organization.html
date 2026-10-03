@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Analysis — root-organization</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #2563eb; --ok: #059669; --warn: #d97706; --bad: #dc2626;
+    --code-bg: #f3f4f6; --surface: #f9fafb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --line: #30363d;
+      --accent: #58a6ff; --ok: #3fb950; --warn: #d29922; --bad: #f85149;
+      --code-bg: #161b22; --surface: #161b22;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--fg); line-height: 1.65;
+    margin: 0; padding: 2rem 1.25rem 5rem;
+  }
+  .wrap { max-width: 60rem; margin: 0 auto; }
+  h1 { font-size: 2rem; margin: 0 0 .35rem; letter-spacing: -.02em; }
+  .sub { color: var(--muted); margin-bottom: 2.5rem; font-size: .95rem; }
+  h2 {
+    font-size: 1.35rem; margin: 3rem 0 1rem; padding-bottom: .45rem;
+    border-bottom: 1px solid var(--line);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  code, kbd { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .875em;
+    background: var(--code-bg); padding: .12em .38em; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 1rem; border-radius: 8px; overflow-x: auto;
+    border: 1px solid var(--line); }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: .92rem; }
+  th, td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--line);
+    vertical-align: top; }
+  th { font-weight: 600; background: var(--surface); }
+  .tag { display: inline-block; padding: .12em .5em; border-radius: 999px;
+    font-size: .75rem; font-weight: 600; letter-spacing: .01em; white-space: nowrap; }
+  .t-user { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+  .t-agent { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+  .t-advisor { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .c-ok { color: var(--ok); font-weight: 600; }
+  .c-warn { color: var(--warn); font-weight: 600; }
+  .c-bad { color: var(--bad); font-weight: 600; }
+  .box { background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--accent); padding: 1rem 1.15rem; border-radius: 6px;
+    margin: 1.25rem 0; }
+  .box.bad { border-left-color: var(--bad); }
+  .box.ok { border-left-color: var(--ok); }
+  .box.warn { border-left-color: var(--warn); }
+  .box h4 { margin: 0 0 .5rem; font-size: .95rem; }
+  .box p:last-child, .box ul:last-child { margin-bottom: 0; }
+  ol.steps { padding-left: 1.4rem; }
+  ol.steps > li { margin-bottom: 1.1rem; }
+  .step-num { font-weight: 700; color: var(--accent); }
+  .kv { display: grid; grid-template-columns: 11rem 1fr; gap: .4rem 1rem; margin: 1rem 0; }
+  .kv dt { color: var(--muted); font-size: .88rem; }
+  .kv dd { margin: 0; font-size: .92rem; }
+  .stat { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.25rem 0; }
+  .stat > div { flex: 1 1 8.5rem; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 8px; padding: .85rem 1rem; }
+  .stat b { display: block; font-size: 1.5rem; line-height: 1.2; }
+  .stat span { font-size: .8rem; color: var(--muted); }
+  footer { margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .85rem; }
+  .anchor { color: var(--muted); font-size: .8rem; text-decoration: none; margin-left: .4rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Session Analysis — <code>root-organization</code></h1>
+<p class="sub">From task invocation to final output · 3 commits · 0 uncommitted changes · suite 775 passed, 7 subtests</p>
+
+<div class="stat">
+  <div><b>45 → 40</b><span>root files</span></div>
+  <div><b>33 → 30</b><span>root dirs</span></div>
+  <div><b>739 → 729</b><span>tracked files</span></div>
+  <div><b>775</b><span>tests passing</span></div>
+</div>
+
+<h2>1. What actually happened</h2>
+
+<p>The session opened as a mechanical command transcript (<code>theteam status</code>,
+<code>theteam tasks</code>, <code>theteam run --only root-organization</code>,
+<code>theteam history</code>) and turned into a repository reorganization. The task
+returned <code>awaiting</code>, not <code>ok</code>, so a member had to be spawned to produce
+the declared artifact before any cleanup could begin.</p>
+
+<h3>Timeline</h3>
+
+<table>
+<thead><tr><th>Step</th><th>Action</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>theteam run --only root-organization</code></td><td><code>awaiting</code> — session must spawn <code>sonic (as devops)</code></td></tr>
+<tr><td>2</td><td>Dispatched <code>sonic</code> with the scan prompt</td><td>7m44s, 164-line inventory written</td></tr>
+<tr><td>3</td><td>Read report from <code>.omp/theteam/reports/</code></td><td><span class="c-bad">Wrong location</span> — runtime state, not report archive</td></tr>
+<tr><td>4</td><td>Re-verified every scan claim against the filesystem</td><td>Scan contradicted itself on 3 files</td></tr>
+<tr><td>5</td><td>Consumer sweep, then deleted 5 zero-byte files</td><td>Tracked 739 → 734, suite green</td></tr>
+<tr><td>6</td><td>Presented proposal in 5 bands (A–E) with confidence</td><td>User answered 2 open questions</td></tr>
+<tr><td>7</td><td>Executed phases 1–4</td><td>4 moves, 5 untracks, 1 delete, 3 dirs</td></tr>
+<tr><td>8</td><td>Advisor caught unanchored <code>.gitignore</code> patterns</td><td>Removed <code>ui/</code> etc. — self-inflicted bug</td></tr>
+</tbody>
+</table>
+
+<h2>2. Decisions <span class="t-user">user-prompted</span></h2>
+
+<table>
+<thead><tr><th>#</th><th>Decision</th><th>Rationale given</th></tr></thead>
+<tbody>
+<tr><td>D1</td><td>Reports belong in project root <code>reports/</code>, not <code>.omp/theteam/reports/</code></td><td>There is no <code>~/.omp/theteam/</code>; <code>.omp/</code> is runtime state, so writing reports there loses them on clone</td></tr>
+<tr><td>D2</td><td>Task must either <em>act</em> on high-confidence findings <em>or</em> ask about foreign files</td><td>Rejects a proposal-only deliverable — the work is the cleanup, not the document</td></tr>
+<tr><td>D3</td><td>Task must <em>resolve</em> scan findings, not just report them</td><td>Same reason</td></tr>
+<tr><td>D4</td><td>Delete empty tracked dirs</td><td>Answered the blocking question; <code>subskills/</code>, <code>system/</code>, <code>ui/</code> held zero files</td></tr>
+<tr><td>D5</td><td><code>review_issues.md</code> → <code>reports/</code></td><td>Answered the blocking question; <code>reports/</code> already held 7 sibling artifacts</td></tr>
+<tr><td>D6</td><td>"Proceed with all high confidence moves"</td><td>Scope gate — authorized the 4 moves, withheld the rest</td></tr>
+<tr><td>D7</td><td>"there is no <code>~/.omp/theteam/</code> folder"</td><td>Corrected the premise; the real path is project-local <code>.omp/theteam/</code></td></tr>
+</tbody>
+</table>
+
+<h2>3. Decisions <span class="t-agent">agent-made</span></h2>
+
+<h3>3.1 Corrections to the delegated scan</h3>
+<p>The subagent's report was treated as a <em>claim</em>, not evidence. Cross-checking against
+the filesystem found it internally inconsistent:</p>
+
+<table>
+<thead><tr><th>Scan claim</th><th>Ground truth</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td><code>30</code>, <code>50%</code>, <code>funcs_all.txt</code> listed as both tracked and untracked</td><td>Tracked, zero-byte</td><td class="c-warn">Ignored the untracked rows</td></tr>
+<tr><td><code>scripts/healthloop.sh</code>, <code>team-skill.sh</code> — "empty due to accidental commits"</td><td>Confirmed zero-byte, no live consumers</td><td class="c-ok">Deleted</td></tr>
+<tr><td><code>prometheus.yml</code> suggested as a loose root file</td><td><code>docker-compose.yml:50</code> mounts it into the Prometheus container</td><td class="c-ok">Kept — moving it breaks the container</td></tr>
+<tr><td>Runtime files implied to be untracked</td><td><code>wal.json</code>, <code>test.db</code>, <code>test.wal</code>, <code>events.jsonl</code>, <code>test_events.jsonl</code> were all <strong>tracked</strong></td><td class="c-ok">Untracked, not moved</td></tr>
+</tbody>
+</table>
+
+<h3>3.2 Two proposals withdrawn after verification</h3>
+
+<div class="box bad">
+<h4><code>theteam.config</code> — rated "Medium", then found load-bearing</h4>
+<p>Initial call was "Medium confidence, no consumers found". Checking <code>theteam/cli.py:100</code>
+and <code>:112</code> showed it resolves the config from <code>project_root</code>, and three test
+modules open it by path (<code>test_m9_context_slice.py</code> ×2, <code>test_m9_manager.py</code> ×2).
+Kept.</p>
+</div>
+
+<div class="box bad">
+<h4><code>system-awareness-config.json</code> — proposed moving, found deliberate</h4>
+<p><code>scripts/loop_health_check.py:25-33</code> carries a comment block explicitly documenting a
+decision to <em>keep</em> the file after removing it from <code>REQUIRED_CONFIGS</code>. The
+<code>scripts/</code> copy differs in content. Kept, not moved, not deduplicated.</p>
+</div>
+
+<h3>3.3 Guardrails that shaped execution</h3>
+<table>
+<thead><tr><th>Rule</th><th>How it changed the work</th></tr></thead>
+<tbody>
+<tr><td>Locate consumers before deleting</td><td>No file was deleted or moved on a name match alone; every candidate got a tree-wide grep first</td></tr>
+<tr><td>State arithmetic before deleting</td><td>Predicted test delta of 0 before the first deletion; measured 775 → 775, confirming <code>test.db</code> was not a fixture</td></tr>
+<tr><td>Measure after</td><td>Every phase ended with <code>pytest</code> plus a tracked-file count; 739 → 734 → 729 fully accounted for</td></tr>
+<tr><td>Deletions last, own commit</td><td>Three separate commits — removals, then moves, then the ignore fix</td></tr>
+</tbody>
+</table>
+
+<h3>3.4 <span class="t-advisor">advisor</span> interventions</h3>
+<table>
+<thead><tr><th>Severity</th><th>Substance</th><th>Outcome</th></tr></thead>
+<tbody>
+<tr><td>nit</td><td>Proposal doc is a decision artifact, not the deliverable</td><td class="c-ok">Accepted — proceeded to real phases</td></tr>
+<tr><td>concern</td><td>Runtime files need <code>git rm --cached</code>, never a plain move</td><td class="c-ok">Accepted — used <code>--cached</code>, files stayed on disk</td></tr>
+<tr><td>blocker</td><td>Unanchored <code>ui/</code> pattern swallows <code>theteam/ui/</code></td><td class="c-ok">Accepted — real bug, fixed</td></tr>
+<tr><td>blocker (stale)</td><td>Same bug, re-raised after it was already fixed</td><td class="c-warn">Declined — re-verified instead of re-doing</td></tr>
+<tr><td>nit</td><td>Check probe file removed before commit</td><td class="c-warn">Already satisfied — <code>rm -f</code> ran in the same command</td></tr>
+</tbody>
+</table>
+
+<h2>4. The bug worth remembering</h2>
+
+<div class="box bad">
+<h4>Unanchored <code>.gitignore</code> directory patterns are depth-unbounded</h4>
+<p>I added <code>subskills/</code>, <code>system/</code>, and <code>ui/</code> to silence three deleted
+empty directories. A trailing-slash pattern with no internal <code>/</code> matches at
+<em>any</em> depth in git, so <code>ui/</code> also matched <code>theteam/ui/</code> — which holds
+live TUI code.</p>
+<p>Existing files were unaffected because they were already tracked. New ones were not: a probe
+file at <code>theteam/ui/__brand_new_probe.py</code> came back ignored via
+<code>git check-ignore</code>. Had the TUI grown a new component, it would have vanished from git
+with no error.</p>
+<p><strong>Fix:</strong> removed the three lines. Git cannot track empty directories, so they were
+dead weight carrying a live footgun. Re-probed to confirm the path is clean.</p>
+</div>
+
+<h2>5. Repeatable methodology</h2>
+
+<h3>5.1 Phase structure</h3>
+<pre><code>0. TRIGGER     Run the task. Read the result field, not just the exit code.
+               awaiting  -> spawn the named member with the named prompt
+               skipped   -> report the refusal verbatim; do NOT hand-write the artifact
+               ok        -> verify the declared artifact exists on disk
+
+1. DELEGATE    Delegated output is a CLAIM. Re-verify every material row against
+               the filesystem before acting. Scan reports have been observed to
+               contradict themselves within a single table.
+
+2. LOCATE      Tree-wide grep per candidate, before any mutation. Cover: imports,
+               string refs, path constants, __main__ entry points, YAML task defs,
+               docker/compose mounts, test fixtures, and external skill configs.
+               Exclude historical ledgers and analysis reports from the count --
+               they reference by name, they do not load.
+
+3. CLASSIFY    Each candidate lands in exactly one band:
+                 MOVE     safe relocation, consumers are documentation only
+                 UNTRACK  harness-written runtime -> git rm --cached + ignore
+                 DELETE   zero-byte or writer-less, verified consumer-free
+                 KEEP     a consumer was found; state the file:line that proved it
+               Report per-item confidence. Never let "Medium" survive a grep.
+
+4. ASK        Surface only decisions with materially different tradeoffs.
+               Execute everything else. A proposal document is not the work.
+
+5. EXECUTE     One band per commit. Moves, then untracks, then deletions.
+
+6. MEASURE     Suite + tracked-file count + explicit arithmetic per band.
+               Account for every unit of delta or treat it as a blocker.</code></pre>
+
+<h3>5.2 Filesystem hygiene rules</h3>
+<table>
+<thead><tr><th>Rule</th><th>Reason</th></tr></thead>
+<tbody>
+<tr><td>Runtime state is written where the code runs</td><td>Untracking keeps the file; moving it breaks the writer</td></tr>
+<tr><td>Reports go in a tracked project directory</td><td><code>.omp/</code> is runtime and is often ignored</td></tr>
+<tr><td>Never add an ignore rule for a deleted empty directory</td><td>Git cannot track empty directories, so the rule can never match anything — it only widens the blast radius of every same-named path elsewhere (<code>ui/</code> silently covered <code>theteam/ui/</code>)</td></tr>
+<tr><td>Probe, don't reason, about ignore scope</td><td><code>git check-ignore -v</code> on a real path</td></tr>
+</tbody>
+</table>
+
+<h3>5.3 Ignored-file hygiene for agents</h3>
+<pre><code>Root scripts must not lie about their own scope. If a task writes to
+.omp/theteam/reports/, that path is wrong unless the project explicitly
+declares .omp/ as tracked output.
+
+Mandatory: when a report path is refused or wrong, verify the directory's
+git-tracked status before writing. Assume runtime until proven otherwise.</code></pre>
+
+<h2>6. Efficiency findings</h2>
+
+<h3>6.1 What cost time</h3>
+<table>
+<thead><tr><th>Cost</th><th>Cause</th><th>Fix applied</th></tr></thead>
+<tbody>
+<tr><td>7m44s delegated scan</td><td>Broad prompt, no arithmetic target, agent explored freely</td><td>Hand the subagent the expected output contract up front</td></tr>
+<tr><td>11 shell probes on root inventory</td><td>The first recursive listing swept the whole tree instead of depth 1, and its output was truncated mid-run</td><td>Depth-1 only, one pass, no recursive listing</td></tr>
+<tr><td>Two proposals withdrawn after the fact</td><td>Rated from name-matching instead of reading the consumer</td><td>Forbid a confidence rating before the consumer grep</td></tr>
+<tr><td>Advisories skipped 4 tool calls</td><td>Pending-advisory gating during active work</td><td>Batch verification greps; one call answers several questions</td></tr>
+<tr><td>Stale blocker re-raised</td><td>Advisory had no view of the fix</td><td>Re-verify stale advice; decline it in one line</td></tr>
+<tr><td>Stale todo list reported 9 open items</td><td>State not synced across parallel work</td><td>Close todos in the same turn as the work they track</td></tr>
+</tbody>
+</table>
+
+<h3>6.2 Agentic-friendly practices</h3>
+<ul>
+<li><strong>Batch independent greps into one call.</strong> A single command answering five
+questions beats five round trips.</li>
+<li><strong>Prefer <code>git ls-files</code> + <code>check-ignore</code> over
+<code>ls</code>.</strong> They answer tracked-ness and ignore-scope directly.</li>
+<li><strong>Give the subagent an output contract</strong> — exact path, format, row count
+expectation. Unbounded scan prompts wander.</li>
+<li><strong>Make the verification command part of the mutation.</strong> The probe file was
+created and removed in one call; it could not leak into a commit.</li>
+<li><strong>Never trust a number from an earlier turn.</strong> Recount after mutating.</li>
+<li><strong>Decline stale advice explicitly</strong> rather than silently re-doing work.</li>
+</ul>
+
+<h3>6.3 Recommended next iterations</h3>
+<ol class="steps">
+<li><span class="step-num">1.</span> <strong>Anchor-check every ignore rule at write time.</strong>
+Run <code>git check-ignore -v</code> against each new pattern's blast radius before
+committing. Catches depth-unbounded patterns in seconds.</li>
+<li><span class="step-num">2.</span> <strong>Make the delegated scan self-checking.</strong>
+Require the subagent to emit <code>git ls-files --error-unmatch</code> results per row. The
+self-contradictory tracked/untracked rows would not survive that.</li>
+<li><span class="step-num">3.</span> <strong>Replace "Medium" with a citation.</strong> Every
+proposal row should carry <code>file:line</code> or the grep that returned zero hits.</li>
+<li><span class="step-num">4.</span> <strong>Encode the config set.</strong> <code>theteam.config</code>,
+<code>prometheus.yml</code>, <code>system-awareness-config.json</code> are all root files that
+look movable and are not. A one-line "do not move" list prevents a future session from
+rediscovering this at cost.</li>
+<li><span class="step-num">5.</span> <strong>Reconcile <code>archive/</code> vs
+<code>archives/</code>.</strong> Two parallel trees, 228 MB untracked in one. Not touched here
+because no instruction covered it.</li>
+</ol>
+
+<h2>7. Outcome</h2>
+
+<table>
+<thead><tr><th>Metric</th><th>Before</th><th>After</th></tr></thead>
+<tbody>
+<tr><td>Root files</td><td>45</td><td>40</td></tr>
+<tr><td>Root directories</td><td>33</td><td>30</td></tr>
+<tr><td>Tracked files</td><td>739</td><td>729</td></tr>
+<tr><td>Suite</td><td>775 passed</td><td>775 passed, 7 subtests</td></tr>
+<tr><td>Uncommitted changes</td><td>—</td><td>0</td></tr>
+</tbody>
+</table>
+
+<p>Ten files removed from the root, ten from git tracking, three empty directories
+eliminated, zero test delta. One self-inflicted ignore-pattern bug found by the advisor and
+fixed before it could hide a TUI file.</p>
+
+<footer>
+  Session analysis · <code>root-organization</code> · generated 2026-10-03<br>
+  Commits: <code>811ac75</code> · <code>d1e1c58</code> · <code>86d7f85</code>
+</footer>
+
+</div>
+</body>
+</html>

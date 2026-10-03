@@ -1,0 +1,39 @@
+id: task-contract
+name: Task Contract Check
+type: monitoring
+priority: 5
+description: >-
+  Verifies every task in tasks/ is one the executor can actually run: llm
+  phases declare prompt_file, output and a spawnable agent_type; declared
+  prompts exist; a script phase's declared output is one its script really
+  writes; and reports/ is written only by a task's final phase, as HTML.
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/task-contract.json — tasks_checked, findings, and one
+  entry per defect naming task, phase, the check it failed, the detail, and
+  the fix. reports/task-contract.html is the human page, rendered by the
+  `publish` phase.
+phases:
+  # Two phases, and the split is the whole design. `check` is a script phase
+  # because every judgement it makes is mechanical: a phase that names a
+  # prompt_file that does not exist is wrong whether or not a model agrees.
+  # Giving that to an LLM would make a deterministic answer probabilistic and
+  # cost a spawn to learn nothing. `publish` is llm because turning a JSON
+  # handoff into a page a human reads is a judgement about emphasis, and
+  # because every other task's human surface is an HTML page — one report per
+  # task, one rule.
+  - name: check
+    script: scripts/check_task_contract.py
+    args: []
+    timeout_seconds: 120
+    memory_limit_mb: 128
+
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/task-contract-publish.md
+    output: reports/task-contract.html
+    memory_limit_mb: 64
+
+order: 9

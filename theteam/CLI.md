@@ -91,7 +91,14 @@ python3 -m theteam.cli --json run --only maintenance
 python3 -m theteam.cli --json run --only doc-truth
 python3 -m theteam.cli --json run --only native-feature-loop
 python3 -m theteam.cli --json run --only root-organization
+python3 -m theteam.cli --json run --only task-contract
 ```
+
+**`task-contract` audits the task registry itself**, so it can be run before anything else: its
+`check` phase is a script and needs no session. It refuses nothing and reports what it finds —
+`scripts/check_task_contract.py` validates every `llm` phase declares `prompt_file`, `output` and a
+spawnable `agent_type`, that declared prompts exist, that a script phase's declared output is one
+its script really writes, and that `reports/` is written only by a task's final phase as HTML.
 
 **`smoke_cli.py` reports which tasks can actually run on your machine.** It reads the Docker
 gate directly — `AgentIsolation.available()` — and derives the spawn requirement from each task's
@@ -109,6 +116,7 @@ environment: docker=True session_spawn_required=True
 task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
+task-contract            2       scr,llm                    420     runnable: runnable here (llm phases need a session to spawn)
 doc-truth                3       llm,llm,llm                  900    runnable: runnable here (llm phases need a session to spawn)
 root-organization        5       llm,llm,llm,llm,llm            1500    runnable: runnable here (llm phases need a session to spawn)
 native-feature-loop      5       llm,llm,scr,llm,llm        2100    runnable: runnable here (llm phases need a session to spawn)
@@ -122,6 +130,7 @@ Measured on this machine, Docker 28.1.1:
 |---|---|---|---|---|
 | `project-integrity` | 2 | script ×2 | 600s | `ok` — both phases `rc=0` |
 | `maintenance` | 1 | script | 300s | `ok` — cache cleaned, logs rotated |
+| `task-contract` | 2 | script + llm | 420s | `awaiting` at `publish` — `check` completes, then the session spawns the member |
 | `doc-truth` | 3 | llm ×3 | 900s | `awaiting` — names the `audit` phase |
 | `root-organization` | 5 | llm ×5 | 1500s | `awaiting` — names the `scan` phase |
 | `native-feature-loop` | 5 | llm ×4 + script | 2100s | `awaiting` at `recon` |

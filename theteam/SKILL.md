@@ -107,9 +107,9 @@ Verified with a live member, for the first phase: `theteam run --only
 root-organization` named `scan` and the agent `sonic`; `agent(prompt,
 agent="sonic")` ran and returned 492 entries and 20 zero-byte tracked files;
 writing those to the declared output advanced the loop to `classify` and the
-agent `reviewer`. **Phases 2–4 have not been driven by a live member** — they
+agent `reviewer`. **Phases 2–5 have not been driven by a live member** — they
 were advanced by writing their output files directly. The loop reaches `ok` on
-all four that way, but only `scan` is verified end to end through a real spawn.
+all five that way, but only `scan` is verified end to end through a real spawn.
 
 `tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 

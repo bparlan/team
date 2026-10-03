@@ -123,7 +123,7 @@ Measured on this machine, Docker 28.1.1:
 | `project-integrity` | 2 | script ×2 | 600s | `ok` — both phases `rc=0` |
 | `maintenance` | 1 | script | 300s | `ok` — cache cleaned, logs rotated |
 | `doc-truth` | 2 | llm ×2 | 600s | `awaiting` — names the `audit` phase |
-| `root-organization` | 4 | llm ×4 | 1200s | `awaiting` — names the `scan` phase |
+| `root-organization` | 5 | llm ×5 | 1500s | `awaiting` — names the `scan` phase |
 | `native-feature-loop` | 4 | llm ×3 + script | 1800s | `awaiting` at `recon` |
 
 **Two outcomes for an `llm` task, and neither is a failure.** `theteam run` does not spawn. It
@@ -137,7 +137,7 @@ root-organization: awaiting (0.01s) (session must spawn the next phase)
   root-organization: awaiting a member
     spawn:  sonic (as devops)
     prompt: prompts/root-organization-scan.md
-    write:  .omp/theteam/reports/root-organization-scan.md
+    write:  reports/root-organization-scan.md
 0 ran, 0 skipped, 0 failed in 0.01s
 ```
 

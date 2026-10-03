@@ -138,7 +138,7 @@ If the task has an unfinished phase, it prints what it needs:
 root-organization: awaiting a member
   spawn:  sonic (as devops)
   prompt: prompts/root-organization-scan.md
-  write:  .omp/theteam/reports/root-organization-scan.md
+  write:  reports/root-organization-scan.md
 ```
 
 Then:

@@ -110,7 +110,7 @@ task                     phases  kinds                      worst   readiness
 project-integrity        2       scr,scr                    600     runnable: runnable here
 maintenance              1       scr                        300     runnable: runnable here
 doc-truth                2       llm,llm                    600     runnable: runnable here (llm phases need a session to spawn)
-root-organization        4       llm,llm,llm,llm            1200    runnable: runnable here (llm phases need a session to spawn)
+root-organization        5       llm,llm,llm,llm,llm            1500    runnable: runnable here (llm phases need a session to spawn)
 native-feature-loop      4       llm,llm,scr,llm            1800    runnable: runnable here (llm phases need a session to spawn)
 ```
 

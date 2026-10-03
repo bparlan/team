@@ -11,10 +11,12 @@ description: >-
 
 failure_handling: abort
 expected_output: >-
-  .omp/theteam/reports/root-organization.md — one section per root entry:
-  classification (keep / move / delete / ask / skip), confidence, destination,
-  reason. Grouped ask section. Plus .omp/theteam/reports/root-organization-decision.md
-  with the three positions and where they agreed or split.
+  reports/root-organization.md — one section per root entry: classification
+  (keep / move / delete / ask / skip), confidence, destination, reason. Grouped
+  ask section. Plus reports/root-organization-decision.md with the three
+  positions and where they agreed or split. Reports land in the tracked
+  `reports/` directory, never `.omp/theteam/reports/` — that tree is runtime
+  state and is untracked, so a report written there is lost on a fresh clone.
 memory_limit_mb: 64
 
 # The tree must be intact before anything classifies it: a scan of a broken
@@ -28,7 +30,7 @@ phases:
     member: devops
     agent_type: sonic
     prompt_file: prompts/root-organization-scan.md
-    output: .omp/theteam/reports/root-organization-scan.md
+    output: reports/root-organization-scan.md
     memory_limit_mb: 32
     order: 1
 
@@ -37,7 +39,7 @@ phases:
     member: architect
     agent_type: reviewer
     prompt_file: prompts/root-organization-classify.md
-    output: .omp/theteam/reports/root-organization-classify.md
+    output: reports/root-organization-classify.md
     memory_limit_mb: 32
     order: 2
 
@@ -46,7 +48,7 @@ phases:
     member: skeptic
     agent_type: reviewer
     prompt_file: prompts/root-organization-decide.md
-    output: .omp/theteam/reports/root-organization-decision.md
+    output: reports/root-organization-decision.md
     memory_limit_mb: 32
     order: 3
 
@@ -55,9 +57,18 @@ phases:
     member: pragmatist
     agent_type: task
     prompt_file: prompts/root-organization-report.md
-    output: .omp/theteam/reports/root-organization.md
+    output: reports/root-organization.md
+    memory_limit_mb: 32
     order: 4
 
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/root-organization-publish.md
+    output: reports/root-organization.html
+    memory_limit_mb: 32
+    order: 5
 coverage:
   - root depth 1 (files and directories)
   - depth 2 subfolders

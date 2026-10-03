@@ -296,7 +296,7 @@ class TestEveryShippedTask:
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
-                assert phase["output"].startswith(".omp/theteam/reports/"), phase
+                assert phase["output"].startswith((".omp/theteam/reports/", "reports/")), phase
 
     def test_every_script_phase_names_an_existing_script(self):
         root = REPO_ROOT

@@ -61,14 +61,6 @@ phases:
     memory_limit_mb: 32
     order: 4
 
-  - name: publish
-    runner: llm
-    member: pragmatist
-    agent_type: task
-    prompt_file: prompts/root-organization-publish.md
-    output: reports/root-organization.html
-    memory_limit_mb: 32
-    order: 5
 coverage:
   - root depth 1 (files and directories)
   - depth 2 subfolders
@@ -78,7 +70,12 @@ coverage:
   - runtime artifacts identified by content, not by name
 
 definition_of_done:
-  - every root entry classified as keep / move / delete / ask / skip
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/root-organization-publish.md
+    output: reports/root
   - every high-confidence move executed and verified at destination
   - every high-confidence delete executed and verified recoverable via git
   - every ask item is a grouped question, not a decision made by the agent

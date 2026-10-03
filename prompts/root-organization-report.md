@@ -36,6 +36,13 @@ is useful; "some items were ambiguous" is not.
 ## Rules
 
 - Never state a move happened without the verification command's output.
+- For every planned move, name the command that will prove it landed (`git ls-files
+  --error-unmatch <destination>` is stronger than `ls`, because it also proves
+  the file is tracked).
+- For every planned delete, name the exact recovery command (`git restore <path>`).
+  An irreversible delete is an ask item, not a high-confidence one.
+- Never write "executed" for anything this run only planned. Execution happens
+  after the human answers; say "planned" until then.
 - Group the ask by decision, not by file. Three files sharing one question is
   one question.
 - Report what the team decided *and* what the human must decide, side by side.

@@ -83,8 +83,9 @@ coverage:
 
 definition_of_done:
   - every root entry classified as keep / move / delete / ask / skip
-  - every high-confidence move executed and verified at destination
-  - every high-confidence delete executed and verified recoverable via git
+  - every high-confidence move named with its destination and the verification
+    that will prove it landed; the run plans it, the human's answer applies it
+  - every high-confidence delete named with the git command that recovers it
   - every ask item is a grouped question, not a decision made by the agent
   - the decision record carries three positions per ask item
   - git status clean, or only ask-list items uncommitted
@@ -121,5 +122,13 @@ rules:
     examples/ and are candidate leftovers
   - self-improvement — record what was uncertain, what was decided, and what
     the next run should check differently
+  - every definition_of_done bullet must be satisfiable by a phase in this task.
+    An earlier revision demanded "every high-confidence move executed" while
+    making every phase read-only and deferring execution to the human's answer,
+    so the run reported ok with its own contract unmet. No code reads this
+    prose — cli.py:415-428 says so explicitly — so a bullet that cannot hold
+    reads exactly like one that is enforced
+  - an ask item is a question this run asks, not a decision it defers. Name the
+    two options and what changes either way, so one answer settles the group
 
 order: 6

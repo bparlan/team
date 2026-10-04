@@ -44,6 +44,7 @@ import sys
 import os
 import json
 import glob
+import html as _html
 from datetime import datetime, timezone
 
 
@@ -143,6 +144,140 @@ def render(topic, project, notes, synthesis):
     lines.append(synthesis["recommendation"].strip())
     lines.append("")
     return "\n".join(lines)
+
+
+
+
+_CSS = """
+:root{color-scheme:light dark}
+body{margin:0 auto;max-width:52rem;padding:2rem 1.25rem;
+  font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  color:#1a1a1a;background:#fff}
+@media (prefers-color-scheme:dark){body{color:#e6e6e6;background:#16181c}}
+h1{font-size:1.7rem;margin:0 0 .5rem}
+h2{font-size:1.25rem;margin:2.5rem 0 .5rem;padding-bottom:.3rem;
+  border-bottom:1px solid #d8d8d8}
+@media (prefers-color-scheme:dark){h2{border-color:#3a3d42}}
+h3{font-size:1.05rem;margin:1.75rem 0 .35rem}
+.meta{color:#666;font-size:.9rem;margin:0 0 1.5rem}
+@media (prefers-color-scheme:dark){.meta{color:#9aa0a6}}
+.note{background:#f6f7f9;border-left:3px solid #b9bec7;border-radius:0 4px 4px 0;
+  padding:.1rem 1rem;margin:1rem 0}
+@media (prefers-color-scheme:dark){.note{background:#1e2126;border-left-color:#4a4f57}}
+.verdict{font-weight:600;margin:.5rem 0}
+.body{white-space:pre-wrap}
+ul{padding-left:1.4rem}li{margin:.3rem 0}
+strong{font-weight:600}
+code{font:.9em ui-monospace,SFMono-Regular,Menlo,monospace;
+  background:#eef0f3;padding:.1em .35em;border-radius:3px}
+@media (prefers-color-scheme:dark){code{background:#252930}}
+"""
+
+
+def _md_inline(text):
+    """Escape, then restore the inline markdown the notes actually use.
+
+    Deliberately not a markdown parser: the contract is a human-readable
+    report, and a full parser is the overengineering this repo already
+    declined once. Bold, italic, code and links cover what members write.
+    """
+    s = _html.escape(text)
+    s = _re_code.sub(lambda m: f"<code>{m.group(1)}</code>", s)
+    s = _re_bold.sub(lambda m: f"<strong>{m.group(1)}</strong>", s)
+    s = _re_italic.sub(lambda m: f"<em>{m.group(1)}</em>", s)
+    s = _re_link.sub(lambda m: (
+        f'<a href="{m.group(2)}">{m.group(1)}</a>'
+        if m.group(2).startswith(("http://", "https://"))
+        else f"<code>{m.group(1)}</code>"), s)
+    return s
+
+
+def _md_block(text):
+    """Inline markdown plus fenced code and bullet lists, block level."""
+    out = []
+    in_code = False
+    in_list = False
+    for raw in text.splitlines():
+        if raw.strip().startswith("```"):
+            out.append("</code></pre>" if in_code else "<pre><code>")
+            in_code = not in_code
+            continue
+        if in_code:
+            out.append(_html.escape(raw))
+            continue
+        item = re.match(r"^\s*[-*]\s+(.*)$", raw)
+        if item:
+            if not in_list:
+                out.append("<ul>")
+                in_list = True
+            out.append(f"<li>{_md_inline(item.group(1))}</li>")
+            continue
+        if in_list:
+            out.append("</ul>")
+            in_list = False
+        if raw.strip():
+            out.append(f'<p class="body">{_md_inline(raw)}</p>')
+        else:
+            out.append("<p class=\"body\">&nbsp;</p>")
+    if in_list:
+        out.append("</ul>")
+    if in_code:
+        out.append("</code></pre>")
+    return "\n".join(out)
+
+
+def _items(values, empty):
+    if not values:
+        return f"<ul><li>{_html.escape(empty)}</li></ul>"
+    return "<ul>\n" + "\n".join(f"<li>{_md_inline(v)}</li>" for v in values) + "\n</ul>"
+
+
+def render_html(topic, project, notes, synthesis, now=None):
+    """HTML sibling of render(). Consumes the same notes and synthesis dicts.
+
+    Never parses render()'s markdown output: the markdown renderer and this
+    one would then be two definitions of the report, free to disagree.
+    Self-contained by contract -- inline CSS, no scripts, no webfonts.
+    """
+    now = now or datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    members = ", ".join(n["id"] for n in notes)
+    parts = [
+        "<!DOCTYPE html>",
+        '<html lang="en"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        f"<title>theteam — {_html.escape(topic)}</title>",
+        f"<style>{_CSS}</style></head><body>",
+        f"<h1>theteam — {_html.escape(topic)}</h1>",
+        '<p class="meta">'
+        f"Project: {_html.escape(project or '(unspecified)')}<br>"
+        f"Generated: {now}<br>"
+        f"Members reporting: {_html.escape(members)}</p>",
+
+        "<h2>Individual notes</h2>",
+        "<p>Each member's note below was written independently, before the "
+        "synthesis pass — no member has seen another's note.</p>",
+    ]
+    for n in notes:
+        parts.append("<h3>" + f"{_html.escape(n['role'])} "
+                     f"(<code>{_html.escape(n['id'])}</code>)</h3>")
+        parts.append(f'<div class="note">'
+                     f'<p class="verdict">Verdict: {_md_inline(n["verdict"])}</p>'
+                     f"{_md_block(n['note'].strip())}</div>")
+
+    parts += [
+        "<h2>Consolidated report</h2>",
+        _md_block(synthesis["summary"].strip()),
+        "<h3>Where the team agreed</h3>",
+        _items(synthesis["agreements"], "(no explicit agreement recorded)"),
+        "<h3>Where the team disagreed</h3>",
+        _items(synthesis["disagreements"], "(no disagreement recorded)"),
+        "<h3>Open questions for you</h3>",
+        _items(synthesis["open_questions"], "(none)"),
+        "<h3>Recommendation</h3>",
+        _md_block(synthesis["recommendation"].strip()),
+        "</body></html>",
+    ]
+    return "\n".join(parts)
 
 
 def cmd_build(args):

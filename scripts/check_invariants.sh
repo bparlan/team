@@ -106,6 +106,25 @@ else
   hard_fail=1
 fi
 
+# 8. Prose citation truth. Report-only: it exits 0 with findings so a
+# false finding cannot stall the pipeline. Tier 1 (existence and range) is
+# the one exception and is enforced by check_doc_truth.py --enforce, which
+# reports its own coverage split and never prints a bare total.
+doc_summary=$(python3 scripts/check_doc_truth.py 2>&1)
+echo "$doc_summary" | grep -E '^(SUMMARY|  TIER1|  TIER3|  SCOPE)' | sed 's/^/  /'
+if echo "$doc_summary" | grep -q 'DRIFT: parser baseline mismatch'; then
+  echo "check 8 FAIL: the citation parser drifted from its frozen baseline"
+  hard_fail=1
+fi
+
+# m4_pending is a non-blocking finding: check 1's safety-layer consumer is
+# still absent and owned by M4. It is read here so the pattern is real --
+# before this, the variable was assigned at :25 and read nowhere, which is
+# a precedent that looks like it works and does not.
+if [ "$m4_pending" -ne 0 ]; then
+  echo "  (non-blocking: check 1 remains open, owner M4; gate exits 0)"
+fi
+
 if [ "$hard_fail" -ne 0 ]; then
   echo "invariant gate FAILED"
   exit 1

@@ -1,0 +1,135 @@
+id: project-convention-infra
+name: Project Convention Infrastructure
+status: awaiting-input
+blocked_on: user-names-one-example-project
+priority: 4
+depends_on: []
+intent: 'A project convention is only real if something checks it. This plan builds the
+  checker side: given one project, establish which conventions it holds, which it claims
+  to hold but does not, and turn the second set into a task that fails.'
+why_this_shape: 'The originating session found the same defect class four times in one repo:
+  AGENTS.md named a file that had moved to archive/; ONBOARDING.md declared markdown-in-reports/
+  a defect while 8 such files existed; a docstring cited a fact its own test disproved;
+  and a rule was documented alongside a test that could not fail. Every one is a claim-vs-reality
+  gap, and every one is mechanically checkable. That is a reusable capability, not a team-specific
+  annoyance.'
+explicitly_out_of_scope:
+- 'Scanning every project under ~/devcode. The user excluded this: only a handful of projects
+  are relevant and the user will name them. A fleet-wide census is a different, larger piece
+  of work and is not started here.'
+- A ROADMAP.md index. Real need, acknowledged separately; it is a content question about
+  this repo, not a convention-checking capability.
+- Rewriting any project's existing documentation. This plan produces a checker and a report.
+  Edits are the owning project's decision.
+decisions:
+- id: one-example-not-a-fleet
+  question: Build against one example project, or survey many first?
+  answer: One, named by the user. Deriving a convention taxonomy from three hand-picked
+    projects produces a scheme that matches the three and is wrong for the rest. One project
+    chosen deliberately -- ideally the median one, neither the tidiest nor a mess -- yields
+    a scheme that generalises because its limits are visible.
+  decided_by: user
+- id: conventions-not-documentation
+  question: Is this an architecture for writing documentation, or for checking it?
+  answer: 'Checking. Prose quality is a judgement call and belongs to doc-truth, which already
+    audits human-facing docs. What is missing everywhere is the mechanical layer: does the
+    file AGENTS.md names exist; does the rule ONBOARDING.md states hold on disk. Same shape
+    as task-contract and prompt-truth, generalised from this repo to any project.'
+  decided_by: analysis
+phases:
+- id: q0-name-the-example
+  name: User names one example project
+  estimated_effort: user input, no engineering
+  steps:
+  - User names the project directory to develop against.
+  - Confirm it has a git history and at least one real code path. A project with no commits
+    cannot demonstrate drift.
+  - Confirm the user accepts that the answer may be 'this project has no conventions'. A
+    checker that reports nothing must be distinguishable from a checker that is not installed.
+  done_when: One absolute path recorded in this file under example_project.
+  rollback: Not applicable; nothing has been built.
+- id: p0-baseline
+  name: Establish what the example project already does
+  depends_on: q0-name-the-example
+  estimated_effort: 1 hour
+  rationale: Read before writing. The failure mode is inventing a taxonomy and then finding
+    the project already had one under another name.
+  steps:
+  - Inventory mechanically which convention files exist (AGENTS.md, ROADMAP.md, docs/, CI
+    config, test config), and what each claims.
+  - For every claim naming a file, path, count or command, test it the way prompt-truth
+    does, and require the referent to exist.
+  - Record what is ABSENT as carefully as what is present. Absent is the interesting half
+    -- it is where a convention would go.
+  done_when: A written inventory separating conventions held, conventions claimed but not
+    held, and conventions absent. Every entry cites the check that produced it.
+  rollback: Read-only; nothing changed.
+- id: p1-derive-the-set
+  name: Decide which conventions are worth checking
+  depends_on: p0-baseline
+  estimated_effort: 1 hour
+  rationale: 'A convention nobody violates needs no checker, and a checker that fires once
+    gets disabled. The bar is: mechanical, and violated often enough to matter.'
+  contract:
+  - Every candidate convention must be mechanically decidable. 'The docs are clear' is not
+    a candidate; 'AGENTS.md names only files that exist' is.
+  - Each must name the failure it prevents. A check that prevents nothing is noise with
+    a maintenance cost.
+  - Anything requiring interpretation is excluded and named as belonging to doc-truth.
+  done_when: A short list, each entry with the check and the failure it prevents. An empty
+    list is a valid and informative outcome.
+  rollback: Nothing built.
+- id: p2-build-the-checker
+  name: One script that runs in any project
+  depends_on: p1-derive-the-set
+  estimated_effort: half a day
+  rationale: One script, not one per project. That is the whole difference between a capability
+    and a chore.
+  contract:
+  - Takes a project root as an argument; hardcodes nothing about the example project.
+  - Exits 0 with findings, like task-contract and prompt-truth. A convention checker that
+    fails closed is one that gets switched off.
+  - Every check ships with a mutation test proving it fires AND a test proving a real compliant
+    shape stays clean. The second half is what stops the checker crying wolf -- the failure
+    that actually happened twice in the originating session.
+  done_when: Run against the example project it reports that project's real state; run against
+    a temporary directory with a known violation it fails, with the failure proven by a
+    test rather than by inspection.
+  rollback: Delete the script and its tests.
+- id: p3-decide-placement
+  name: Decide where this lives
+  depends_on: p2-build-the-checker
+  estimated_effort: decision, not engineering
+  options:
+  - Extend theteam as another task (check-conventions), consistent with task-contract and
+    prompt-truth. Cheapest; one registry to maintain.
+  - A separate package that theteam can invoke. Right if it must apply to projects that
+    do not use theteam at all; wrong if it only ever serves theteam's own ecosystem.
+  done_when: 'One option chosen and recorded here with its reason. Deliberately left as
+    a decision: choosing before p2 exists would be guessing at the shape.'
+verification:
+- command: python -m pytest -q
+  expect: at least 800 passed in theteam, zero failures
+- command: bash scripts/check_invariants.sh
+  expect: invariant gate PASSED
+- command: python scripts/check_task_contract.py .
+  expect: zero findings -- new work must not break the existing checkers
+open_questions_for_user:
+- Which project is the example? Blocking q0.
+- Should this ship as a theteam task or a standalone package? Revisit at p3, once the checker
+  exists and its shape is known.
+notes_for_implementer:
+- 'Four of nine errors in the originating session were false claims about files the author
+  had not opened. Three were caught by the user, one by a mutation test. The cheapest guard
+  is unchanged: verify a factual claim in the same breath you write it, or mark it [UNVERIFIED].'
+- A checker that reports working code as broken gets tuned out and then catches nothing.
+  Both halves of that -- fires on violation, silent on compliance -- are tests, not intentions.
+- Do not start this plan before human-report-surface lands. The boundary rule it establishes
+  is the vocabulary p1 needs, and building both at once means debugging two unfamiliar things
+  at the same time.
+status_meaning: 'Awaiting one input from the user: the absolute path of one example project.
+  This is NOT the same as theteam''s `awaiting` run status -- these files are roadmap artifacts,
+  not registered tasks. The system has no vocabulary for ''plan not started'', so the values
+  used across both plans are: not-started (ready to execute), awaiting-input (cannot begin
+  without a user decision), blocked-on-defect (cannot begin until an external fix lands).
+  Any new value must be added here first.'

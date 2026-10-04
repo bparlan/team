@@ -69,6 +69,14 @@ decisions:
     one project holds would fire false findings everywhere else, so the script would stop
     being project-agnostic and p2's contract would be unachievable as written.
   decided_by: user
+- id: rules-in-a-data-file
+  question: Do the checked conventions live in the script, or in a per-project file?
+  answer: In a per-project data file the script reads. B1. The script carries the mechanism
+    and the project supplies its rules, which is what makes "one script, not one per project"
+    achievable. Baking the rules in (B2) would be a smaller plan, but a convention only one
+    project holds would fire false findings everywhere else, so the script would stop being
+    project-agnostic and p2's contract would be unachievable as written.
+  decided_by: user
 phases:
 - id: q0-name-the-example
   name: User names one example project
@@ -152,12 +160,12 @@ verification:
 - command: python scripts/check_task_contract.py .
   expect: zero findings -- new work must not break the existing checkers
 - command: python scripts/check_conventions.py --project-root <synthetic-project-with-known-violations>
-  expect: names the violation and exits non-zero. The directory shares NO filenames with the
-    example project -- this is the command that proves the script hardcodes nothing, which
+  expect: names the violation and exits non-zero. This directory shares NO filenames with
+    the example project. It is the command that proves the script hardcodes nothing, which
     no theteam-local gate can show.
 - command: python scripts/check_conventions.py --project-root <example-project>
-  expect: reports N checked, M not checkable with M attributed to a named class; never a bare
-    total
+  expect: reports N checked and M not checkable with M attributed to a named class, never
+    a bare total
 open_questions_for_user:
 - Which project is the example? Blocks p0 only. The checker is project-agnostic either way
   -- the example is the subject p0 derives a taxonomy from, not a dependency of the deliverable.
@@ -172,7 +180,9 @@ notes_for_implementer:
 - Do not start this plan before human-report-surface lands. The boundary rule it establishes
   is the vocabulary p1 needs, and building both at once means debugging two unfamiliar things
   at the same time.
-status_meaning: 'Awaiting one input from the user: the absolute path of one example project.
+status_meaning: 'Awaiting one input from the user: the absolute path of one example project,
+  which p0 needs as the subject it derives a taxonomy from. It does NOT block the whole plan
+  -- p1, p2 and p3 never touch it, and the checker p2 builds is project-agnostic by contract.
   This is NOT the same as theteam''s `awaiting` run status -- these files are roadmap artifacts,
   not registered tasks. The system has no vocabulary for ''plan not started'', so the values
   used across both plans are: not-started (ready to execute), awaiting-input (cannot begin
@@ -182,29 +192,24 @@ shared_constraints:
 - Rules live in a per-project data file (B1), never inside the script. The script carries
   the mechanism; the project supplies its rules. Every checker built in the originating session
   hardcoded something -- a path, a filename, an exit code -- and that is the exact failure
-  this constraint exists to stop. A convention added to a project must not require editing
+  this constraint exists to stop. Adding a convention to a project must never require editing
   the script.
 - Report, never gate. Exits 0 with findings, like task-contract and prompt-truth. A checker
   that fails closed on a false finding gets switched off, and a switched-off checker catches
   nothing.
 - Prove both halves. Every check ships with a mutation test proving it fires AND a test proving
   a real compliant shape stays clean. The second half is what stops it crying wolf.
-- Report the checked/not-checkable split, never a bare total. A checker reporting "12 conventions
-  checked" while examining 12 of 12 and saying nothing about the other conventions it could
-  not evaluate is a false all-clear.
-- A convention requiring human interpretation is out of scope and gets named as belonging
-  to doc-truth rather than silently dropped.
+- Report the checked/not-checkable split, never a bare total. "12 conventions checked" while
+  saying nothing about the ones it could not evaluate is a false all-clear.
 risks:
 - - Deriving from one project yields a taxonomy that fits that project.
-  - 'Mitigation: one example chosen so its limits are visible, and every derived rule must
-    be stated as a shape ("AGENTS.md names only files that exist") rather than as a finding
-    about one repo. A rule that could only ever apply to the example is not a convention,
-    it is a coincidence.'
-- - The checker drifts back toward hardcoding, because that is the path of least resistance
-    when a new project needs one more rule.
+  - 'Mitigation: every rule is stated as a shape ("AGENTS.md names only files that exist")
+    rather than as a finding about one repo. A rule that could only apply to the example is
+    a coincidence, not a convention.'
+- - The checker drifts back toward hardcoding, which is the path of least resistance when
+    a new project needs one more rule.
   - 'Mitigation: the data-file constraint above, plus p2''s mutation test proving the script
-    passes on a synthetic project that shares no filenames with the example.'
-- - The example project turns out to have no claimed-but-unheld conventions, and the plan
-    produces nothing.
-  - 'Accepted: the plan says so explicitly ("an empty list is a valid and informative outcome").
-    An hour spent discovering a project needs no checker is a cheap answer, not a failure.'
+    passes on a synthetic project sharing no filenames with the example.'
+- - The example has no claimed-but-unheld conventions and the plan produces nothing.
+  - Accepted. The plan already says an empty list is a valid and informative outcome; an hour
+    spent learning a project needs no checker is a cheap answer.

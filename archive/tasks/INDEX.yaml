@@ -36,9 +36,12 @@ plans:
   one_line: Given one named project, establish which conventions it holds, which it claims
     but does not hold, and make the second set fail a check.
   phases: 5
-  blocked_on: user-names-one-example-project
+  blocked_on: p0-needs-one-example-project
   depends_on_plans:
   - human-report-surface
+  note: Only p0 needs a named example; the checker p2 builds is project-agnostic by contract
+    and reads its rules from a per-project data file. blocked_on moved off file scope because
+    it read as a runtime dependency and stalled the plan for a session.
 - file: system-awareness-injection.yaml
   id: system-awareness-injection
   status: not-started
@@ -159,5 +162,4 @@ phase_entry_points:
   document-citation-truth: p0 -- freeze the measurement. Its first run must reproduce 389/12;
     a mismatch means the parser drifted, not that the docs are wrong.
   system-awareness-injection: p0 -- audit capability claims. Needs no example project.
-  project-convention-infra: BLOCKED at q0. Cannot start until the user names one example
-    project.
+  project-convention-infra: BLOCKED at p0 only. p1, p2 and p3 do not need an example project.

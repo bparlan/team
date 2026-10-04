@@ -158,22 +158,36 @@ def _resolve_cited(root, doc, ref):
 def expected_fragments(prose: str) -> list[str]:
     """Literal strings the prose expects the cited line to contain.
 
-    Tier 3 only works where the prose names something checkable. Three shapes
-    occur in these documents and are extracted mechanically:
+    Tier 3 only works where the prose names something checkable, and the
+    distinction is load-bearing: a *literal* can appear on one line, a
+    *qualified name* cannot.
 
-      `code` inside backticks, adjacent to the citation
-      "a quoted string"
-      def/class NAME() in backticks, which is a symbol the line must define
+      `memory_limit_mb`            literal  -> checked against the span
+      "Insight from {id}"          quoted   -> checked against the span
+      `TaskExecutor.execute_task`  qualified-> NOT checkable; the class and the
+                                    method are on different lines. Stripping
+                                    the qualifier to `execute_task` and
+                                    declaring a mismatch is a fabricated
+                                    finding about a correct citation.
+      `run_llm_phase(a, b)`        signature-> NOT checkable for the same reason
 
-    Anything else yields no fragment, and a claim with no fragment is
-    reported as unverifiable rather than passing. A tier that silently
-    checked nothing would be the same false all-clear this repo has twice.
+    Shapes that are not literals are dropped, and a claim left with none is
+    reported unverifiable rather than passing. A tier that checks nothing
+    silently is the false all-clear this repo has already produced twice.
     """
     out = []
     for frag in re.findall(r"`([^`\n]{2,60})`", prose):
         f = frag.strip()
-        if f and not _looks_like_path(f) and not f.endswith((":", ",", ";", ".")):
-            out.append(f.rstrip("()").split(".")[-1] if f.endswith("()") else f)
+        if not f or _looks_like_path(f):
+            continue
+        if f.endswith((":", ",", ";", ".")):
+            continue
+        body = f.rstrip("()")
+        if "(" in body:            # a call signature, not a literal
+            continue
+        if re.fullmatch(r"[\w.]+\.[\w.]+", body):   # Class.method
+            continue
+        out.append(body)
     for frag in re.findall(r'"([^"\n]{2,60})"', prose):
         out.append(frag)
     return [f for f in out if len(f) >= 3]
@@ -181,6 +195,21 @@ def expected_fragments(prose: str) -> list[str]:
 
 def _looks_like_path(token: str) -> bool:
     return "/" in token or bool(re.search(r"\.(py|md|json|yaml|yml|sh|toml)$", token))
+
+
+#: Prose shapes that assert an ABSENCE: "returns nothing outside X", "no
+#: hardcoded paths". The cited line is supposed NOT to hold the named string,
+#: so a containment check against it is the wrong test -- it would report a
+#: mismatch about a negative it cannot actually evaluate.
+NEGATION_MARKERS = (
+    "returns nothing", "nothing outside", "no hardcoded", "is excluded",
+    "not found", "never ", "cannot", "must not", "does not", "do not",
+)
+
+
+def _is_negation(prose: str) -> bool:
+    low = prose.lower()
+    return any(m in low for m in NEGATION_MARKERS)
 
 
 def content_check(root, doc_text, row) -> dict:
@@ -209,6 +238,11 @@ def content_check(root, doc_text, row) -> dict:
     le = doc_text.find("\n", row["at"])
     le = le if le > 0 else len(doc_text)
     prose = doc_text[ls:le]
+    if _is_negation(prose):
+        # The claim is about what the line does NOT contain. Verifying it
+        # needs the whole file and an inverted containment test; reporting
+        # either way would be a claim the checker cannot stand behind.
+        return {"status": "unverifiable", "reason": "prose asserts an absence"}
     frags = expected_fragments(prose)
     if not frags:
         return {"status": "unverifiable", "reason": "prose names no checkable fragment"}

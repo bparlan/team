@@ -106,12 +106,18 @@ else
   hard_fail=1
 fi
 
-# 8. Prose citation truth. Report-only: it exits 0 with findings so a
-# false finding cannot stall the pipeline. Tier 1 (existence and range) is
-# the one exception and is enforced by check_doc_truth.py --enforce, which
-# reports its own coverage split and never prints a bare total.
-doc_summary=$(python3 scripts/check_doc_truth.py 2>&1)
+# 8. Prose citation truth. Tier 1 (existence and range) is enforced; tiers 2
+# and 3 report only. The split is the plan's, not a preference: all 15 tier-1
+# claims pass today, so enforcing cannot break the tree, while tier 3 is the
+# newest and least proven rule and a false finding there must not stall a
+# build. Tier 3 firing is printed, not fatal.
+doc_summary=$(python3 scripts/check_doc_truth.py --enforce 2>&1)
 echo "$doc_summary" | grep -E '^(SUMMARY|  TIER1|  TIER3|  SCOPE)' | sed 's/^/  /'
+if echo "$doc_summary" | grep -q 'TIER1 FAIL'; then
+  echo "check 8 FAIL: a cited file is missing or a cited line is past EOF"
+  echo "$doc_summary" | grep 'TIER1 FAIL' | sed 's/^/  /'
+  hard_fail=1
+fi
 if echo "$doc_summary" | grep -q 'DRIFT: parser baseline mismatch'; then
   echo "check 8 FAIL: the citation parser drifted from its frozen baseline"
   hard_fail=1

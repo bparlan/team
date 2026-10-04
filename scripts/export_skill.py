@@ -91,8 +91,14 @@ def log(message: str) -> None:
 def run_suite() -> bool:
     """The gate. A failing suite must not produce a production install."""
     log("running the test suite (gate)")
+    # test_skill_export.py is deselected: it asserts the installed copy matches
+    # the repo, and this script is the thing that makes them match. Gating the
+    # resync on its own precondition means a pending resync can never be
+    # performed -- the only fix is the command that is being blocked. It still
+    # runs in the normal suite, where it is the check that matters.
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "theteam/tests/", "-q"],
+        [sys.executable, "-m", "pytest", "theteam/tests/", "-q",
+         "--deselect", "theteam/tests/test_skill_export.py"],
         cwd=str(REPO_ROOT),
         capture_output=True,
         text=True,

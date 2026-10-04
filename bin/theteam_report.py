@@ -45,7 +45,15 @@ import os
 import json
 import glob
 import html as _html
+import re
 from datetime import datetime, timezone
+
+#: Inline markdown the HTML renderer restores after escaping. Applied in this
+#: order: code first, so bold/italic/link never match inside a code span.
+_re_code = re.compile(r"`([^`\n]+)`")
+_re_bold = re.compile(r"\*\*([^*]+)\*\*")
+_re_italic = re.compile(r"(?<!\*)\*([^*\n]+)\*(?!\*)")
+_re_link = re.compile(r"\[([^\]\n]+)\]\(([^)\s]+)\)")
 
 
 def _fatal(code, message):
@@ -280,6 +288,21 @@ def render_html(topic, project, notes, synthesis, now=None):
     return "\n".join(parts)
 
 
+def derive_out_path(out_path, fmt):
+    """One place decides the extension, so the filename cannot disagree with
+    the format it holds. A caller passing --format html and an --out ending
+    in .md gets .html rather than markdown written to an html name, and the
+    markdown default keeps the .md path callers already pass unchanged.
+    """
+    wanted = {"markdown": ".md", "html": ".html"}[fmt]
+    root, ext = os.path.splitext(out_path)
+    if ext.lower() == wanted:
+        return out_path
+    if ext.lower() in (".md", ".markdown", ".html"):
+        return root + wanted
+    return out_path + wanted
+
+
 def cmd_build(args):
     topic = None
     notes_dir = None
@@ -287,6 +310,7 @@ def cmd_build(args):
     out_path = None
     project = None
     expected_ids = None
+    fmt = "markdown"
 
     i = 0
     while i < len(args):
@@ -303,6 +327,8 @@ def cmd_build(args):
             project = args[i + 1]; i += 2
         elif a == "--expected-ids":
             expected_ids = args[i + 1].split(","); i += 2
+        elif a == "--format":
+            fmt = args[i + 1]; i += 2
         else:
             _fatal(1, f"unrecognized argument: {a}")
 
@@ -315,13 +341,19 @@ def cmd_build(args):
     if missing_args:
         sys.stderr.write(
             "usage: theteam_report.py build --topic <t> --notes-dir <d> "
-            "--synthesis <f> --out <o> [--project <p>] [--expected-ids a,b,c]\n"
+            "--synthesis <f> --out <o> [--project <p>] [--format markdown|html] "
+            "[--expected-ids a,b,c]\n"
         )
         sys.exit(1)
+    if fmt not in ("markdown", "html"):
+        _fatal(1, f"unknown --format: {fmt} (expected markdown or html)")
 
     notes = load_notes(notes_dir)
     synthesis = load_synthesis(synthesis_path)
 
+    # The expected-ids gate runs for BOTH formats. It is what catches a
+    # dropped subagent; making it format-conditional would let a report
+    # silently omit a member's view whenever html was requested.
     if expected_ids:
         got_ids = {n["id"] for n in notes}
         missing = [e for e in expected_ids if e not in got_ids]
@@ -334,7 +366,9 @@ def cmd_build(args):
                 "missing member's subagent.",
             )
 
-    report = render(topic, project, notes, synthesis)
+    out_path = derive_out_path(out_path, fmt)
+    report = (render(topic, project, notes, synthesis) if fmt == "markdown"
+              else render_html(topic, project, notes, synthesis))
     os.makedirs(os.path.dirname(os.path.abspath(out_path)) or ".", exist_ok=True)
     if os.path.exists(out_path):
         _fatal(2, f"refusing to overwrite existing report: {out_path}")

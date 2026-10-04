@@ -342,7 +342,8 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
    `agreements`, `disagreements`, `open_questions`, `recommendation`. Be
    honest about disagreement; `"No consensus — see disagreements"` is a
    legitimate recommendation. Do not average away a real split.
-10. **Render the report:**
+10. **Render the report.** Decide the format from who reads it: `--format html`
+   for the user, `--format markdown` (the default) for a machine handoff.
    ```bash
    python3 bin/theteam_report.py build \
      --topic "<topic>" \
@@ -350,8 +351,18 @@ All subsequent steps (pre‑analysis, spawning, synthesis, report) follow from t
      --synthesis /tmp/theteam-synthesis-<timestamp>.json \
      --out "$(pwd)/<output.report_dir from config>/<timestamp>-<slug>.md" \
      --project "<project.name from config>" \
-     --expected-ids <comma-separated ids of every member you spawned>
+     --expected-ids <comma-separated ids of every member you spawned> \
+     --format markdown
    ```
+   Add `--format html` to produce a self-contained `.html` page the user can
+   open in a browser — inline CSS, no scripts, no webfonts, readable in light
+   and dark. Both formats emit the same sections and both run the
+   `--expected-ids` check. The extension is derived from `--format`, so the
+   `.md` you pass is rewritten to `.html` when you ask for html.
+
+   Which directory: html is what a human reads and stays in `reports/`;
+   markdown is a machine handoff and belongs in `reports/.handoff/`.
+
    The `--expected-ids` check is not optional busywork — it's what catches a
    dropped/failed subagent before you present an incomplete report as
    complete. If it fails, fix the actual gap (missing note file, failed

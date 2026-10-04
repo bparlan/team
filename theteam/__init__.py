@@ -943,11 +943,19 @@ def run_discussion(project_root, topic):
     with open(synthesis_file_path, 'w') as f:
         json.dump(synthesis, f, indent=2)
 
-    # Render report
+    # Render report. Format and path are decided together, because the
+    # two-consumer model says the directory decides: HTML is what a human
+    # reads and stays in reports/; markdown is a machine handoff and goes to
+    # reports/.handoff/. Picking the filename without the format is how
+    # markdown ended up in the human directory in the first place.
+    report_format = config["output"].get("report_format", "markdown")
     report_output_dir = os.path.join(project_root, config["output"]["report_dir"])
+    if report_format != "html":
+        report_output_dir = os.path.join(report_output_dir, ".handoff")
     os.makedirs(report_output_dir, exist_ok=True)
-    report_file_name = f"{conversation_id}-discussion-report.md"
-    report_full_path = os.path.join(report_output_dir, report_file_name)
+    report_ext = "html" if report_format == "html" else "md"
+    report_full_path = os.path.join(
+        report_output_dir, f"{conversation_id}-discussion-report.{report_ext}")
 
     report_script_path = os.path.join(os.path.dirname(CURRENT_DIR), "bin", "theteam_report.py")
     expected_ids_str = ",".join(expected_member_ids)
@@ -962,7 +970,8 @@ def run_discussion(project_root, topic):
         "--synthesis", synthesis_file_path,
         "--out", report_full_path,
         "--project", project_name_esc,
-        "--expected-ids", expected_ids_str
+        "--expected-ids", expected_ids_str,
+        "--format", report_format,
     ]
 
     print(f"Building report with command: {' '.join(report_command)}")

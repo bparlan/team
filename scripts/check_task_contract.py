@@ -274,6 +274,38 @@ def _check_task_contract(root, task, findings):
                         "nothing in the script creates it"))
 
 
+
+def _check_human_boundary(root, findings):
+    """reports/ is for humans. Assert that at the directory level.
+
+    ONBOARDING.md states this rule but nothing enforced it: every previous
+    check inspected task-declared outputs and never looked at the directory,
+    so eight hand-dropped markdown files sat in reports/ for weeks behind a
+    passing gate. Scope limit, stated here rather than implied: this checks
+    the shape of the directory. It cannot tell a human's drop-in from a
+    task's output, so it claims nothing about who wrote an .html -- it only
+    asserts .html is what is in there.
+    """
+    reports = root / HUMAN_ROOT
+    if not reports.is_dir():
+        return
+    for path in sorted(reports.iterdir()):
+        if not path.is_file():
+            continue
+        if path.suffix == ".md":
+            findings.append(_finding(
+                HUMAN_ROOT.rstrip("/"), None, "human_surface",
+                f"{HUMAN_ROOT}{path.name} is markdown in the human directory",
+                f"move it to {MACHINE_ROOTS[1]} -- reports/ holds only html, "
+                "which is what a human reads in a browser"))
+        elif path.suffix != ".html":
+            findings.append(_finding(
+                HUMAN_ROOT.rstrip("/"), None, "human_surface",
+                f"{HUMAN_ROOT}{path.name} is neither .html nor .md",
+                f"reports/ holds html for humans and markdown in "
+                f"{MACHINE_ROOTS[1]}; this is neither"))
+
+
 def main(argv):
     root = Path(argv[1] if len(argv) > 1 else ".").resolve()
     tasks_dir = root / "tasks"
@@ -296,6 +328,7 @@ def main(argv):
         checked += 1
         _check_task_contract(root, task, findings)
 
+    _check_human_boundary(root, findings)
     report = {
         "tasks_checked": checked,
         "findings": len(findings),

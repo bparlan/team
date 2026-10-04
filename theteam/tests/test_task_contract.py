@@ -194,5 +194,64 @@ class TestTaskIsRegistered(unittest.TestCase):
             (PROJECT_ROOT / "prompts/task-contract-publish.md").exists())
 
 
+
+class TestHumanBoundary(unittest.TestCase):
+    """reports/ holds only html. Proven both ways: a checker only ever seen
+    firing is not known to detect the compliant shape.
+
+    Scope, stated so no reader over-reads it: this asserts the SHAPE of the
+    directory. It cannot tell a human's drop-in from a task's output, so it
+    makes no claim about which .html is legitimate -- only that reports/
+    contains no markdown and nothing that is neither html nor markdown.
+    """
+
+    def _findings(self, reports_files):
+        namespace = _load_script_module()
+        findings = []
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            reports = root / "reports"
+            reports.mkdir()
+            for name in reports_files:
+                (reports / name).write_text("x", encoding="utf-8")
+            namespace["_check_human_boundary"](root, findings)
+        return findings
+
+    def test_markdown_in_reports_is_a_finding(self):
+        findings = self._findings(["a.html", "orphan.md"])
+        self.assertEqual(len(findings), 1, findings)
+        self.assertEqual(findings[0]["check"], "human_surface")
+        self.assertIn("orphan.md", findings[0]["detail"])
+        self.assertIn(".handoff", findings[0]["fix"])
+
+    def test_non_html_non_md_is_a_finding(self):
+        findings = self._findings(["a.html", "notes.txt"])
+        self.assertEqual(len(findings), 1, findings)
+        self.assertIn("notes.txt", findings[0]["detail"])
+
+    def test_compliant_directory_is_silent(self):
+        self.assertEqual(self._findings(["a.html", "b.html"]), [])
+
+    def test_handoff_subdirectory_is_not_scanned(self):
+        """reports/.handoff/ is the machine side of the split; markdown
+        living there is correct, and the check must stay silent on it."""
+        namespace = _load_script_module()
+        findings = []
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "reports/.handoff").mkdir(parents=True)
+            (root / "reports/a.html").write_text("x", encoding="utf-8")
+            (root / "reports/.handoff/machine.md").write_text("x", encoding="utf-8")
+            namespace["_check_human_boundary"](root, findings)
+        self.assertEqual(findings, [])
+
+    def test_real_reports_directory_is_clean(self):
+        reports = PROJECT_ROOT / "reports"
+        self.assertTrue(reports.is_dir())
+        strays = [p.name for p in reports.iterdir()
+                  if p.is_file() and p.suffix != ".html"]
+        self.assertEqual(strays, [], f"reports/ must hold only .html, found {strays}")
+
+
 if __name__ == "__main__":
     unittest.main()

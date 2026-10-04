@@ -112,9 +112,16 @@ separate from task output:
 | Human reading | `reports/` | one HTML page per task, written only by a `publish` phase | yes |
 
 The last row is the only one meant for you. A markdown file directly under `reports/`
-is a defect: `test_llm_outputs_land_in_one_of_the_two_named_roots` in
-`theteam/tests/test_m9_llm_runner.py` enforces both that rule and the one that only a
-task's final phase may write there.
+is a defect, and two checks enforce it from different directions:
+`test_llm_outputs_land_in_one_of_the_two_named_roots` in
+`theteam/tests/test_m9_llm_runner.py` asserts what a task *writes*, and the
+`human_surface` check in `scripts/check_task_contract.py` asserts the *shape of the
+directory* — no `.md`, and nothing that is neither `.html` nor `.md`.
+
+Know what the directory check does not do: it cannot tell a human's drop-in from a
+task's output, so it makes no claim about which `.html` is legitimate, only that
+`.html` is what is in there. `reports/.handoff/` is deliberately not scanned — markdown
+living there is the rule working, not a violation.
 
 Regenerate it with `PYTHONPATH=theteam python3 theteam/bin/theteam_config.py init ...`, never by
 hand-editing, so validation runs before anything reaches disk.

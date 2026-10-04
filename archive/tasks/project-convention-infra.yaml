@@ -16,40 +16,43 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: awaiting-input. Cannot begin until the user names one example
-# project; see status_meaning for the vocabulary.
+# Status: awaiting-input. Only p0 needs the user to name one example project;
+# p1, p2 and p3 do not, and the checker p2 builds is project-agnostic by
+# contract. A file-level "cannot begin" here read as a runtime dependency on
+# one repo and cost a session. See status_meaning for the vocabulary.
+# Revised: 2026-10-04 -- blocked_on moved from file scope onto p0; B1 chosen
+# (rules live in a per-project data file, never in the script).
 # Authored: 2026-10-04.
 
 id: project-convention-infra
 name: Project Convention Infrastructure
 status: awaiting-input
-blocked_on: user-names-one-example-project
 priority: 4
 depends_on: []
-intent: 'A project convention is only real if something checks it. This plan builds the
-  checker side: given one project, establish which conventions it holds, which it claims
-  to hold but does not, and turn the second set into a task that fails.'
+intent: 'A project convention is only real if something checks it. This plan builds the checker
+  side: given one project, establish which conventions it holds, which it claims to hold but
+  does not, and turn the second set into a task that fails.'
 why_this_shape: 'The originating session found the same defect class four times in one repo:
   AGENTS.md named a file that had moved to archive/; ONBOARDING.md declared markdown-in-reports/
-  a defect while 8 such files existed; a docstring cited a fact its own test disproved;
-  and a rule was documented alongside a test that could not fail. Every one is a claim-vs-reality
+  a defect while 8 such files existed; a docstring cited a fact its own test disproved; and
+  a rule was documented alongside a test that could not fail. Every one is a claim-vs-reality
   gap, and every one is mechanically checkable. That is a reusable capability, not a team-specific
   annoyance.'
 explicitly_out_of_scope:
 - 'Scanning every project under ~/devcode. The user excluded this: only a handful of projects
   are relevant and the user will name them. A fleet-wide census is a different, larger piece
   of work and is not started here.'
-- A ROADMAP.md index. Real need, acknowledged separately; it is a content question about
-  this repo, not a convention-checking capability.
+- A ROADMAP.md index. Real need, acknowledged separately; it is a content question about this
+  repo, not a convention-checking capability.
 - Rewriting any project's existing documentation. This plan produces a checker and a report.
   Edits are the owning project's decision.
 decisions:
 - id: one-example-not-a-fleet
   question: Build against one example project, or survey many first?
-  answer: One, named by the user. Deriving a convention taxonomy from three hand-picked
-    projects produces a scheme that matches the three and is wrong for the rest. One project
-    chosen deliberately -- ideally the median one, neither the tidiest nor a mess -- yields
-    a scheme that generalises because its limits are visible.
+  answer: One, named by the user. Deriving a convention taxonomy from three hand-picked projects
+    produces a scheme that matches the three and is wrong for the rest. One project chosen
+    deliberately -- ideally the median one, neither the tidiest nor a mess -- yields a scheme
+    that generalises because its limits are visible.
   decided_by: user
 - id: conventions-not-documentation
   question: Is this an architecture for writing documentation, or for checking it?
@@ -58,6 +61,14 @@ decisions:
     file AGENTS.md names exist; does the rule ONBOARDING.md states hold on disk. Same shape
     as task-contract and prompt-truth, generalised from this repo to any project.'
   decided_by: analysis
+- id: rules-in-a-data-file
+  question: Do the checked conventions live in the script, or in a per-project file?
+  answer: In a per-project data file the script reads. B1. The script carries the mechanism
+    and the project supplies its rules, which is what makes "one script, not one per project"
+    achievable. Baking the rules in (B2) would be a much smaller plan, but a convention only
+    one project holds would fire false findings everywhere else, so the script would stop
+    being project-agnostic and p2's contract would be unachievable as written.
+  decided_by: user
 phases:
 - id: q0-name-the-example
   name: User names one example project
@@ -66,9 +77,11 @@ phases:
   - User names the project directory to develop against.
   - Confirm it has a git history and at least one real code path. A project with no commits
     cannot demonstrate drift.
-  - Confirm the user accepts that the answer may be 'this project has no conventions'. A
-    checker that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: One absolute path recorded in this file under example_project.
+  - Confirm the user accepts that the answer may be 'this project has no conventions'. A checker
+    that reports nothing must be distinguishable from a checker that is not installed.
+  done_when: One absolute path recorded in this file under example_project, written through
+    yaml.safe_load/safe_dump like every other edit here. The key does not exist until this
+    phase completes.
   rollback: Not applicable; nothing has been built.
 - id: p0-baseline
   name: Establish what the example project already does
@@ -79,13 +92,14 @@ phases:
   steps:
   - Inventory mechanically which convention files exist (AGENTS.md, ROADMAP.md, docs/, CI
     config, test config), and what each claims.
-  - For every claim naming a file, path, count or command, test it the way prompt-truth
-    does, and require the referent to exist.
+  - For every claim naming a file, path, count or command, test it the way prompt-truth does,
+    and require the referent to exist.
   - Record what is ABSENT as carefully as what is present. Absent is the interesting half
     -- it is where a convention would go.
   done_when: A written inventory separating conventions held, conventions claimed but not
     held, and conventions absent. Every entry cites the check that produced it.
   rollback: Read-only; nothing changed.
+  blocked_on: user-names-one-example-project
 - id: p1-derive-the-set
   name: Decide which conventions are worth checking
   depends_on: p0-baseline
@@ -95,8 +109,8 @@ phases:
   contract:
   - Every candidate convention must be mechanically decidable. 'The docs are clear' is not
     a candidate; 'AGENTS.md names only files that exist' is.
-  - Each must name the failure it prevents. A check that prevents nothing is noise with
-    a maintenance cost.
+  - Each must name the failure it prevents. A check that prevents nothing is noise with a
+    maintenance cost.
   - Anything requiring interpretation is excluded and named as belonging to doc-truth.
   done_when: A short list, each entry with the check and the failure it prevents. An empty
     list is a valid and informative outcome.
@@ -115,8 +129,8 @@ phases:
     shape stays clean. The second half is what stops the checker crying wolf -- the failure
     that actually happened twice in the originating session.
   done_when: Run against the example project it reports that project's real state; run against
-    a temporary directory with a known violation it fails, with the failure proven by a
-    test rather than by inspection.
+    a temporary directory with a known violation it fails, with the failure proven by a test
+    rather than by inspection.
   rollback: Delete the script and its tests.
 - id: p3-decide-placement
   name: Decide where this lives
@@ -125,27 +139,36 @@ phases:
   options:
   - Extend theteam as another task (check-conventions), consistent with task-contract and
     prompt-truth. Cheapest; one registry to maintain.
-  - A separate package that theteam can invoke. Right if it must apply to projects that
-    do not use theteam at all; wrong if it only ever serves theteam's own ecosystem.
-  done_when: 'One option chosen and recorded here with its reason. Deliberately left as
-    a decision: choosing before p2 exists would be guessing at the shape.'
+  - A separate package that theteam can invoke. Right if it must apply to projects that do
+    not use theteam at all; wrong if it only ever serves theteam's own ecosystem.
+  done_when: 'One option chosen and recorded here with its reason. Deliberately left as a
+    decision: choosing before p2 exists would be guessing at the shape.'
 verification:
 - command: python -m pytest -q
-  expect: at least 800 passed in theteam, zero failures
+  expect: at least 810 passed in theteam, zero failures -- new work must not break the existing
+    suite
 - command: bash scripts/check_invariants.sh
   expect: invariant gate PASSED
 - command: python scripts/check_task_contract.py .
   expect: zero findings -- new work must not break the existing checkers
+- command: python scripts/check_conventions.py --project-root <synthetic-project-with-known-violations>
+  expect: names the violation and exits non-zero. The directory shares NO filenames with the
+    example project -- this is the command that proves the script hardcodes nothing, which
+    no theteam-local gate can show.
+- command: python scripts/check_conventions.py --project-root <example-project>
+  expect: reports N checked, M not checkable with M attributed to a named class; never a bare
+    total
 open_questions_for_user:
-- Which project is the example? Blocking q0.
+- Which project is the example? Blocks p0 only. The checker is project-agnostic either way
+  -- the example is the subject p0 derives a taxonomy from, not a dependency of the deliverable.
 - Should this ship as a theteam task or a standalone package? Revisit at p3, once the checker
   exists and its shape is known.
 notes_for_implementer:
 - 'Four of nine errors in the originating session were false claims about files the author
   had not opened. Three were caught by the user, one by a mutation test. The cheapest guard
   is unchanged: verify a factual claim in the same breath you write it, or mark it [UNVERIFIED].'
-- A checker that reports working code as broken gets tuned out and then catches nothing.
-  Both halves of that -- fires on violation, silent on compliance -- are tests, not intentions.
+- A checker that reports working code as broken gets tuned out and then catches nothing. Both
+  halves of that -- fires on violation, silent on compliance -- are tests, not intentions.
 - Do not start this plan before human-report-surface lands. The boundary rule it establishes
   is the vocabulary p1 needs, and building both at once means debugging two unfamiliar things
   at the same time.
@@ -155,3 +178,33 @@ status_meaning: 'Awaiting one input from the user: the absolute path of one exam
   used across both plans are: not-started (ready to execute), awaiting-input (cannot begin
   without a user decision), blocked-on-defect (cannot begin until an external fix lands).
   Any new value must be added here first.'
+shared_constraints:
+- Rules live in a per-project data file (B1), never inside the script. The script carries
+  the mechanism; the project supplies its rules. Every checker built in the originating session
+  hardcoded something -- a path, a filename, an exit code -- and that is the exact failure
+  this constraint exists to stop. A convention added to a project must not require editing
+  the script.
+- Report, never gate. Exits 0 with findings, like task-contract and prompt-truth. A checker
+  that fails closed on a false finding gets switched off, and a switched-off checker catches
+  nothing.
+- Prove both halves. Every check ships with a mutation test proving it fires AND a test proving
+  a real compliant shape stays clean. The second half is what stops it crying wolf.
+- Report the checked/not-checkable split, never a bare total. A checker reporting "12 conventions
+  checked" while examining 12 of 12 and saying nothing about the other conventions it could
+  not evaluate is a false all-clear.
+- A convention requiring human interpretation is out of scope and gets named as belonging
+  to doc-truth rather than silently dropped.
+risks:
+- - Deriving from one project yields a taxonomy that fits that project.
+  - 'Mitigation: one example chosen so its limits are visible, and every derived rule must
+    be stated as a shape ("AGENTS.md names only files that exist") rather than as a finding
+    about one repo. A rule that could only ever apply to the example is not a convention,
+    it is a coincidence.'
+- - The checker drifts back toward hardcoding, because that is the path of least resistance
+    when a new project needs one more rule.
+  - 'Mitigation: the data-file constraint above, plus p2''s mutation test proving the script
+    passes on a synthetic project that shares no filenames with the example.'
+- - The example project turns out to have no claimed-but-unheld conventions, and the plan
+    produces nothing.
+  - 'Accepted: the plan says so explicitly ("an empty list is a valid and informative outcome").
+    An hour spent discovering a project needs no checker is a cheap answer, not a failure.'

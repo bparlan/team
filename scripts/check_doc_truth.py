@@ -212,6 +212,29 @@ def _is_negation(prose: str) -> bool:
     return any(m in low for m in NEGATION_MARKERS)
 
 
+#: A heading that names a removal. ARCHITECTURE.md's "### Delete" table
+#: under "## M0 -- The team cannot lie" cites `MockAPI` at
+#: `theteam/__init__.py:4-18`: code that was there and is deliberately gone.
+#: Checking such a citation against today's file reports a mismatch about a
+#: historical record -- a false finding, because the number was right when
+#: written and the code it names is supposed to be absent.
+#:
+#: Deliberately keyed on the word "Delete", NOT on "## M<n>". A milestone
+#: heading does not say whether it shipped -- M4 is still open in this same
+#: document -- so exempting every M-numbered section would silently stop
+#: checking the milestones that have not landed yet. A checker that stops
+#: checking is the false all-clear this milestone exists to remove.
+REMOVAL_HEADING = re.compile(r"^#{2,4}\s+Delete\b", re.MULTILINE)
+
+
+def _is_removal_record(doc_text: str, offset: int) -> bool:
+    """True when `offset` falls under a "Delete" heading."""
+    last = None
+    for m in REMOVAL_HEADING.finditer(doc_text[:offset]):
+        last = m
+    return last is not None
+
+
 def content_check(root, doc_text, row) -> dict:
     """Does the cited line hold the fragment the prose expects?
 

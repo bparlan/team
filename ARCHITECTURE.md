@@ -735,7 +735,7 @@ task would wait on `p`, `r`, `o`, `j` forever.
 
 
 Validation runs on write. `TaskRepository` rejects a phase without
-`memory_limit_mb` at the write that creates it (`tasks/repository.py:72-80`), and
+`memory_limit_mb` at the write that creates it (`tasks/repository.py:93-100`), and
 `theteam run` reports a task whose `script` is missing rather than silently
 skipping it as a success. The line that said `executor.py:22-24` discovers this
 mid-loop named imports, not validation; that pointer was stale.

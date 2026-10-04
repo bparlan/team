@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>theteam — code reality vs. declared architecture</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a21; --line:#252b36; --fg:#dfe4ec; --dim:#8f9aab;
+    --ok:#4ec9a0; --warn:#e0b341; --bad:#e5695f; --info:#6aa9e0; --accent:#b48ead;
+  }
+  @media (prefers-color-scheme: light){
+    :root{ --bg:#f7f8fa; --panel:#fff; --line:#e2e6ec; --fg:#1b2029; --dim:#5c6779;
+           --ok:#1a7f5a; --warn:#8a6100; --bad:#b0342a; --info:#1f5f9e; --accent:#7a4f86; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:15px/1.62 ui-sans-serif,-apple-system,"SF Pro Text",Segoe UI,Roboto,sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 24px 96px}
+  h1{font-size:26px;margin:0 0 6px;letter-spacing:-.2px}
+  h2{font-size:19px;margin:44px 0 12px;padding-top:14px;border-top:1px solid var(--line)}
+  h3{font-size:15px;margin:22px 0 8px;color:var(--dim);text-transform:uppercase;letter-spacing:.09em}
+  p,li{color:var(--fg)}
+  .sub{color:var(--dim);margin:0 0 22px}
+  code,kbd,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.87em}
+  code{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em}
+  tbody tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:11px;
+       font-weight:600;letter-spacing:.04em;white-space:nowrap}
+  .t-hold{background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+  .t-drift{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+  .t-bad{background:color-mix(in srgb,var(--bad) 18%,transparent);color:var(--bad)}
+  .t-info{background:color-mix(in srgb,var(--info) 18%,transparent);color:var(--info)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:14px 0}
+  .card.bad{border-left:3px solid var(--bad)}
+  .card.warn{border-left:3px solid var(--warn)}
+  .card.ok{border-left:3px solid var(--ok)}
+  .card.info{border-left:3px solid var(--info)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:18px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+  .stat .n{font-size:24px;font-weight:650;line-height:1.2}
+  .stat .l{color:var(--dim);font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;margin-top:3px}
+  .n-ok{color:var(--ok)} .n-warn{color:var(--warn)} .n-bad{color:var(--bad)} .n-info{color:var(--info)}
+  .why{color:var(--dim);font-size:13.5px;margin-top:8px;padding-left:12px;border-left:2px solid var(--line)}
+  .why b{color:var(--fg);font-weight:600}
+  .anchor{color:var(--info);text-decoration:none;border-bottom:1px dotted var(--info)}
+  ol,ul{padding-left:22px} li{margin:5px 0}
+  .meta{color:var(--dim);font-size:12.5px;margin-top:26px;padding-top:14px;border-top:1px solid var(--line)}
+  details{margin:8px 0}
+  summary{cursor:pointer;color:var(--info);font-size:13.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>theteam: code reality vs. declared architecture</h1>
+<p class="sub">Project-wide analysis &middot; 2026-10-04 &middot; measured against <code>main</code> @ <code>02b8b76</code></p>
+
+<div class="grid">
+  <div class="stat"><div class="n n-ok">5<span style="font-size:14px;color:var(--dim)">/14</span></div><div class="l">diagram citations exact</div></div>
+  <div class="stat"><div class="n n-ok">13<span style="font-size:14px;color:var(--dim)">/13</span></div><div class="l">diagram edges real</div></div>
+  <div class="stat"><div class="n n-warn">14<span style="font-size:14px;color:var(--dim)">/14</span></div><div class="l">anchors drifted</div></div>
+  <div class="stat"><div class="n n-ok">7<span style="font-size:14px;color:var(--dim)">/10</span></div><div class="l">invariants enforced</div></div>
+  <div class="stat"><div class="n n-bad">1</div><div class="l">layer contract violated</div></div>
+</div>
+
+<div class="card ok">
+<b>Shape is sound. Provenance is not.</b> Every architectural relationship the diagrams assert
+— all 13 edges — is real and verified against the source. Every module
+<code>ARCHITECTURE.md</code> assigns exists, and all 20 <code>core/</code> modules have a live or
+correctly-documented importer story. What has decayed is <i>traceability</i>: line-number citations,
+content anchors, and the gate that should catch either drifting.
+</div>
+
+<h2>1. Method</h2>
+<p>Three independent measurements, so the numbers are comparable to <code>ARCHITECTURE.md</code> §5.2.1's own claim of having used "an AST scan for imports at any nesting level plus a runtime <code>sys.modules</code> check across all three entry points."</p>
+<ul>
+  <li><b>AST import scan</b> — 97 modules, 155 in-package edges, imports at any nesting level.</li>
+  <li><b>Runtime <code>sys.modules</code></b> — what <code>import theteam</code> actually loads, plus every lazy re-export resolved.</li>
+  <li><b>Symbol resolution</b> — each cited <code>file:line</code> checked against the real <code>def</code>/<code>class</code> line, and each cited file's blob hash against <code>git hash-object</code>.</li>
+</ul>
+<p>The architecture gate was run, not assumed: <code>bash scripts/check_invariants.sh</code> → <b>PASSED</b> (7 checks). <code>scripts/check_import_graph.py</code> → 88 modules (budget 90), 7 of 7 <code>theteam.core.*</code> (budget 8), no cluster tier. Suite: <b>800 passed</b>.</p>
+
+<h2>2. Architecture diagram — shape right, citations stale</h2>
+
+<h3>2.1 Citation accuracy (<code>diagrams/active-usage-architecture.json</code>)</h3>
+<table>
+<thead><tr><th>Node</th><th>Cited</th><th>Actual</th><th>Δ</th><th>Verdict</th></tr></thead>
+<tbody>
+<tr><td><code>selector</code></td><td>selector.py:191</td><td>191</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
+<tr><td><code>commentary_controller</code></td><td>commentary.py:111</td><td>111</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
+<tr><td><code>state_store</code></td><td>state.py:35</td><td>35</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
+<tr><td><code>task_scheduler</code></td><td>scheduler.py:32</td><td>32</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
+<tr><td><code>session</code></td><td>SKILL.md:117</td><td>line exists</td><td>—</td><td><span class="tag t-hold">exact</span></td></tr>
+<tr><td><code>discussion</code></td><td>__init__.py:690</td><td>710</td><td>+20</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>task_repository</code></td><td>repository.py:123</td><td>144</td><td>+21</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>task_executor</code></td><td>executor.py:57</td><td>77</td><td>+20</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>context_slice</code></td><td>context_slice.py:90</td><td>128</td><td>+38</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>circuit_breaker</code></td><td>circuit_breaker.py:1</td><td>55</td><td>+54</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>llm_runner</code></td><td>llm.py:82</td><td>190</td><td>+108</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>agent_isolation</code></td><td>agent_isolation.py:1</td><td>152</td><td>+151</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>team_manager</code></td><td>manager.py:1</td><td>133</td><td>+132</td><td><span class="tag t-drift">drifted</span></td></tr>
+<tr><td><code>theteam_cli</code></td><td>cli.py:604</td><td>1203</td><td>+599</td><td><span class="tag t-bad">drifted</span></td></tr>
+</tbody>
+</table>
+
+<div class="card warn">
+<b>Drift is monotonic in one direction.</b> Every drift is <i>positive</i> — the symbol moved down the file,
+never up. That is the signature of insertions above a definition, not of a wrong reference. No citation points
+at a line that no longer holds its symbol.
+<div class="why"><b>Therefore:</b> the diagram is describing the correct architecture; it is pointing at the
+wrong line of the correct file. This is a cheap class of drift — regenerable — and it is exactly what the
+anchors file was supposed to catch.</div>
+</div>
+
+<h3>2.2 Edge verification</h3>
+<p>All 13 connections were checked by resolving the target symbol or module in the source module's body.
+<b>13/13 are real.</b> The one edge my first verifier flagged as unproven — <code>selector → commentary_controller</code> —
+is real and I was wrong: <code>advisory/commentary.py:31</code> imports <code>select_members</code> and
+<code>:228</code> calls it. The edge is correct; my lookup searched the wrong module for it.</p>
+<p>The two boundary edges (<code>llm_runner → session</code>, <code>member → output</code>) cross the process
+boundary and are documented as such in <code>README.md:116</code>.</p>
+
+<h2>3. Anchors — the mechanism that should have caught this, and does not</h2>
+<p><code>diagrams/active-usage-architecture.anchors.json</code> records a content hash for each of the 14 cited
+files, plus the revision it was generated from.</p>
+<div class="card bad">
+<b>All 14 hashes have drifted.</b> Anchored at <code>ca3673bf</code>; <code>HEAD</code> is <code>02b8b76</code>.
+Not one cited file still matches.
+<p style="margin:8px 0 0">The anchor records <i>whole-file</i> hashes, so it is a change detector, not a citation
+checker — any edit anywhere trips it, and it says nothing about whether line 604 still holds
+<code>build_parser</code>. It is a coarser instrument than the thing it was meant to protect, and nothing runs it.</p>
+</div>
+<div class="why"><b>Consequence:</b> the file that exists precisely to detect architectural drift is itself
+undetectable drift, because no script reads it. <code>scripts/check_invariants.sh</code> has 7 checks;
+none touches <code>diagrams/</code>. There is no <code>prompt-truth</code>-style gate for diagrams, which
+is the same gap that plan closed for prompts.</div>
+
+<h2>4. Where the code contradicts the document</h2>
+
+<h3>4.1 Layer 0 contract is violated by the CLI — <span class="tag t-bad">defect</span></h3>
+<div class="card bad">
+<p><code>ARCHITECTURE.md:459</code> defines Layer 0 (Entry) as owning "argument parsing, exit codes, JSON output"
+and requiring it <b>"must not know about any domain object."</b></p>
+<p><code>theteam/cli.py</code> references six domain symbols directly:
+<code>TaskRepository</code>, <code>TaskExecutor</code>, <code>TaskScheduler</code>,
+<code>StateStore</code>, <code>CircuitBreaker</code>, <code>run_discussion</code>.</p>
+<div class="why"><b>Reason — the doc describes an intent that was never completed.</b> §2.3 shows the pattern
+being applied where it mattered: <code>run_due_tasks()</code> was "extracted out of <code>cmd_run</code>
+rather than duplicated into <code>serve</code>" precisely so the scheduler would not import the CLI. The same
+discipline was never applied to the other 11 commands. Layer 0 is an aspiration in §5.1 and a description
+of practice nowhere else. This is the same class as the <code>health_monitor.py</code> finding at §5.2.1 —
+documented honestly, but recorded as "open work" rather than as a contract breach.</div>
+</div>
+
+<h3>4.2 <code>import theteam</code> contradicts its own comment — <span class="tag t-drift">stale</span></h3>
+<div class="card warn">
+<p><code>theteam/__init__.py:30-33</code> states that importing <code>theteam.core.state_manager</code>
+"loads <code>database</code>, which loads the PostgreSQL cluster/wal/transaction modules", so every
+<code>import theteam</code> pulled a database tier §5.1 never placed in the stack.</p>
+<p>Measured <code>sys.modules</code> after a bare <code>import theteam</code>:
+<code>database</code> <b>is</b> loaded — but <code>postgres_cluster</code> is <b>not</b>. The chain stops one
+link short of what the comment claims.</p>
+<div class="why"><b>Reason:</b> <code>database.py</code> now imports <code>postgres_cluster</code> at point
+of use rather than module scope — which is exactly the fix §5.2.1 describes ("Imported at point of use by
+<code>database.py</code>"). The comment documenting the <i>defect</i> was never updated to record that the
+defect is fixed. The comment is correct about the past and wrong about the present, and it is the first thing
+a reader meets when reasoning about the import graph.</div>
+</div>
+
+<h3>4.3 Two packages are empty and tracked — <span class="tag t-drift">orphan</span></h3>
+<div class="card warn">
+<p><code>theteam/skill/</code> and <code>theteam/automation/</code> contain no files and are tracked.
+<code>theteam/skill/</code> is the residue of <code>skill/SKILL_metadata.py</code>, deleted in M10. Neither is
+named in §5.2. §5.3.1 tracks one orphaned directory (<code>config/routine-engine/</code>) as "not removed,
+with the reason" — these two have no such entry.</p>
+<div class="why"><b>Reason:</b> M10's deletion pass removed files, not the directories they emptied.
+The cost is low but the precedent matters: §5.3.1's rule is "an orphan is recorded with a reason," and
+these are unrecorded.</div>
+</div>
+
+<h2>5. Where the document is right and the diagram is stale</h2>
+<div class="card ok">
+<p><b>The milestones pair is out of sync — and <code>ARCHITECTURE.md:11-24</code> already says so, accurately.</b></p>
+<p>The committed <code>active-usage-milestones.json</code> carries 11 nodes (<code>m0</code>–<code>m10</code>);
+the committed <code>.html</code> renders 7 (<code>m0</code>–<code>m6</code>). The document's claim that
+"<code>archify validate workflow</code> now fails on that committed source as-is" is <b>verified correct</b>:
+the node-count mismatch is exactly as described.</p>
+<p>The document also correctly reports that the architecture pair <i>is</i> synced and <code>validate</code>
+returns <code>ok: true</code>. That claim is now falsified in the useful direction — the JSON is synced to the
+code, but the line citations inside it are not (§2.1).</p>
+</div>
+
+<div class="card info">
+<p><b>Part 8's fabricated-component verdict holds up.</b> The document lists
+<code>MetricsStore</code>, <code>Alerting</code>, <code>ConfigStore</code>, <code>ToolManifest</code>,
+<code>AgentRegistry</code>, <code>theteam_cli</code> as absent from the tree. Independent AST + grep
+confirms none exists. The 2026-09-29 correction — <code>StateStore</code> is real and load-bearing at
+<code>state.py:35</code> — is also correct, and it is the one cited node that is still exact.</p>
+<p>That <code>theteam_cli</code> was once listed as fabricated is worth noting: it is now a real node in the
+live diagram. The doc records that correction and the diagram has since moved past it.</p>
+</div>
+
+<h2>6. Invariant coverage: the gate checks 7 of 10</h2>
+<table>
+<thead><tr><th>#</th><th>Invariant (§7.2)</th><th>Enforced?</th><th>Note</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>Safety layer has a consumer in <code>tasks/</code></td><td><span class="tag t-hold">yes</span></td><td>import + call, AST-matched</td></tr>
+<tr><td>2</td><td>No bare <code>subprocess</code> in Layer 3</td><td><span class="tag t-hold">yes</span></td><td>AST, not grep</td></tr>
+<tr><td>3</td><td>No hardcoded developer paths</td><td><span class="tag t-hold">yes</span></td><td>carve-out documented at :38-45</td></tr>
+<tr><td>4</td><td>No <code>parents[</code> index trickery</td><td><span class="tag t-hold">yes</span></td><td>—</td></tr>
+<tr><td>5</td><td>No <code>.mp/theteam</code> outside the guard</td><td><span class="tag t-hold">yes</span></td><td>line-number pinning removed, correctly</td></tr>
+<tr><td>6</td><td>No <code>MockAPI</code></td><td><span class="tag t-hold">yes</span></td><td>AST</td></tr>
+<tr><td>7</td><td>Import graph of entry point</td><td><span class="tag t-hold">yes</span></td><td>88/90, 7/8 — measured, not grepped</td></tr>
+<tr><td>8</td><td>Layer 3 has no unguarded <code>subprocess</code></td><td><span class="tag t-drift">no</span></td><td><b>is check 2</b> — superseded, doc still numbers it separately</td></tr>
+<tr><td>9</td><td>No <code>rich</code> import</td><td><span class="tag t-bad">no</span></td><td><b>unenforced.</b> Currently true; nothing keeps it true. §5.2 calls it a CI-green/red hazard.</td></tr>
+<tr><td>10</td><td><code>check_import_graph.py</code> exits 0</td><td><span class="tag t-bad">no</span></td><td><b>is gate check 7</b> — the numbering diverged</td></tr>
+</tbody>
+</table>
+<div class="card warn">
+<b>Only invariant 9 is genuinely unenforced.</b> 8 and 10 exist under different numbers (the gate
+renumbered when it absorbed them), so the doc's list is misleading rather than incomplete — a reader
+comparing counts concludes three are missing when one is.
+<div class="why"><b>Reason:</b> §5.2 says <code>rich</code> "is installed in one developer's pyenv transitively
+and declared nowhere, so a module-scope import of it is green locally and red in CI." That is a defect
+waiting to happen, documented as a fact with no check behind it. Given the repo already ships
+<code>check_call_sites.py</code>, adding this is a one-line call — and it is the cheapest unforced invariant.</div>
+</div>
+
+<h2>7. Report surface</h2>
+<div class="card info">
+<p><code>run_discussion</code> writes <code>{conversation_id}-discussion-report.md</code> into
+<code>.omp/theteam/reports/</code> (<code>__init__.py:513,947-950</code>; <code>SKILL.md:351</code> repeats it).</p>
+<p>That is the most user-facing artifact the product produces, in Markdown, into a dot-directory. Meanwhile the
+tracked human surface <code>reports/</code> holds <b>1 HTML</b> and <b>8 Markdown</b> files — violating the
+rule documented at <code>ONBOARDING.md:114</code>. The invariant test only checks task-declared outputs, so
+these 8 pass.</p>
+<p>This is exactly the <code>human-report-surface.yaml</code> plan in <code>archive/tasks/</code>, already
+written and waiting. p2 of that plan is the 15-minute phase that moves the 8 files.</p>
+</div>
+
+<h2>8. Assessment</h2>
+<table>
+<thead><tr><th>Dimension</th><th>State</th><th>Evidence</th></tr></thead>
+<tbody>
+<tr><td>Module inventory</td><td><span class="tag t-hold">accurate</span></td><td>20/20 core modules assigned; 0 disagreements</td></tr>
+<tr><td>Import graph</td><td><span class="tag t-hold">accurate</span></td><td>97 modules, 155 edges, no unexpected importer</td></tr>
+<tr><td>Diagram shape</td><td><span class="tag t-hold">accurate</span></td><td>13/13 edges real</td></tr>
+<tr><td>Layering (downward)</td><td><span class="tag t-hold">holds</span></td><td>executor.py never imports advisory; terminal.py reaches only core + monitor</td></tr>
+<tr><td>Layer 0 contract</td><td><span class="tag t-bad">violated</span></td><td>6 domain symbols in cli.py</td></tr>
+<tr><td>Line citations</td><td><span class="tag t-bad">stale</span></td><td>9/14 drifted, all monotonic</td></tr>
+<tr><td>Anchor hashes</td><td><span class="tag t-bad">stale</span></td><td>14/14 drifted; nothing reads the file</td></tr>
+<tr><td>Invariant enforcement</td><td><span class="tag t-drift">partial</span></td><td>6 of 10 numbered invariants enforced as written</td></tr>
+<tr><td>Milestone pair</td><td><span class="tag t-drift">out of sync</span></td><td>JSON 11 nodes vs HTML 7 — documented, tool-blocked</td></tr>
+<tr><td>Orphaned dirs</td><td><span class="tag t-drift">unrecorded</span></td><td><code>theteam/skill/</code>, <code>theteam/automation/</code></td></tr>
+</tbody>
+</table>
+
+<div class="card info">
+<b>The pattern across every finding is the same:</b> someone measured correctly, wrote the finding down, and
+then nothing kept the measurement current. The doc knows the milestone pair is stale; the comment knows the
+import chain changed; §5.2.1 knows <code>event_bus</code> and <code>health_monitor</code> have no importer.
+<i>The knowledge is in the repo. The enforcement is not.</i>
+<div class="why">This is precisely the failure mode <code>prompt-truth.yaml</code> and
+<code>task-contract.yaml</code> were written to close on the prompt and task surfaces — and the diagram
+surface has no equivalent. A <code>check_diagram_truth.py</code> that resolves each cited
+<code>file:line</code> to its named symbol is the direct analogue, and the task registry already has the
+shape for it.</div>
+</div>
+
+<h3>Ranked by cost of being wrong</h3>
+<ol>
+  <li><b>Enforce invariant 9 (<code>rich</code>)</b> — one line, blocks a documented CI hazard.</li>
+  <li><b>Add a diagram-truth check</b> — resolves 9 stale citations and prevents the next 9.</li>
+  <li><b>Fix <code>__init__.py:30-33</code></b> — a comment that misstates the import graph misleads every reader who reasons from it.</li>
+  <li><b>Record or remove the two empty packages</b> — §5.3.1 requires a reason; there is none.</li>
+  <li><b>Layer 0</b> — largest, and genuinely a design question rather than a defect to fix.</li>
+</ol>
+
+<p class="meta">Measured 2026-10-04 on <code>main</code> @ <code>02b8b76</code> · suite 800 passed ·
+invariant gate PASSED · no source file was modified to produce this report</p>
+
+</div>
+</body>
+</html>

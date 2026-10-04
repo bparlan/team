@@ -68,6 +68,9 @@ from check_diagram_truth import resolve_symbol
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DIAGRAM_DIR = REPO_ROOT / "diagrams"
 SIDECAR_SUFFIX = ".anchors.json"
+#: An evidence receipt, not a diagram. Excluded from _diagram_paths() for the
+#: same reason as the sidecar: it is not something the anchor gate evaluates.
+VISUAL_CHECK_SUFFIX = ".visual-check.json"
 
 OK = 0
 BROKEN_INPUT = 1
@@ -134,11 +137,14 @@ def _report(lines: list[str], name: str = "update-team") -> None:
             "\n".join(lines) + "\n")
 
 def record() -> int:
-    """Write the sidecar for every diagram that carries source anchors."""
+    """Write the sidecar for every diagram that carries source anchors.
+
+    Iterates _diagram_paths(), not glob('*.json'), for the same reason
+    check() does: a sidecar is not a diagram, and recording one would write
+    'active-usage-architecture.anchors.anchors.json' beside it.
+    """
     written = 0
-    for diagram_path in sorted(DIAGRAM_DIR.glob("*.json")):
-        if diagram_path.name.startswith("."):
-            continue
+    for diagram_path in _diagram_paths():
         try:
             diagram = json.loads(diagram_path.read_text())
         except json.JSONDecodeError:
@@ -161,17 +167,29 @@ def record() -> int:
 
 
 def _diagram_paths() -> list[Path]:
-    """Diagrams only. Sidecars are excluded by construction, not by accident.
+    """Diagrams only. Excluded by construction, not by accident or by luck
+    of ordering.
 
-    glob('*.json') matches 'active-usage-architecture.anchors.json' too, and
-    sorted() puts that sidecar at position 1; _sidecar_for() then looks for a
-    sidecar of the sidecar, does not find one, and the real diagram is only
-    reached by luck of the ordering. Filtering on the suffix removes the
-    whole class of mistake.
+    Two kinds of file live in diagrams/ and are not diagrams:
+
+      *.anchors.json         the recorded-hash sidecar. glob('*.json')
+                             matches it, sorted() puts it first, and
+                             _sidecar_for() then looks for a sidecar OF
+                             the sidecar.
+      *.visual-check.json    an evidence receipt -- `evidenceKind`,
+                             `artifact.sha256`, `visualReview: pending`.
+                             It records that a render was checked; it is
+                             not a rendered diagram, so counting it
+                             produced a could-not-evaluate verdict for a
+                             file that was never meant to be evaluated.
+
+    Both are recognised by suffix, so a new one is excluded by the same rule
+    rather than needing this list edited.
     """
+    excluded = (SIDECAR_SUFFIX, VISUAL_CHECK_SUFFIX)
     return [
         p for p in sorted(DIAGRAM_DIR.glob("*.json"))
-        if not p.name.startswith(".") and not p.name.endswith(SIDECAR_SUFFIX)
+        if not p.name.startswith(".") and not p.name.endswith(excluded)
     ]
 
 
@@ -258,11 +276,14 @@ def _exit_for(changed, bad) -> int:
 def check() -> int:
     """Evaluate every diagram with a sidecar in one run.
 
-    The exit code carries the evaluated count so a caller reading only the
-    code can tell full coverage from an early exit: evaluated*10 + class.
-    'exit 3' alone cannot distinguish 'I checked everything and one file
-    changed' from 'I stopped at the first diagram' -- which is the false
-    all-clear this gate already had, one level up.
+    The exit code is the plain verdict class -- 0 ok, 2 cannot evaluate,
+    3 a cited file changed, 4 a cited line does not hold its symbol -- and
+    nothing else. It is consumed by tasks/task-update-team.yaml through
+    theteam/tasks/executor.py, which branches on exactly those codes; an
+    earlier version packed the evaluated count into it as n*10+class and
+    silently broke that consumer, turning a working gate into a failing
+    phase. Coverage is reported in the report text, where a reader sees it,
+    rather than encoded in a code nobody can decode.
     """
     diagrams = _diagram_paths()
     reports: list[list[str]] = []
@@ -279,21 +300,21 @@ def check() -> int:
             worst = code
         _report(lines, name=diagram_path.stem)
 
+    code = CANNOT_EVALUATE if evaluated == 0 else worst
     header = [
         "# update-team",
         "",
         f"- **diagrams present:** {len(diagrams)}",
         f"- **diagrams evaluated:** {evaluated}",
         f"- **diagrams could-not-evaluate:** {len(diagrams) - evaluated}",
-        f"- **verdict class:** {_verdict_class(worst)}",
+        f"- **verdict class:** {_verdict_class(code)}",
+        f"- **exit code:** {code}",
         "",
     ]
     for report in reports:
         header += report + [""]
     _report(header)
-    if evaluated == 0:
-        return 2 * 100 + CANNOT_EVALUATE
-    return evaluated * 10 + worst
+    return code
 
 
 def _verdict_class(code: int) -> str:

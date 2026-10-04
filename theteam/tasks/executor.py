@@ -58,6 +58,12 @@ DEFAULT_IMAGE = "theteam:p4final"
 # result — that is the defect class this taxonomy exists to close.
 FINDINGS_EXIT_CODE = 3
 CANNOT_EVALUATE_EXIT_CODE = 2
+#: The phase ran and found a citation whose line does not hold its named
+#: symbol. Same shape as FINDINGS -- the phase did its job -- but kept
+#: distinct so a reader can tell "fix this number" from "re-derive this
+#: node". It has to be registered here: an unregistered non-zero code falls
+#: through to success=False, which turns a working gate into a failing phase.
+BAD_CITATION_EXIT_CODE = 4
 #: Where the project tree appears inside the container.
 WORKSPACE_MOUNT = "/workspace"
 
@@ -355,6 +361,16 @@ class TaskExecutor:
             # cannot produce.
             outcome["success"] = True
             outcome["findings"] = True
+            outcome["findings_output"] = result["stdout"]
+        elif exit_code == BAD_CITATION_EXIT_CODE:
+            # The phase ran and found a citation pointing at the wrong line.
+            # `success` stays True -- the gate did its job -- and `findings`
+            # carries it so the breaker is not advanced. `bad_citation` is
+            # recorded separately so the log can tell "fix this number" from
+            # "re-derive this node"; the two need different repairs.
+            outcome["success"] = True
+            outcome["findings"] = True
+            outcome["bad_citation"] = True
             outcome["findings_output"] = result["stdout"]
         return outcome
 

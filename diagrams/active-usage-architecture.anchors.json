@@ -1,8 +1,8 @@
 {
   "revision": "ca3673bf49606fa81260a9d5e7d84f450f68922e",
   "cited": {
-    "theteam/SKILL.md": "4076e78637893d9f",
-    "theteam/__init__.py": "a9adbd769b8fc781",
+    "theteam/SKILL.md": "cb6a151219c6461a",
+    "theteam/__init__.py": "c0c10fb49eb2d1b5",
     "theteam/advisory/commentary.py": "42fd3127b68f93fd",
     "theteam/advisory/context_slice.py": "6cc1f88589144630",
     "theteam/advisory/manager.py": "763d68e053f160d8",

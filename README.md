@@ -123,10 +123,18 @@ theteam run --only update-team     # is anything necessary?
 
 `update-team` hashes every file each diagram cites and reports which changed
 since the diagram was derived. Exit 0 = nothing necessary, 3 = a cited file
-changed, 2 = no anchor sidecar so it could not check. Only
-`active-usage-architecture.json` carries source anchors; the other two
-diagrams are judgment-only, and the task says so rather than implying
-coverage it does not have.
+changed, 4 = a cited line does not hold its named symbol (fix the number, do
+not re-derive), 2 = no anchor sidecar so it could not check. Every diagram
+with a sidecar is evaluated in one run, and the report states how many were
+evaluated — a single exit code cannot tell you "checked everything, one is
+stale" from "stopped at the first".
+
+`active-usage-architecture.json` is the only diagram carrying source anchors;
+the other two are judgment-only, and the task reports them as
+could-not-evaluate rather than implying coverage it does not have. Diagrams
+are the three `*.json` files that are neither a `*.anchors.json` sidecar nor a
+`*.visual-check.json` receipt. Each diagram also gets its own
+`update-team-<diagram>.md`, so a second verdict cannot overwrite the first.
 
 The rest of the sequence is manual, each step for a measured reason:
 

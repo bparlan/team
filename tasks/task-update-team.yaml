@@ -21,6 +21,12 @@ expected_output: >-
   cited files that changed since the diagram was derived, and the next
   action. Exit 0 = nothing necessary, 3 = findings (a cited file changed),
   2 = cannot evaluate (no anchor sidecar, or a cited file is gone).
+  4 = a cited line does not hold its named symbol — fix the number, do not
+  re-derive. Every diagram with a sidecar is evaluated in one run, and the
+  report states how many, so full coverage is distinguishable from an early
+  exit without reading this file.
+  Also writes .omp/theteam/reports/update-team-<diagram>.md per diagram, so a
+  second verdict cannot overwrite the first.
 
   Why steps 1–4 are not in this task:
   * archify lives at ~/.omp/agent/skills/archify, outside the project mount,

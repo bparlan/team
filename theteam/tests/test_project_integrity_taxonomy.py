@@ -25,9 +25,11 @@ import pytest
 from theteam.tasks.executor import (
     CANNOT_EVALUATE_EXIT_CODE,
     FINDINGS_EXIT_CODE,
+    BAD_CITATION_EXIT_CODE,
     TIMEOUT_EXIT_CODE,
     OOM_KILL_EXIT_CODE,
 )
+
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
 
@@ -217,6 +219,7 @@ def _fake_isolation(exit_code):
 @pytest.mark.parametrize("exit_code,expect_success,expect_key", [
     (0, True, None),
     (FINDINGS_EXIT_CODE, True, "findings"),
+    (BAD_CITATION_EXIT_CODE, True, "findings"),
     (CANNOT_EVALUATE_EXIT_CODE, False, "cannot_evaluate"),
     (TIMEOUT_EXIT_CODE, False, None),
     (OOM_KILL_EXIT_CODE, False, None),
@@ -248,6 +251,35 @@ def test_execute_phase_classifies_every_exit_code(
         assert expect_key not in outcome
     else:
         assert outcome.get(expect_key) is True
+
+
+def test_bad_citation_is_distinguishable_from_a_changed_file(tmp_path, monkeypatch):
+    """Exit 3 and exit 4 are both successes with findings, but they need
+    different repairs: 3 means re-derive the node, 4 means fix the number.
+
+    Asserting only `findings` would let the BAD_CITATION branch be deleted
+    and leave the suite green, because FINDINGS already sets that key.
+    """
+    from theteam.tasks.executor import TaskExecutor
+
+    def outcome_for(code):
+        monkeypatch.setattr("theteam.tasks.executor.AgentIsolation",
+                            _fake_isolation(code))
+        script = tmp_path / "scripts" / "probe.py"
+        script.parent.mkdir(parents=True, exist_ok=True)
+        script.write_text("print('ok')\n")
+        phase = {"name": "probe", "script": "scripts/probe.py", "args": [],
+                 "timeout_seconds": 5, "memory_limit_mb": 128}
+        return TaskExecutor(str(tmp_path)).execute_phase(phase, {"id": "t"})
+
+    bad = outcome_for(BAD_CITATION_EXIT_CODE)
+    changed = outcome_for(FINDINGS_EXIT_CODE)
+
+    assert bad.get("bad_citation") is True
+    assert changed.get("bad_citation") is None, (
+        "a changed cited file must not be reported as a bad citation; the "
+        "two need different repairs")
+    assert bad["findings"] is True and changed["findings"] is True
 
 
 def test_a_crash_is_never_read_as_findings(tmp_path, monkeypatch):

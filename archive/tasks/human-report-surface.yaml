@@ -58,11 +58,22 @@ decisions:
     question: >
       Should reports/.orphans/ exist for the 8 unproduced markdown files?
     answer: >
-      No. reports/.handoff/ already exists, already has a rule, and already
-      holds this exact class of artifact. A third category means an agent
-      scanning reports/ must know a fourth thing. Two rules, no exceptions.
-      If the files are considered finished rather than in-flight, archive/
-      is the honest home -- archive/ already means "done, not current".
+      No -- DECIDED. The user chose reports/.handoff/ for all 8. The user also
+      asked about reports/.human/ and it was rejected: reports/ already means
+      "for humans", so a .human/ subfolder states it twice and gives an agent
+      a second directory to misread. .handoff/ earns its dot-prefix because it
+      carves machine files OUT of a human directory -- it exists to be skipped.
+      There is nothing to skip inside a .human/ folder.
+    decided_by: user
+  - id: html-default
+    question: >
+      Should --format html be the default for discuss, or stay opt-in?
+    answer: >
+      Opt-in -- DECIDED by the user. Defaulting would silently change the
+      artifact every existing discussion produces, and this session established
+      that a change nobody asked for is the failure mode to avoid. The .md path
+      therefore stays byte-identical and html is requested explicitly.
+    decided_by: user
   - id: shared-builder
     question: >
       Which theteam_report.py is authoritative?

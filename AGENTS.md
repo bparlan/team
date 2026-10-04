@@ -14,7 +14,7 @@ planning documents instead of fixes.
 
 ### Before Every Phase
 
-1. Re-read `STABILITY_ROADMAP.md` — the single source of truth
+1. Re-read `archive/tasks/INDEX.yaml` — the forward-work index, and the entry point for anything not yet built
 2. Re-read `AGENTS.md` — these rules
 3. Run `find theteam/core/ -name "*.py" | sort` — see what actually exists
 4. Check integration: `grep -l "import <module>" theteam/core/*.py` for each new module
@@ -24,13 +24,13 @@ planning documents instead of fixes.
 - One task at a time. Complete it. Verify it. Move to the next.
 - After each `write` or `edit`, re-read the file you changed to confirm it's correct.
 - After each code change, run the affected tests.
-- Do not create `.md` files. The roadmap is the only planning document.
+- Do not create `.md` files. The plans are the only planning artifacts, and they are YAML in `archive/tasks/`.
 
 ### Before Yielding
 
 1. Re-read the files you modified
 2. Run the test suite
-3. Update roadmap checkboxes ONLY for tasks where code exists AND is integrated AND tests pass
+3. Update `archive/tasks/INDEX.yaml` status ONLY for plans where code exists AND is integrated AND tests pass
 4. Summarize in 3 lines max
 
 ## Implementation Discipline
@@ -38,7 +38,7 @@ planning documents instead of fixes.
 **No planning documents.**
 - No `PHASE*.md`, `*_PLAN.md`, `*_STATUS.md`, `*_STRATEGY.md`, `*_SUMMARY.md`
 - No `IMPLEMENTATION_*.md`, `*_REPORT.md`, `*_ANALYSIS.md`
-- The roadmap (`STABILITY_ROADMAP.md`) is the single source of truth.
+- `archive/tasks/INDEX.yaml` is the index of forward work; `archive/STABILITY_ROADMAP.md` is the finished stability milestone and is history, not the contract.
 - The only output of an implementation turn is: code changes + test results + 3-line summary.
 
 **No orphaned files.**
@@ -46,6 +46,22 @@ planning documents instead of fixes.
 - After creating a file, verify it's imported by at least one existing module.
 - If no file imports it, either delete it or wire it in.
 - **Never duplicate a class inline when a standalone module exists.** If `theteam/core/circuit_breaker.py` exists, import it. Do not write `class CircuitBreaker` inside `unified_loop.py`.
+
+## Forward work (stacked plans)
+
+Plans are YAML in `archive/tasks/`, one file per milestone, indexed by `INDEX.yaml`.
+Start at the index; do not read the plans in isolation — each states its own status
+and what it waits on. They are executed in a fresh context, so an index is the only
+thing a new session is guaranteed to find.
+
+| Plan | Status | Waits on |
+|---|---|---|
+| `human-report-surface.yaml` | not-started | — |
+| `project-convention-infra.yaml` | awaiting-input | an example project |
+| `system-awareness-injection.yaml` | not-started | — (only p3 needs a project) |
+
+`awaiting-input` is defined in the index: it cannot begin without a user decision.
+It is not a failure, and it is unrelated to the run statuses the executor uses.
 
 **No skipped tests.**
 - Run existing tests after every code change.

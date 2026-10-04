@@ -1,6 +1,6 @@
 # System Awareness Injection -- implementation plan
 #
-# Third of three plans. The others are human-report-surface.yaml and
+# Third of three plans; the others are human-report-surface.yaml and
 # project-convention-infra.yaml, beside it in this directory. All three live
 # here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
 # `*_REPORT.md`; this directory already holds milestone artifacts in the same
@@ -11,13 +11,13 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: awaiting-input. Cannot begin until the user names one example
-# project; see status_meaning for the vocabulary.
+# Status: not-started. Phases p0 through p2 are executable now and need no
+# user input; only p3 waits on a named example project.
 # Authored: 2026-10-04.
 
 id: system-awareness-injection
 name: System Awareness Injection
-status: awaiting-input
+status: not-started
 status_meaning: 'Awaiting one input from the user: the absolute path of one example project.
   These files are roadmap artifacts, not registered tasks, so this vocabulary is local to
   them and unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal
@@ -87,12 +87,15 @@ phases:
   rollback: Not applicable; nothing has been built.
 - id: p0-audit-capability-claims
   name: Audit every claim theteam makes about what it can do
-  depends_on: q0-name-the-example
   estimated_effort: 1 hour
-  rationale: Read before writing, and the same discipline prompt-truth applies to citations.
+  rationale: 'Read before writing, and the same discipline prompt-truth applies to citations.
     The originating session found four false claims about files the author had not opened;
-    this phase asks the same question about a different layer -- not 'does this file exist'
-    but 'is this claim about capability true'.
+    this phase asks the same question about a different layer -- not ''does this file exist''
+    but ''is this claim about capability true''. This phase audits theteam''s own refusal
+    strings, so it needs no example project and is a ROOT phase. Gating it behind q0 was
+    wrong: it is the phase that decides whether the rest of this plan is worth building,
+    so making it wait on an input it does not use delays the one cheap check that can void
+    the plan.'
   contract:
   - 'Enumerate every refusal and readiness message in the codebase: grep for the strings
     the CLI and runner emit when they decline to act.'
@@ -157,6 +160,26 @@ phases:
     proven by a test that runs both the present and absent cases.
   rollback: Remove the heading injection and the refusal together; a prompt that still hardcodes
     a capability value is worse than one that never had it.
+- id: p3-example-project-conventions
+  name: Apply the capability surface to a named example project
+  depends_on:
+  - p2-inject-into-member-prompts
+  - q0-name-the-example
+  estimated_effort: half a day
+  rationale: The only phase that genuinely needs a project path. Until the user names one,
+    this plan is fully executable through p2 and the work is not idle.
+  contract:
+  - Run the p1 capability surface against the named project root and confirm it reports
+    that project's reality rather than this repo's.
+  - A member prompt in that project that names an unavailable capability is refused, proving
+    p2 works outside the repo it was written in.
+  steps:
+  - Point the p1 probe at the example project root.
+  - Exercise one prompt requiring an absent capability, and one requiring a present one,
+    in that project.
+  done_when: The capability surface is reported for the example project, and both the present
+    and absent prompt cases behave as specified there -- not only in this repo.
+  rollback: Revert the example-project wiring; p1 and p2 stand alone.
 verification:
 - command: python -m pytest -q
   expect: at least 800 passed, zero failures
@@ -167,7 +190,8 @@ verification:
 - command: python3 scripts/check_prompt_truth.py .
   expect: zero findings -- no prompt may gain a hardcoded capability value
 open_questions_for_user:
-- Which project is the example? Blocking q0.
+- Which project is the example? Blocks p3 only. Phases p0 through p2 are executable now
+  and do not need it.
 - Should scripts/system-awareness-config.json be deleted once p0 confirms nothing reads
   it, or kept with a comment marking it inert? Deletion is cleaner; the repo has an archive/
   convention for exactly this.

@@ -57,6 +57,14 @@ plans:
   blocked_on: null
   one_line: Nine diagram citations were never right, not stale. Correct the 9 numbers, then
     teach scripts/update_team_check.py to resolve symbols so they cannot come back.
+- file: document-citation-truth.yaml
+  id: document-citation-truth
+  status: not-started
+  phases: 5
+  blocked_on: null
+  one_line: No checker reads ARCHITECTURE.md, README.md, SKILL.md or CLI.md. They carry
+    389 path-shaped citations, 12 of them line-cited and mechanically checkable. Close the
+    12, and report the other 377 as not checked rather than implying coverage.
 recommended_order:
 - 1. human-report-surface p2 -- move the 8 markdown files already committed into the human
   surface to reports/.handoff/. Fifteen minutes, no decisions outstanding, and it makes
@@ -64,28 +72,37 @@ recommended_order:
 - 2. diagram-citation-truth p0-p1 -- add the symbol checker, then correct the 9 lines. Independent
   of everything else here, mechanical, and the only finding where a reader tracing the architecture
   today lands on the wrong line.
-- 3. diagram-citation-truth p2-p3 -- extend the existing anchor gate to resolve symbols,
+- 3. document-citation-truth p0-p2 -- the measurement, the package-relative resolution,
+  and the two rules that can hard-fail because all 12 checkable claims pass today. p0 asserts
+  its own counts, so parser drift surfaces as a failure rather than a slow rot.
+- 4. diagram-citation-truth p2-p3 -- extend the existing anchor gate to resolve symbols,
   and move its in-loop return so all three diagrams are checked. Makes the gate able to
   see the defect it currently waves through.
-- 4. human-report-surface in full -- the html renderer, the boundary check, the skill-copy
+- 5. document-citation-truth p3-p4 -- symbol resolution, then gate wiring. This is the tier
+  that catches a citation pointing at the wrong line rather than a missing file, and it
+  starts report-only because it is the newest and least proven rule.
+- 6. human-report-surface in full -- the html renderer, the boundary check, the skill-copy
   drift test. Establishes the vocabulary the other plans reuse.
-- '5. system-awareness-injection p0 -- audit capability claims. One hour, read-only, needs
+- '7. system-awareness-injection p0 -- audit capability claims. One hour, read-only, needs
   no example project, and it verifies its own premise: if no false claims exist, the plan
   is void and the hour was cheap.'
-- 6. project-convention-infra -- BLOCKED until the user names an example project. Its p1
+- 8. project-convention-infra -- BLOCKED until the user names an example project. Its p1
   derives the convention set from a real inventory rather than a guess.
 why_this_order: Cost of being wrong, ascending, and cost of being unable to undo it, descending.
   Step 1 is fifteen minutes, needs no decision, and cannot be wrong. Step 2 corrects nine
   line numbers that are wrong today, so a reader tracing the architecture today lands on
   the wrong line -- it is the only step that fixes a defect a person is currently hitting,
-  and it ships alone without waiting for anything. Step 3 makes the gate stricter, which
-  turns a green gate red on a tree that was previously wrong, so it must follow step 2 or
-  the repo spends a commit failing its own gate for no stated reason. Step 4 is the largest
-  build in the set and introduces a new public surface, so it goes after the cheap corrections
-  have proven the process works. Step 5 is read-only and can only return 'your premise is
-  false', which is a useful answer for an hour. Step 6 is blocked on a decision only the
-  user can make, so it is last and stays blocked rather than being started on a guess. Running
-  the cheap, irreversible, currently-broken things first is the whole argument.
+  and it ships alone without waiting for anything. Step 3 adds a checker whose first run
+  is green by construction, because all 12 claims it can check currently pass; it goes before
+  step 5 so that when symbol resolution later turns the checker red, there is a known-good
+  baseline to compare against. Step 4 makes the diagram gate stricter, which turns a green
+  gate red on a tree that was previously wrong, so it must follow step 2. Step 5 is the
+  newest and least proven rule in the set and starts report-only; putting it after the measured
+  phases is what keeps 'report, do not gate' credible. Step 6 is the largest build and introduces
+  a new public surface. Step 7 is read-only and can only return 'your premise is false',
+  which is a useful answer for an hour. Step 8 is blocked on a decision only the user can
+  make, so it is last and stays blocked rather than being started on a guess. Running the
+  cheap, irreversible, currently-broken things first is the whole argument.
 not_planned:
 - 'A project-wide ROADMAP.md index. Acknowledged as a real need by the user and deliberately
   not built here: it is a content decision about what a roadmap is for, and this index does
@@ -97,19 +114,24 @@ not_planned:
 - 'Running the 13 unverified LLM phases. The largest unproven surface in the system: only
   root-organization/scan has completed through a live spawn.'
 shared_constraints:
-- 'Report rather than gate. Every checker here exits 0 with findings. A check that fails
-  closed gets switched off, and a switched-off check catches nothing. The one named exception
-  is diagram-citation-truth p0''s checker, which must exit non-zero: it is the only thing
-  standing between nine wrong citations and the next nine, and nothing else would run it.
-  The exception is recorded in that phase''s own contract rather than left as a silent violation
-  of this rule.'
+- 'Report rather than gate. Every checker here exits 0 with findings, with named exceptions
+  recorded in the phase that needs them: diagram-citation-truth p0''s checker must exit
+  non-zero, and document-citation-truth p2''s existence and range rules may hard-fail because
+  all 12 checkable claims pass today. A check that fails closed on a false finding gets
+  switched off, and a switched-off check catches nothing.'
+- Report the checked/not-checkable split, never a bare total. document-citation-truth parses
+  389 claims and can check 12. A checker reporting '389 checked' while examining 12 is a
+  false all-clear -- the same shape as 9 wrong diagram citations behind a green gate, and
+  as an exit code that cannot say how many diagrams it read.
 - Prove both halves. A checker must be tested firing on a violation AND silent on a compliant
   shape. The second half is what stops it crying wolf -- a failure that actually happened
-  twice while writing the first two checkers.
-- Verify before citing. Four of nine errors in the originating session were false claims
-  about files that had not been opened.
+  is not the same as a rule that always fires.
+- Verify before citing. Wrong line numbers shipped twice in one session, both into a delivered
+  artifact. Resolve the line before publishing it; do not carry one forward from memory.
+- Refuse to guess. An ambiguous resolution is reported as ambiguous. Picking one of sixteen
+  __init__.py files produces a confident wrong answer.
 - Markdown is for agents, HTML for humans, and the directory decides which. reports/ holds
-  only what a person reads.
+  only what a human reads; machine handoffs go to reports/.handoff/ or .omp/theteam/reports/.
 verification:
 - command: python -m pytest -q
   expect: at least 800 passed, zero failures
@@ -121,12 +143,19 @@ evidence:
 - artifact: reports/architecture-reality-analysis.html
   date: '2026-10-04'
   measures: 9 of 13 diagram citations wrong at authoring; 13/14 anchor hashes valid; 13/13
-    diagram edges real; 9 of 10 invariants enforced, rich nowhere; Layer 0 contract violated.
+    edges real; 9 of 10 invariants enforced, rich nowhere; Layer 0 contract violated.
+- artifact: archive/tasks/document-citation-truth.yaml
+  date: '2026-10-04'
+  measures: 389 path-shaped citations across 4 prose documents; 373 after 9 ignored and
+    7 generated are dropped. Of those, 12 are line-cited and mechanically checkable, 26
+    are package-relative (8 irreducibly ambiguous -- __init__.py matches 16 files), and
+    335 are path-only with no line to verify. Two wrong ARCHITECTURE.md citations were published
+    in this session and caught by hand.
 phase_entry_points:
   human-report-surface: p2 -- move the 8 files. No decisions outstanding.
-  diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone; independent
-    of every other plan here.
-  system-awareness-injection: p0 -- audit capability claims. Needs no example project; p3
-    is the only phase that does.
+  diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone.
+  document-citation-truth: p0 -- freeze the measurement. Its first run must reproduce 389/12;
+    a mismatch means the parser drifted, not that the docs are wrong.
+  system-awareness-injection: p0 -- audit capability claims. Needs no example project.
   project-convention-infra: BLOCKED at q0. Cannot start until the user names one example
     project.

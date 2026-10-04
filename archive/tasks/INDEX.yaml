@@ -1,0 +1,92 @@
+# Forward Work Index
+#
+# The entry point for archive/tasks/. Start here, then open the plan file.
+#
+# The body is emitted by yaml.safe_dump from a dict, not hand-indented.
+# Hand-written YAML failed to parse three times in one session -- an unquoted
+# ": " inside a folded scalar is enough -- so only the prose in this header is
+# hand-written.
+#
+# Status: not-started. Authored: 2026-10-04.
+
+id: forward-work
+name: Forward Work Index
+status: not-started
+status_meaning: 'Roadmap artifacts, not registered tasks, so this vocabulary is local and
+  unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal values:
+  not-started (ready to execute), awaiting-input (cannot begin without a user decision),
+  blocked-on-defect (cannot begin until an external fix lands). Add any new value here first.'
+purpose: 'One index over the plans in this directory: what exists, what order it can run
+  in, and what each one is waiting on. AGENTS.md:39-40 bans a planning markdown file, and
+  it names STABILITY_ROADMAP.md as the single source of truth while that file lives in archive/
+  -- this index is the working answer to that contradiction, not a replacement for a project-wide
+  roadmap.'
+plans:
+- file: human-report-surface.yaml
+  id: human-report-surface
+  status: not-started
+  one_line: Every artifact a human reads is HTML in reports/; every artifact an agent reads
+    is JSON or markdown in .omp/ or reports/.handoff/.
+  phases: 5
+  blocked_on: null
+  depends_on_plans: []
+- file: project-convention-infra.yaml
+  id: project-convention-infra
+  status: awaiting-input
+  one_line: Given one named project, establish which conventions it holds, which it claims
+    but does not hold, and make the second set fail a check.
+  phases: 5
+  blocked_on: user-names-one-example-project
+  depends_on_plans:
+  - human-report-surface
+- file: system-awareness-injection.yaml
+  id: system-awareness-injection
+  status: awaiting-input
+  one_line: Give theteam the ability to see what it can do right now, so a refusal names
+    the missing capability instead of only denying.
+  phases: 4
+  blocked_on: user-names-one-example-project
+  depends_on_plans:
+  - human-report-surface
+recommended_order:
+- 1. human-report-surface p2 -- move the 8 unproduced markdown files to reports/.handoff/.
+  Fifteen minutes, no decisions outstanding, and it makes a rule already written in ONBOARDING.md
+  true today.
+- 2. human-report-surface in full -- the html renderer, the boundary check, the skill-copy
+  drift test. Establishes the vocabulary the other two plans reuse.
+- '3. system-awareness-injection p0 -- audit capability claims. One hour, read-only, and
+  it verifies its own premise: if no false claims exist, the plan is void and an hour was
+  cheap.'
+- 4. project-convention-infra -- after the example project is named. Its p1 derives the
+  convention set from a real inventory rather than a guess.
+why_this_order: Cost of being wrong, ascending. Step 1 is fifteen minutes and cannot be
+  wrong. Step 3 is read-only and can only return 'your premise is false', which is a useful
+  answer. Step 4 is the largest and the only one that needs a decision the user has not
+  yet made. Running the cheap irreversible things first is the whole argument.
+not_planned:
+- 'A project-wide ROADMAP.md index. Acknowledged as a real need by the user and deliberately
+  not built here: it is a content decision about what a roadmap is for, and this index does
+  not presume to answer it.'
+- A fleet-wide convention census across ~/devcode. Excluded by the user; only a handful
+  of projects are relevant and the user will name them.
+- Self-measurement of the checkers (does checking help?). Correctly sequenced AFTER they
+  have run for real, which they have not yet.
+- 'Running the 13 unverified LLM phases. The largest unproven surface in the system: only
+  root-organization/scan has completed through a live spawn.'
+shared_constraints:
+- Report rather than gate. Every checker here exits 0 with findings. A check that fails
+  closed gets switched off, and a switched-off check catches nothing.
+- Prove both halves. A checker must be tested firing on a violation AND silent on a compliant
+  shape. The second half is what stops it crying wolf -- a failure that actually happened
+  twice while writing the first two checkers.
+- Verify before citing. Four of nine errors in the originating session were false claims
+  about files that had not been opened.
+- Markdown is for agents, HTML for humans, and the directory decides which. reports/ holds
+  only what a person reads.
+verification:
+- command: python -m pytest -q
+  expect: at least 800 passed, zero failures
+- command: bash scripts/check_invariants.sh
+  expect: invariant gate PASSED
+- command: python3 -c "import yaml,glob;[yaml.safe_load(open(f)) for f in glob.glob('archive/tasks/*.yaml')]"
+  expect: exit 0 -- every plan in this directory parses

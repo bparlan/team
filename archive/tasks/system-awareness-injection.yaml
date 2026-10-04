@@ -1,0 +1,185 @@
+# System Awareness Injection -- implementation plan
+#
+# Third of three plans. The others are human-report-surface.yaml and
+# project-convention-infra.yaml, beside it in this directory. All three live
+# here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
+# `*_REPORT.md`; this directory already holds milestone artifacts in the same
+# shape (folder-monitoring.yaml).
+#
+# The body is emitted by yaml.safe_dump from a dict, not hand-indented.
+# Hand-written YAML failed to parse three times in one session -- an unquoted
+# ": " inside a folded scalar is enough -- so only the prose in this header is
+# hand-written.
+#
+# Status: awaiting-input. Cannot begin until the user names one example
+# project; see status_meaning for the vocabulary.
+# Authored: 2026-10-04.
+
+id: system-awareness-injection
+name: System Awareness Injection
+status: awaiting-input
+status_meaning: 'Awaiting one input from the user: the absolute path of one example project.
+  These files are roadmap artifacts, not registered tasks, so this vocabulary is local to
+  them and unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal
+  values: not-started (ready to execute), awaiting-input (cannot begin without a user decision),
+  blocked-on-defect (cannot begin until an external fix lands). Add any new value here first.'
+blocked_on: user-names-one-example-project
+priority: 2
+depends_on: []
+intent: 'Give theteam the ability to see its own shape: what files and tasks exist (static
+  awareness), and what it can actually do right now -- whether a provider is bound, whether
+  Docker answers, which agent types are spawnable (dynamic awareness). Today it cannot,
+  and the symptom is visible: theteam discuss refuses with a flat error because no environment
+  binds a provider, when the useful answer is a named list of what it needs instead.'
+why_this_shape: 'The static half already exists as two checkers, task-contract and prompt-truth,
+  both mechanical and both proven non-vacuous by mutation tests. The dynamic half has no
+  representation at all. This plan closes it, and deliberately reuses the same shape: measure
+  mechanically, report rather than gate, and pin both the fires and the stays-quiet halves
+  with tests.'
+design_principle: 'System awareness has two halves and they must not be confused. STATIC
+  is what exists -- files, configs, registered tasks, factual citations. DYNAMIC is what
+  the machine can do at this moment -- provider bound, docker available, agent types spawnable,
+  disk and memory. Mixing them produces the failure already seen in this repo: scripts/system-awareness-config.json
+  declares enabled/priority/timeout/health_threshold and is read by nobody, while loop_health_check.py:25-33
+  documents that nothing has read its contents. A static file pretending to be a dynamic
+  capability is the exact defect this plan exists to remove.'
+relationship_to_bootstrap: 'Composes with bootstrap rather than competing with it. Bootstrap
+  is static and authored: the user declares what team they want. This is dynamic and measured:
+  the machine reports what it can currently run. Both answer ''what do I have'', and together
+  they let a prompt say something true. Bootstrap designs the team; awareness tells that
+  team what it may attempt.'
+explicitly_out_of_scope:
+- 'Making discuss work. Its gate cannot pass anywhere: theteam.default_api is only ever
+  assigned by a monkeypatch in a test, so the check is not a condition that sometimes fails
+  -- it cannot pass. This plan does not attempt to bind a provider. It changes what the
+  refusal SAYS, not whether it happens.'
+- Rendering HTML or any report format work; that is human-report-surface.
+- Fleet-wide scanning across ~/devcode; the user excluded it.
+- Rewriting scripts/system-awareness-config.json in place. It is a stale artifact and the
+  honest outcome is deletion, but that is a decision with its own evidence, not a side effect
+  of this plan.
+decisions:
+- id: dynamic-not-a-config-file
+  question: Should capability state live in a JSON file the way system-awareness-config.json
+    does?
+  answer: No. A file records an intention; capability is measured at the moment of use and
+    changes without anyone editing anything. A checked-in config for a dynamic fact is stale
+    the moment the environment changes, and the existing one has been stale since its task
+    was retired. The capability surface is computed, cached per run, and never committed.
+  decided_by: analysis
+- id: measure-dont-gate
+  question: Should a missing capability fail the run, or be reported?
+  answer: 'Report. Consistent with task-contract and prompt-truth: both exit 0 with findings.
+    A capability check that fails closed is one that gets switched off, and a switched-off
+    check catches nothing.'
+  decided_by: analysis
+phases:
+- id: q0-name-the-example
+  name: User names one example project
+  estimated_effort: user input, no engineering
+  steps:
+  - User names the project directory to develop against.
+  - Confirm it has a git history and at least one real code path; a project with no commits
+    cannot demonstrate drift.
+  - Confirm the user accepts that the answer may be 'this project has no conventions'. A
+    checker that reports nothing must be distinguishable from a checker that is not installed.
+  done_when: One absolute path recorded in this file under example_project.
+  rollback: Not applicable; nothing has been built.
+- id: p0-audit-capability-claims
+  name: Audit every claim theteam makes about what it can do
+  depends_on: q0-name-the-example
+  estimated_effort: 1 hour
+  rationale: Read before writing, and the same discipline prompt-truth applies to citations.
+    The originating session found four false claims about files the author had not opened;
+    this phase asks the same question about a different layer -- not 'does this file exist'
+    but 'is this claim about capability true'.
+  contract:
+  - 'Enumerate every refusal and readiness message in the codebase: grep for the strings
+    the CLI and runner emit when they decline to act.'
+  - For each, determine what would have to be true for it to be false, and whether anything
+    currently tests that.
+  - 'Record each as: claim, source file and line, how to falsify it, and whether it is currently
+    checked.'
+  steps:
+  - 'Grep for refusal text: ''requires an OMP session'', ''needs Docker'', ''is not one
+    a session can spawn'', ''names no output'', ''dependency_unmet''.'
+  - For each, write the falsification test before deciding whether to fix it.
+  - Report the inventory as HTML through the publish phase, if one is added; otherwise as
+    the JSON handoff.
+  done_when: A written inventory of capability claims, each with a falsification test that
+    has been RUN and its result recorded. An empty inventory is a valid and informative
+    outcome, and would mean this plan is unnecessary.
+  rollback: Read-only; nothing changed.
+- id: p1-build-the-capability-surface
+  name: Compute the capability surface as JSON
+  depends_on: p0-audit-capability-claims
+  estimated_effort: 1 hour
+  rationale: One function, called where the refusals are produced, so the refusal and the
+    capability report cannot disagree.
+  contract:
+  - 'Keys, each computed at call time and never cached across runs: provider_bound (bool),
+    docker_available (bool), spawnable_agents (list), python_version (str), writable_project
+    (bool), disk_free_mb (int).'
+  - Values are measured, not declared. provider_bound is hasattr(theteam, 'default_api');
+    docker_available is AgentIsolation.available(). No config file is consulted and none
+    may be added.
+  - Exits 0 always. This reports the world; it does not judge it.
+  steps:
+  - Implement the probe in theteam, near the code that raises refusals.
+  - Emit it as a JSON handoff under .omp/theteam/reports/ -- machine consumer, so it does
+    not belong in reports/.
+  - 'Rewrite each refusal from p0 to name the missing capability and the value found, instead
+    of only denying. The refusal itself does not change: discuss still cannot run.'
+  done_when: Every refusal identified in p0 now names what it measured and what it found,
+    and each is proven by a test that asserts the message, not by reading the source.
+  rollback: Revert the probe and the message changes together. They are one change and splitting
+    them would leave the messages lying again.
+- id: p2-inject-into-member-prompts
+  name: Give members the surface so prompts fail closed
+  depends_on: p1-build-the-capability-surface
+  estimated_effort: 1 hour
+  rationale: 'The last mile, and the one that prevents a whole class of silent failure:
+    a prompt instructing a member to use a tool that is not available.'
+  contract:
+  - Every member prompt carries the capability surface under a '## Runtime Capability' heading,
+    alongside the existing '## Tool Inventory' section that lists permitted_skills.
+  - A prompt naming a capability absent from the surface must be refused at load time, the
+    same way the runner already refuses a missing prompt_file. Fail closed, loudly, naming
+    the capability.
+  - The surface is per-run and never committed, so no prompt may quote a specific value.
+  steps:
+  - Add the heading to the prompt assembly path, not to each prompt file by hand; hand-editing
+    prompts is how prompt-truth findings get created.
+  - Add the refusal for a prompt requiring an unavailable capability.
+  - 'Add tests: a prompt requiring docker_available when docker is absent is refused; the
+    same prompt passes when the surface reports it present.'
+  done_when: A prompt requiring an absent capability is refused with the capability named,
+    proven by a test that runs both the present and absent cases.
+  rollback: Remove the heading injection and the refusal together; a prompt that still hardcodes
+    a capability value is worse than one that never had it.
+verification:
+- command: python -m pytest -q
+  expect: at least 800 passed, zero failures
+- command: bash scripts/check_invariants.sh
+  expect: invariant gate PASSED
+- command: python3 scripts/check_task_contract.py .
+  expect: zero findings -- new work must not break the existing checkers
+- command: python3 scripts/check_prompt_truth.py .
+  expect: zero findings -- no prompt may gain a hardcoded capability value
+open_questions_for_user:
+- Which project is the example? Blocking q0.
+- Should scripts/system-awareness-config.json be deleted once p0 confirms nothing reads
+  it, or kept with a comment marking it inert? Deletion is cleaner; the repo has an archive/
+  convention for exactly this.
+notes_for_implementer:
+- Four of nine errors in the originating session were false claims about files the author
+  had not opened. Three were caught by the user, one by a mutation test. Verify a factual
+  claim in the same breath you write it, or mark it [UNVERIFIED].
+- A checker that reports working code as broken gets tuned out and then catches nothing.
+  Both halves -- fires on violation, silent on compliance -- are tests, not intentions.
+- If p0 finds no false capability claims, stop and say so. This plan's premise is unverified;
+  p0 is the phase that verifies it, and a void plan found in an hour is cheaper than a wrong
+  one built in a day.
+- Do not make theteam discuss work. The gate cannot pass anywhere -- theteam.default_api
+  is only assigned by a test monkeypatch. Changing what the refusal says is in scope; making
+  it pass is not.

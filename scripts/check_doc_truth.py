@@ -212,27 +212,31 @@ def _is_negation(prose: str) -> bool:
     return any(m in low for m in NEGATION_MARKERS)
 
 
-#: A heading that names a removal. ARCHITECTURE.md's "### Delete" table
-#: under "## M0 -- The team cannot lie" cites `MockAPI` at
-#: `theteam/__init__.py:4-18`: code that was there and is deliberately gone.
-#: Checking such a citation against today's file reports a mismatch about a
-#: historical record -- a false finding, because the number was right when
-#: written and the code it names is supposed to be absent.
+#: A citation inside a table under a "Delete" heading records code this
+#: document says it REMOVED. ARCHITECTURE.md's "### Delete" table cites
+#: `MockAPI` at `theteam/__init__.py:4-18`: code that was there and is
+#: deliberately gone. Matching it against today's file is a false finding --
+#: the number was right when written and the code is supposed to be absent.
 #:
-#: Deliberately keyed on the word "Delete", NOT on "## M<n>". A milestone
-#: heading does not say whether it shipped -- M4 is still open in this same
-#: document -- so exempting every M-numbered section would silently stop
-#: checking the milestones that have not landed yet. A checker that stops
-#: checking is the false all-clear this milestone exists to remove.
-REMOVAL_HEADING = re.compile(r"^#{2,4}\s+Delete\b", re.MULTILINE)
+#: The heading is the signal, and it must be the NEAREST preceding one: the
+#: live prose further down this same document (`theteam/state.py:35`, a
+#: present-tense claim about code that exists today) also sits under an
+#: "## M<n>" heading, so keying on the milestone rather than the nearest
+#: heading swept those in and silently stopped checking them. A checker that
+#: stops checking is the false all-clear this milestone exists to remove.
+REMOVAL_HEADING = re.compile(r"^#{2,4}[ \t]+Delete\b", re.MULTILINE)
+ANY_HEADING = re.compile(r"^#{1,6}[ \t]+\S.*$", re.MULTILINE)
 
 
-def _is_removal_record(doc_text: str, offset: int) -> bool:
-    """True when `offset` falls under a "Delete" heading."""
+def _in_removal_section(doc_text: str, offset: int) -> bool:
+    """True when the nearest heading above `offset` names a deletion."""
+    preceding = doc_text[:offset]
     last = None
-    for m in REMOVAL_HEADING.finditer(doc_text[:offset]):
+    for m in ANY_HEADING.finditer(preceding):
         last = m
-    return last is not None
+    if last is None:
+        return False
+    return bool(REMOVAL_HEADING.match(last.group(0)))
 
 
 def content_check(root, doc_text, row) -> dict:
@@ -241,7 +245,28 @@ def content_check(root, doc_text, row) -> dict:
     Returns {status: verified | mismatch | unverifiable, ...}. A range
     citation (`:72-80`) is checked against the whole span, not one line,
     because the prose describes a block.
+
+    Four shapes are unverifiable rather than passing or failing, and each
+    exclusion is deliberate: a checker that cannot evaluate a claim must say
+    so, because "unverifiable" quietly counted as "verified" is a false
+    all-clear -- the exact defect this milestone exists to remove.
     """
+    ls = doc_text.rfind("\n", 0, row["at"]) + 1
+    le = doc_text.find("\n", row["at"])
+    le = le if le > 0 else len(doc_text)
+    prose = doc_text[ls:le]
+
+    if _in_removal_section(doc_text, row["at"]):
+        # The nearest heading above this citation says the code was deleted.
+        # Nothing is left to match against, and demanding a match would report
+        # a historical record for behaving exactly as written.
+        return {"status": "unverifiable", "reason": "cites a deletion record"}
+    if _is_negation(prose):
+        # The claim is about what the line does NOT contain. Verifying it
+        # needs the whole file and an inverted containment test; reporting
+        # either way would be a claim the checker cannot stand behind.
+        return {"status": "unverifiable", "reason": "prose asserts an absence"}
+
     target = root / row["resolved_ref"]
     try:
         lines = target.read_text(encoding="utf-8").splitlines()
@@ -252,20 +277,12 @@ def content_check(root, doc_text, row) -> dict:
     if hi > len(lines) or lo < 1:
         return {"status": "unverifiable", "reason": "range outside file"}
     span = "\n".join(lines[lo - 1:hi])
+
     # Fragments come from the claim's OWN prose line, not a window. A
     # 200-character window pulls fragments out of neighbouring sentences and
     # reports mismatches on citations that are correct -- 7 of 15 on the real
     # tree. A tier that cries wolf gets switched off and then catches nothing,
     # so the extractor is deliberately narrow: unverifiable beats wrong.
-    ls = doc_text.rfind("\n", 0, row["at"]) + 1
-    le = doc_text.find("\n", row["at"])
-    le = le if le > 0 else len(doc_text)
-    prose = doc_text[ls:le]
-    if _is_negation(prose):
-        # The claim is about what the line does NOT contain. Verifying it
-        # needs the whole file and an inverted containment test; reporting
-        # either way would be a claim the checker cannot stand behind.
-        return {"status": "unverifiable", "reason": "prose asserts an absence"}
     frags = expected_fragments(prose)
     if not frags:
         return {"status": "unverifiable", "reason": "prose names no checkable fragment"}

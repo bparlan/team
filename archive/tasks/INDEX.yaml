@@ -64,7 +64,8 @@ plans:
   blocked_on: null
   one_line: No checker reads ARCHITECTURE.md, README.md, SKILL.md or CLI.md. They carry
     389 path-shaped citations, 12 of them line-cited and mechanically checkable. Close the
-    12, and report the other 377 as not checked rather than implying coverage.
+    12, and report the other 360 as not checkable plus 17 skipped by rule, rather than implying
+    coverage.
 recommended_order:
 - 1. human-report-surface p2 -- move the 8 markdown files already committed into the human
   surface to reports/.handoff/. Fifteen minutes, no decisions outstanding, and it makes
@@ -146,11 +147,12 @@ evidence:
     edges real; 9 of 10 invariants enforced, rich nowhere; Layer 0 contract violated.
 - artifact: archive/tasks/document-citation-truth.yaml
   date: '2026-10-04'
-  measures: 389 path-shaped citations across 4 prose documents; 373 after 9 ignored and
-    7 generated are dropped. Of those, 12 are line-cited and mechanically checkable, 26
+  measures: 389 path-shaped citations across 4 prose documents; 372 after 11 ignored and
+    6 generated are dropped. Of those, 12 are line-cited and mechanically checkable, 26
     are package-relative (8 irreducibly ambiguous -- __init__.py matches 16 files), and
-    335 are path-only with no line to verify. Two wrong ARCHITECTURE.md citations were published
-    in this session and caught by hand.
+    334 are path-only with no line to verify. Two wrong ARCHITECTURE.md citations were published
+    in this session and caught by hand. Measured by scripts/measure_citations.py, which
+    imports the parser rather than retyping it.
 phase_entry_points:
   human-report-surface: p2 -- move the 8 files. No decisions outstanding.
   diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone.

@@ -20,3 +20,341 @@
 # Predecessor in spirit: check_prompt_truth.py, which closed the same gap for
 # prompts/ (24 claims, 14 files, 0 findings today).
 # Authored: 2026-10-04.
+
+id: document-citation-truth
+name: Document Citation Truth
+status: not-started
+status_meaning: 'Roadmap artifacts, not registered tasks, so this vocabulary is local to
+  them and unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal
+  values: not-started (ready to execute), awaiting-input (cannot begin without a user decision),
+  blocked-on-defect (cannot begin until an external fix lands). Add any new value here first.'
+problem: 'The repo has three citation checkers and none of them looks at prose. check_prompt_truth.py
+  guards prompts/, check_task_contract.py guards tasks/*.yaml, update_team_check.py hashes
+  the files diagrams cite. ARCHITECTURE.md, README.md, SKILL.md and CLI.md carry 389 path-shaped
+  citations and nothing verifies a single one. This is not hypothetical: in the session
+  that produced this plan, two wrong ARCHITECTURE.md citations were published into a delivered
+  report -- the conflict-order rule cited as :26 when it is at :34, and a blockquote cited
+  as :11-26 when it runs :12-32. Both were caught by hand, after the fact.'
+why_the_gap_exists: 'Every existing checker guards a machine-read surface, because a machine
+  reads those. Prose is the surface an agent reads FIRST -- before writing a line it has
+  usually read ARCHITECTURE.md and SKILL.md -- and it is the only one with no gate. prompt-truth
+  is the proof the mechanism works: the same gap, closed, on a different surface.'
+measurement_method:
+  method: 'The CLAIM regex already shipped at scripts/check_prompt_truth.py:55, applied
+    to whole file text rather than to backticked spans only -- a citation written in prose
+    is still a citation. Chosen deliberately: reusing the repo''s existing parser means
+    doc truth and prompt truth cannot disagree about what a citation IS.'
+  why_not_the_alternative: 'An earlier pass in this session counted 36 citations using a
+    regex that required a directory component, then a second pass counted 335 with a broader
+    one, then a third pass counted 373 using a hand-rolled ignore rule. All three numbers
+    were arithmetically self-consistent and none was a measurement, because each came from
+    a method the next step discarded. This plan fixes ONE method -- the repo''s own parser
+    -- and reports resolvability under it. If a future count disagrees with this one, run
+    measure_citations.py first: the disagreement is in the parser, and that is the thing
+    to investigate.'
+  ignore_rules_reused: IGNORED_DIRS and GENERATED_ROOTS from check_prompt_truth.py:65 and
+    :72, and its EXAMPLE_MARKERS. A claim under archive/ or .omp/ is describing history
+    or a runtime write, not citing source, and reporting it as drift produces findings about
+    the checker.
+  the_number_that_matters: '12 of 372 classified claims are mechanically checkable today:
+    they name a file that exists and a line in it. 334 are path-only mentions with no line
+    to verify. The gap this plan closes is the 12, plus a truthful count of the 334. Any
+    framing that implies the 389 are now covered is false, and the checker must never print
+    a bare total that a reader could mistake for coverage.'
+  counts_measured_2026_10_04:
+    definition_of_the_two_totals: '389 is every path-shaped token CLAIM matches in the four
+      documents. 372 is what survives the ignore rules: 389 minus 11 under IGNORED_DIRS
+      (archive/, .omp/) and 6 under GENERATED_ROOTS (.omp/, reports/, wal.json). Both numbers
+      are correct and mean different things, so the checker must label which is which.'
+    raw_matches: 389
+    dropped_by_ignore_rules: 11
+    dropped_as_generated_roots: 6
+    classified_total: 372
+    by_document:
+      ARCHITECTURE.md:
+        raw: 308
+        classified: 298
+        line_cited_repo: 11
+        line_cited_pkg: 25
+        path_only: 262
+        ignored: 6
+        generated: 4
+        out_of_range: 0
+      README.md:
+        raw: 27
+        classified: 24
+        line_cited_repo: 1
+        line_cited_pkg: 0
+        path_only: 23
+        ignored: 3
+        generated: 0
+        out_of_range: 0
+      theteam/SKILL.md:
+        raw: 21
+        classified: 18
+        line_cited_repo: 0
+        line_cited_pkg: 0
+        path_only: 18
+        ignored: 2
+        generated: 1
+        out_of_range: 0
+      theteam/CLI.md:
+        raw: 33
+        classified: 32
+        line_cited_repo: 0
+        line_cited_pkg: 1
+        path_only: 31
+        ignored: 0
+        generated: 1
+        out_of_range: 0
+    classified_classes:
+      line_cited_repo: 12
+      line_cited_pkg: 26
+      path_only: 334
+      out_of_range: 0
+    the_three_way_split: '372 classified = 12 checkable + 26 package-relative + 334 path-only.
+      The 17 filtered claims (11 ignored + 6 generated) are SKIPPED, not unchecked: they
+      were never candidates. So the honest report line is ''12 checked, 360 not checkable,
+      17 skipped by rule'' out of 389 raw. An earlier draft of this plan said ''377 not
+      checkable'', which folded the skipped claims into the unchecked count and overstated
+      the gap by exactly the number the ignore rules remove on purpose.'
+    measured_by: python3 scripts/measure_citations.py, run 2026-10-04. Reproduce with that
+      command; it imports the parser rather than reimplementing it.
+    why_an_earlier_draft_said_373: It gated the ignore rule on the path not existing, so
+      two claims under archive/ that DO exist on disk were counted as path_only instead
+      of ignored. The real parser ignores by path shape, not by existence. Same documents,
+      same regex, different ignore predicate -- which is why the numbers had to come from
+      the script rather than from a retyped rule.
+  parser_source_of_truth: scripts/measure_citations.py IMPORTS CLAIM, IGNORED_DIRS and GENERATED_ROOTS
+    from check_prompt_truth rather than retyping them. Every number in counts_measured_2026_10_04
+    came out of that script, so p0 can assert them instead of re-deriving them. A hand-copied
+    regex is how the earlier counts of 36 and 335 were produced, and how a later hand-rolled
+    pass produced 373 where the real parser says 372 -- the lookbehind (?<![\w*.-]) and
+    the optional line group are both load-bearing, and a copy drifts on them silently.
+the_ambiguity_that_shapes_p1: '26 claims are package-relative prose: cli.py:227, selector.py:35,
+  __init__.py:291. Resolving them means matching a bare filename against the tree. Measured:
+  18 of the 26 resolve to exactly one file (cli.py -> theteam/cli.py, executor.py -> theteam/tasks/executor.py).
+  The other 8 are __init__.py, which matches SIXTEEN files across the repo -- theteam/,
+  theteam/core/, theteam/tasks/, theteam/advisory/, theteam/ui/, theteam/security/, theteam/bin/,
+  theteam/tests/ and seven more under _island/. No amount of cleverness resolves __init__.py:291
+  mechanically; only the surrounding prose says which package is meant. A checker that guesses
+  here would resolve it wrong more often than right, and a wrong resolution is a false finding
+  about a document that was correct.'
+phases:
+- id: p0-baseline
+  name: Freeze the measurement with one parser
+  depends_on: []
+  estimated_effort: 30 minutes, read-only
+  rationale: The count in this file was produced by a session that no longer exists, using
+    a method that was chosen three times and discarded twice. Pin it in a checker so the
+    next reader reproduces the same numbers instead of re-deriving a fourth.
+  contract:
+  - scripts/check_doc_truth.py reports per-document and total counts by class.
+  - It prints the checked/skipped split in the same line, never a bare total.
+  - 'It reproduces counts_measured_2026_10_04 exactly: 389 raw, 372 classified after 11
+    ignored and 6 generated are dropped, and line_cited_repo = 12.'
+  - 'The summary line carries three numbers, not two: checked, not-checkable, and skipped-by-rule.
+    Collapsing the third into the second overstates the gap by 17.'
+  steps:
+  - Import CLAIM, IGNORED_DIRS, GENERATED_ROOTS and EXAMPLE_MARKERS from check_prompt_truth.py
+    rather than copying them. A second copy of that regex is a second definition of citation,
+    and the two will drift.
+  - 'Classify each claim into: line_cited_repo, line_cited_pkg, path_only, ignored, generated,
+    example, out_of_range.'
+  - Assert the classified total equals 372 and line_cited_repo equals 12. A mismatch means
+    the parser drifted from the one this plan was written against, which is the finding.
+    Report the raw 389 alongside it, labelled, so the two totals never read as a contradiction.
+  - 'Assert against measure_citations.py rather than against hardcoded literals, so the
+    baseline has one source: run it, compare its output, fail on any difference.'
+  done_when: The script reproduces every number in counts_measured_2026_10_04 and prints
+    '12 checked, 360 not checkable, 17 skipped by rule, 389 raw' -- labelled, never as one
+    bare figure.
+  rollback: Delete the script. No document is modified in this phase.
+- id: p1-resolve-package-relative
+  name: Resolve bare filenames, and refuse to guess __init__.py
+  depends_on:
+  - p0-baseline
+  estimated_effort: half a day
+  rationale: 26 line-cited claims are unresolvable as written, and 8 of them are irreducibly
+    so. This phase is what makes tier 1 safe to hard-fail; without it the checker fails
+    CI on 8 correct citations.
+  contract:
+  - A package-relative claim resolving to exactly one candidate file is checked normally.
+  - A package-relative claim matching more than one file is reported as ambiguous, never
+    resolved by guessing and never reported as broken.
+  steps:
+  - Match bare filenames against the tree, excluding archive/ and _island/ -- _island holds
+    seven extra __init__.py files and is not part of the product.
+  - For the 8 __init__.py claims, read the enclosing sentence and record it in the finding.
+    A human decides; the checker states the ambiguity rather than resolving it.
+  - Verify the split is 18 resolved / 8 ambiguous before wiring any pass-fail behaviour.
+  done_when: 26 package-relative claims classify as exactly 18 unique and 8 ambiguous, and
+    no ambiguous one is reported as a broken citation.
+  rollback: Report all 26 as ambiguous. That is strictly worse than today but strictly honest,
+    and it keeps the checker from failing on correct citations.
+- id: p2-check-the-checkable
+  name: Enforce existence and range on the 12
+  depends_on:
+  - p1-resolve-package-relative
+  estimated_effort: half a day
+  rationale: 'This is the defect class that actually bit: a citation pointing at the wrong
+    line or a deleted file. 12 claims qualify today and all 12 currently pass, so this tier
+    can hard-fail without breaking the tree.'
+  contract:
+  - Existence and in-range violations in line_cited_repo exit non-zero.
+  - Every other class is reported and exits 0.
+  steps:
+  - 'Tier 1: cited path exists, and cited line is within the file. These two exit non-zero.'
+  - 'Confirm the tree is green before wiring it: all 12 currently resolve and 0 are out
+    of range.'
+  - 'Report the other claims in the same output with all three numbers visible: 12 checked,
+    360 not checkable, 17 skipped by rule. Never print only the checked count.'
+  done_when: Deleting a cited file or citing a line past EOF fails the check; adding a valid
+    citation does not.
+  rollback: Downgrade both rules to report-only. The measurement stays; only the enforcement
+    leaves.
+- id: p3-symbol-resolution
+  name: Check that the cited line says what the prose claims
+  depends_on:
+  - p2-check-the-checkable
+  estimated_effort: half a day
+  rationale: 'Existence and range pass for a citation pointing at the wrong line, which
+    is the exact defect this plan was written for: :26 versus :34 both exist and both are
+    in range. Tier 3 is what makes the check mean something. It is not free -- CLAIM captures
+    (path, line, end) and not the surrounding text, so the parser needs a new capture and
+    a line-offset lookup.'
+  contract:
+  - For a claim carrying an expected text fragment, the cited line contains that fragment.
+  - A claim with no fragment to check is reported as unverifiable, not as passing.
+  steps:
+  - Extend CLAIM, or wrap its output, to capture the claim's own line of prose. Do not re-derive
+    the citation from the prose -- that is tier 4 and is out of scope.
+  - 'Start with the claims where the prose names a literal string, which is where a wrong
+    line is most detectable: ARCHITECTURE.md:459 ''must not know about any domain object''.'
+  - Report every claim that carries no checkable fragment as unverifiable, so the count
+    of 'actually checked' never silently exceeds the count that could be.
+  done_when: Moving ARCHITECTURE.md's conflict-order citation from :34 to :26 is reported,
+    while both lines exist and are in range -- the defect that motivated this plan, detected
+    mechanically.
+  rollback: Report symbol findings without failing the run. Tier 1 and 2 keep their enforcement;
+    this is the newest and least proven rule.
+- id: p4-wire-and-publish
+  name: Register the checker and state its coverage honestly
+  depends_on:
+  - p3-symbol-resolution
+  estimated_effort: half a day
+  rationale: A checker nothing runs catches nothing, and a checker whose output overstates
+    its coverage is worse than one that does not exist. Both failure modes are already documented
+    in this repo, and this phase is the one that avoids them.
+  contract:
+  - scripts/check_invariants.sh calls the checker.
+  - Every run states N checked and M not checkable, with M attributed to a named class,
+    and labels raw versus classified totals.
+  steps:
+  - 'Call it from check_invariants.sh as a report-only step, alongside check_import_graph.py,
+    and keep check_invariants.sh exiting 0 on it. While wiring it, decide what to do with
+    m4_pending: it is assigned at :25 inside check 1''s else-branch and read nowhere before
+    hard_fail is tested at :109 -- a non-blocking pattern that was built and then left half-wired.
+    Either restore the consumer (about three lines: fold m4_pending into the final decision)
+    or delete the variable, so the next reader is not sent looking for a precedent that
+    half exists.'
+  - Record the coverage split in ARCHITECTURE.md §7.2 as an invariant, with its honest number,
+    so the next reader learns what is and is not checked.
+  - 'State in the output that SKILL.md is out of scope: scripts/export_skill.py rewrites
+    it, so checking the repo copy and the exported copy is one decision, not two.'
+  done_when: bash scripts/check_invariants.sh runs the doc check, still exits 0, and every
+    run states both numbers.
+  rollback: Remove the one call line. The script remains runnable by hand, which is how
+    it will be used most often anyway.
+explicitly_out_of_scope:
+  SKILL.md: scripts/export_skill.py rewrites repo-relative paths in SKILL.md to absolute
+    on the way out. Checking the repo copy and the production copy is one decision about
+    the export, not a doc check. Listed here so the omission is a decision rather than an
+    oversight.
+  enforcing_tier_3: p3 resolves symbols; p2 makes existence and range hard-fail. Symbol
+    findings start as report-only because they are the newest and least proven rule, and
+    a check that fails closed on a false finding gets switched off -- see shared_constraints.
+  the_m4_pending_pattern: 'check_invariants.sh declares m4_pending at :16 and assigns m4_pending=1
+    at :25 when check 1''s safety-layer grep fails, but nothing reads it: the only other
+    reference is the declaration. The consumer was dropped, not never built. So the gate
+    already has a half-wired non-blocking pattern and no working one. p4 either restores
+    the consumer (about three lines) or models the reporting explicitly -- it must not cite
+    m4_pending as a precedent that works, because anyone who copies it inherits the same
+    dead variable.'
+  the_334_path_only_claims: '334 of 389 claims name a file with no line. There is no mechanical
+    oracle for these: SKILL.md cited from prose and a typo''d filename are the same shape,
+    and telling them apart needs semantics a regex does not have. This plan counts them
+    and says so. It does not check them, and no output of this checker may imply otherwise.'
+shared_constraints:
+- - Report the split, never a bare total.
+  - 'Every run prints N checked and M not checkable, with M attributed to path_only, ignored,
+    generated or ambiguous. A checker that reports ''389 claims checked'' while examining
+    12 is a false all-clear, and that is the defect class this repo already has twice: 9
+    wrong diagram citations behind a green gate, and an exit code that cannot say how many
+    diagrams it read.'
+- - Report, do not gate -- with one named exception.
+  - 'This plan''s own gate: existence and range may hard-fail because all 12 currently pass,
+    so wiring them cannot break the tree. Symbol resolution starts report-only. The exception
+    is recorded in the phase contract rather than left as a silent violation of the rule.'
+- - Prove both halves.
+  - Every tier is demonstrated firing AND silent. Deleting a cited file must fail the check;
+    a correct tree must exit 0. A checker only ever observed firing is not known to detect
+    the pass, which is how a gate becomes decorative.
+- - Refuse to guess.
+  - An ambiguous resolution is reported as ambiguous. Picking one of sixteen __init__.py
+    files produces a confident wrong answer, and a wrong finding about a correct document
+    costs more trust than the check earns.
+verification:
+  today: 'No checker reads these four documents. Of 372 classified claims, the 12 that carry
+    a resolvable line all currently pass: 0 missing paths, 0 out-of-range lines. So this
+    plan''s first run is green, and a red first run means the method drifted, not that the
+    documents are wrong.'
+  after_p0: check_doc_truth.py prints 389 raw and 372 classified, both labelled, asserts
+    them along with line_cited_repo = 12, and reports the split as 12 checked / 360 not
+    checkable / 17 skipped -- so parser drift surfaces as a failure rather than a slow rot.
+  after_p1: Package-relative claims classify as 18 unique / 8 ambiguous. The 8 are __init__.py,
+    reported with their surrounding sentence rather than resolved.
+  after_p2: Existence and range are enforced. Deleting theteam/state.py, which ARCHITECTURE.md
+    cites at :35, fails the run; adding a valid citation does not.
+  after_p3: Moving the conflict-order citation from ARCHITECTURE.md:34 to :26 is reported.
+    Both lines exist; both are in range; only symbol resolution catches it. That single
+    test is the whole argument for this plan.
+  after_p4: 'bash scripts/check_invariants.sh still exits 0 and now runs the doc check,
+    printing both numbers every time. Suite stays at 800 passed: this plan adds a script
+    and changes no product behaviour, so any test delta is a defect in the plan.'
+  suite_and_gates: python3 -m pytest -q -- expected 800 passed, unchanged. No file under
+    theteam/ is touched by any phase.
+  measuring_today: python3 scripts/measure_citations.py -- already run, already committed.
+    It is the tool p0 wraps, so the baseline is reproducible before a line of check_doc_truth.py
+    exists.
+risks:
+- - The first run looks like full coverage.
+  - '389 claims parsed, 12 checked. Mitigation is in shared_constraints: the checker prints
+    three labelled numbers and never a bare total. This is the single most likely way this
+    plan misleads, and it is the exact shape of the two false all-clears already catalogued
+    -- 9 wrong diagram citations behind a green gate, and an exit code that cannot say how
+    many diagrams it read. The specific error to avoid is reporting the 17 rule-filtered
+    claims (11 ignored + 6 generated) as unchecked, which is what an earlier draft of this
+    plan did with the figure 377.'
+- - Package-relative resolution guesses __init__.py.
+  - Sixteen candidates, no mechanical discriminator. p1's contract forbids resolving it
+    and requires the finding to carry the surrounding sentence instead.
+- - The regex diverges from check_prompt_truth.py's.
+  - Two copies of CLAIM would be two definitions of citation. p0 imports rather than copies,
+    and p0's assertion on 389 makes divergence a hard failure rather than a slow drift.
+- - Scope creep into the 334.
+  - Path-only claims are where my own :26 error lived, so they are tempting. There is no
+    oracle for them; counting them honestly is the deliverable, checking them is a different
+    plan with semantics in it.
+cost_estimate:
+  basis: check_prompt_truth.py is 188 lines and covers the same claim grammar plus symbol
+    resolution. This plan adds package-relative resolution, an ambiguity class the prompt
+    checker does not need, a raw-versus-classified reporting split, and an assertion on
+    its own counts. It is a larger job than prompt-truth, not a smaller one -- the earlier
+    'about 150 lines' figure came from a count this plan has since discarded.
+  p0: ~60 lines, mostly classification and reporting
+  p1: ~70 lines, the tree search plus the ambiguity report
+  p2: ~40 lines, two rules and their findings
+  p3: ~120 lines, new capture group plus line-offset lookup
+  p4: ~30 lines, gate wiring and the invariant entry
+  total: ~320 lines across 5 phases, one new file, no product code touched

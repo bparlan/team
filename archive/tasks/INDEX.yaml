@@ -74,10 +74,18 @@ recommended_order:
   is void and the hour was cheap.'
 - 6. project-convention-infra -- BLOCKED until the user names an example project. Its p1
   derives the convention set from a real inventory rather than a guess.
-why_this_order: Cost of being wrong, ascending. Step 1 is fifteen minutes and cannot be
-  wrong. Step 3 is read-only and can only return 'your premise is false', which is a useful
-  answer. Step 4 is the largest and the only one that needs a decision the user has not
-  yet made. Running the cheap irreversible things first is the whole argument.
+why_this_order: Cost of being wrong, ascending, and cost of being unable to undo it, descending.
+  Step 1 is fifteen minutes, needs no decision, and cannot be wrong. Step 2 corrects nine
+  line numbers that are wrong today, so a reader tracing the architecture today lands on
+  the wrong line -- it is the only step that fixes a defect a person is currently hitting,
+  and it ships alone without waiting for anything. Step 3 makes the gate stricter, which
+  turns a green gate red on a tree that was previously wrong, so it must follow step 2 or
+  the repo spends a commit failing its own gate for no stated reason. Step 4 is the largest
+  build in the set and introduces a new public surface, so it goes after the cheap corrections
+  have proven the process works. Step 5 is read-only and can only return 'your premise is
+  false', which is a useful answer for an hour. Step 6 is blocked on a decision only the
+  user can make, so it is last and stays blocked rather than being started on a guess. Running
+  the cheap, irreversible, currently-broken things first is the whole argument.
 not_planned:
 - 'A project-wide ROADMAP.md index. Acknowledged as a real need by the user and deliberately
   not built here: it is a content decision about what a roadmap is for, and this index does
@@ -89,8 +97,12 @@ not_planned:
 - 'Running the 13 unverified LLM phases. The largest unproven surface in the system: only
   root-organization/scan has completed through a live spawn.'
 shared_constraints:
-- Report rather than gate. Every checker here exits 0 with findings. A check that fails
-  closed gets switched off, and a switched-off check catches nothing.
+- 'Report rather than gate. Every checker here exits 0 with findings. A check that fails
+  closed gets switched off, and a switched-off check catches nothing. The one named exception
+  is diagram-citation-truth p0''s checker, which must exit non-zero: it is the only thing
+  standing between nine wrong citations and the next nine, and nothing else would run it.
+  The exception is recorded in that phase''s own contract rather than left as a silent violation
+  of this rule.'
 - Prove both halves. A checker must be tested firing on a violation AND silent on a compliant
   shape. The second half is what stops it crying wolf -- a failure that actually happened
   twice while writing the first two checkers.
@@ -110,3 +122,11 @@ evidence:
   date: '2026-10-04'
   measures: 9 of 13 diagram citations wrong at authoring; 13/14 anchor hashes valid; 13/13
     diagram edges real; 9 of 10 invariants enforced, rich nowhere; Layer 0 contract violated.
+phase_entry_points:
+  human-report-surface: p2 -- move the 8 files. No decisions outstanding.
+  diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone; independent
+    of every other plan here.
+  system-awareness-injection: p0 -- audit capability claims. Needs no example project; p3
+    is the only phase that does.
+  project-convention-infra: BLOCKED at q0. Cannot start until the user names one example
+    project.

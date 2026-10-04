@@ -1,10 +1,15 @@
 # System Awareness Injection -- implementation plan
 #
-# Third of three plans; the others are human-report-surface.yaml and
-# project-convention-infra.yaml, beside it in this directory. All three live
-# here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
-# `*_REPORT.md`; this directory already holds milestone artifacts in the same
-# shape (folder-monitoring.yaml).
+# One of five plans in this directory. The others are
+# human-report-surface.yaml, project-convention-infra.yaml and
+# diagram-citation-truth.yaml. All five live here because AGENTS.md:39-40 bans
+# `*_PLAN.md`, `*_ANALYSIS.md` and `*_REPORT.md`.
+#
+# NOTE: folder-monitoring.yaml also sits in this directory but is NOT the same
+# shape. It is a `type: loop` registered task -- schedule, outputs, actions,
+# script-only phases -- the tasks/*.yaml contract. These five are roadmap
+# plans: status, phases with contract/steps/done_when/rollback, no schedule.
+# Cite a sibling plan as precedent, not folder-monitoring.
 #
 # The body is emitted by yaml.safe_dump from a dict, not hand-indented.
 # Hand-written YAML failed to parse three times in one session -- an unquoted

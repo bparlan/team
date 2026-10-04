@@ -1,9 +1,15 @@
 # Diagram Citation Truth -- implementation plan
 #
-# Fifth plan in this directory, beside human-report-surface.yaml,
-# project-convention-infra.yaml and system-awareness-injection.yaml. It lives
-# here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
-# `*_REPORT.md`.
+# One of five plans in this directory. The others are
+# human-report-surface.yaml, project-convention-infra.yaml and
+# system-awareness-injection.yaml. All five live here because AGENTS.md:39-40
+# bans `*_PLAN.md`, `*_ANALYSIS.md` and `*_REPORT.md`.
+#
+# NOTE: folder-monitoring.yaml also sits in this directory but is NOT the same
+# shape. It is a `type: loop` registered task -- schedule, outputs, actions,
+# script-only phases -- the tasks/*.yaml contract. These five are roadmap
+# plans: status, phases with contract/steps/done_when/rollback, no schedule.
+# Cite a sibling plan as precedent, not folder-monitoring.
 #
 # The body is emitted by yaml.safe_dump from a dict, not hand-indented.
 # Hand-written YAML failed to parse three times in one session -- an unquoted
@@ -100,6 +106,10 @@ phases:
   - A checker names all 9 wrong citations by node, file and both line numbers.
   - Its finding count is reproducible from a clean checkout, and it exits non-zero when
     it finds any.
+  - 'The checker is demonstrated in BOTH states before this phase closes: firing (names
+    all 9 today) and silent (reports 0 and exits 0 once p1 lands). A checker only ever seen
+    firing is not known to detect the passing case -- see shared_constraints, ''prove both
+    halves''.'
   steps:
   - 'Add scripts/check_diagram_truth.py. Prefer a new file over extending check_prompt_truth.py:
     prompt truth and diagram truth are different failure modes and one exit code cannot
@@ -108,8 +118,13 @@ phases:
     not grep for the symbol name -- a name in a docstring would satisfy a grep, and six
     of the nine wrong citations point into a docstring or at line 1.
   - Confirm it reports exactly 9 findings, matching corrections[] in this file.
-  done_when: The checker names all 9 by node, file and both line numbers, and its finding
-    count is reproducible from a clean checkout.
+  - 'Demonstrate both states before closing: run it now and record the 9 findings, then
+    run it against a corrected copy of the diagram in a scratch directory and record 0 with
+    exit 0. Both runs go in the phase report. Proving only the firing half is how a checker
+    passes vacuously.'
+  done_when: The checker names all 9 by node, file and both line numbers today, reports
+    0 with exit 0 against a corrected diagram, and its finding count is reproducible from
+    a clean checkout.
   rollback: Delete the new script. No diagram or source file is touched in this phase.
 - id: p1-correct-citations
   name: Write the 9 correct line numbers into the diagram
@@ -158,26 +173,50 @@ phases:
   rollback: Revert the symbol-resolution block. The hash half is untouched and still catches
     SKILL.md.
 - id: p3-fix-gate-coverage
-  name: Stop the gate returning after the first diagram
+  name: Fix the gate's diagram coverage and its blind spot to itself
   depends_on:
   - p2-enforce-in-the-gate
   estimated_effort: half a day
-  rationale: update_team_check.py:176 returns inside the loop over DIAGRAM_DIR.glob. sorted()
-    puts active-usage-architecture.json first, so the other two diagrams are never evaluated.
-    It is masked today only because those two have no .anchors.json sidecar and continue
-    past first.
+  rationale: 'Two defects in the same loop, and the second is why the first went unnoticed.
+    DIAGRAM_DIR.glob(''*.json'') at update_team_check.py:130 matches the sidecar itself,
+    because ''active-usage-architecture.anchors.json'' also ends in .json. sorted() puts
+    that sidecar at position 1; _sidecar_for() then looks for ''active-usage-architecture.anchors.anchors.json'',
+    which does not exist, and :141 continues. Position 2 is the real diagram, its sidecar
+    exists, the hashes are compared and it returns 3 -- verified by running it, which named
+    theteam/SKILL.md. So the architecture diagram IS checked today; the defect is that check()
+    returns at :176 after the first diagram that has a sidecar, and only one does, so the
+    other two are never reached. Record a second sidecar and it is silently still never
+    checked. The deeper problem is that the exit code is a single number: nothing in ''exit
+    3'' distinguishes ''I checked every diagram and one is stale'' from ''I stopped at the
+    first one''. That is the same false-all-clear shape as the nine citations this gate
+    waves through, one level up.'
   contract:
+  - 'The loop iterates diagrams only: sidecars named *.anchors.json are excluded by construction,
+    not by filename accident.'
   - Every diagram with a sidecar is checked in one run.
+  - The exit code and report state how many diagrams were evaluated, so full coverage is
+    distinguishable from early exit without reading the source.
   - Each verdict is reported separately; _report() stops overwriting one file with the next.
   steps:
-  - Accumulate per-diagram verdicts across the loop and return once, after it.
-  - Give _report() a per-diagram filename, or write one report with a section per diagram.
+  - Exclude sidecars from the glob -- iterate .json files whose name does not end in .anchors.json,
+    so the loop sees diagrams and only diagrams. Verify the iteration count drops from 5
+    to 3 before anything else changes.
+  - Accumulate per-diagram verdicts across the loop and return once, after it, so every
+    diagram with a sidecar is evaluated in a single run.
+  - Make the exit code and the report state how many diagrams were evaluated, so a caller
+    reading only the exit code can tell full coverage from early exit. A gate whose coverage
+    is invisible is the defect this plan exists to remove.
+  - Give _report() a per-diagram filename, or write one report with a section per diagram,
+    so a second diagram does not overwrite the first.
   - Decide explicitly whether milestones and llm-phase-spawn get sidecars. task-update-team.yaml's
     honest-coverage rule calls a diagram with no sidecar could-not-evaluate, never up to
     date; this phase should record them or make that rule executable rather than leaving
     it as prose in a task file.
-  done_when: A run with two sidecars present evaluates both, and the report names both verdicts.
-  rollback: Revert to the single-diagram return. No recorded sidecar is affected.
+  done_when: A run with two sidecars present evaluates both and names both verdicts, the
+    evaluated count is visible in the report, and a sidecar present in diagrams/ is never
+    itself treated as a diagram.
+  rollback: Revert to the single-diagram return. No recorded sidecar is affected, and the
+    hash check that catches SKILL.md is untouched throughout.
 - id: p4-close-the-adjacent-gaps
   name: Fix the small findings the same measurement surfaced
   depends_on:
@@ -227,3 +266,65 @@ risks:
 - - Conflating the two classes again.
   - Nine authoring defects and one staleness case look identical from outside. p2's contract
     requires them reported distinctly; that requirement is the plan's main deliverable.
+evidence:
+  artifact: reports/architecture-reality-analysis.html
+  date: '2026-10-04'
+  commit: 02b8b76
+  method: AST import scan (97 modules, 155 in-package edges), runtime sys.modules after
+    `import theteam`, and symbol resolution of every cited file:line against the real def/class
+    line at the anchor revision ca3673b and again at HEAD, so authoring defects separate
+    from staleness.
+  headline_numbers:
+    citations_wrong_at_authoring: 9 of 13 symbol-bearing citations
+    cited_files_unchanged_since_anchor_revision: 13 of 14
+    diagram_edges_real: 13 of 13
+    anchor_hashes_still_valid: '13 of 14 (gate names the 1 changed file: theteam/SKILL.md)'
+    invariants_enforced_somewhere: 9 of 10; only `rich` (doc 9) is enforced nowhere
+  reproduce:
+  - 'python3 scripts/update_team_check.py  # exit 3, names theteam/SKILL.md'
+  - 'git show ca3673bf:theteam/cli.py | grep -n ''^def build_parser''  # 1203, not the cited
+    604'
+  - 'git diff --stat ca3673bf HEAD -- theteam/cli.py  # empty: the file never moved'
+shared_constraints:
+- - Report, never gate.
+  - 'A phase reports what it found and exits 0; it does not fail a build because a citation
+    is wrong. The p0 checker is the deliberate exception and says so in its own docstring:
+    it is the only thing standing between nine wrong numbers and the next nine, and a checker
+    nothing runs is indistinguishable from no checker. Every other finding in this plan
+    is a report.'
+- - Prove both halves.
+  - 'The p0 checker must be demonstrated firing AND silent. Firing: it names all 9 today.
+    Silent: after p1, the same command reports 0 and still exits 0. A checker only ever
+    observed in its failing state is not known to detect the passing one -- the failure
+    mode this repo already has in check_task_contract.py and check_prompt_truth.py, which
+    is why both were built to exit 0 with findings.'
+- - Verify before citing.
+  - Every correction in this file was resolved by AST against live source, and the plan
+    is void if that stops being true. `git show ca3673bf:<file>` is the historical check;
+    the AST walk is the current one. Never hand a line number forward without one of the
+    two.
+- - Cite the sibling plan, not the task file.
+  - folder-monitoring.yaml shares this directory and nothing else -- different artifact
+    class, different contract. Sibling plans are the precedent for this shape.
+verification:
+  today: 'python3 scripts/update_team_check.py exits 3 with ''re-derive may be needed''
+    and names theteam/SKILL.md. That is correct: SKILL.md is the only cited file whose content
+    changed. It is also exit 3 for the wrong reason -- the loop returns after the first
+    diagram with a sidecar, and only one has one, so exit 3 today means ''one diagram checked'',
+    not ''five diagrams checked, one stale''.'
+  after_p1: The 9 citation lines are corrected. update_team_check.py still exits 3, still
+    naming only SKILL.md, because correcting a line number in a file whose hash did not
+    change moves no hash. Exit 3 across p1 is the expected state, not a regression.
+  after_p2: The same command additionally resolves every cited line to its named symbol.
+    Corrupting one citation makes it name that node with both line numbers; restoring it
+    returns the previous verdict. This is the phase where a correct tree finally produces
+    a meaningful exit code.
+  after_p3: The loop iterates 3 diagrams instead of 5 (sidecars excluded by construction),
+    the report states how many were evaluated, and a run with two sidecars present names
+    both verdicts instead of overwriting one.
+  after_p4: 'bash scripts/check_invariants.sh reports 8 checks and exits 0. The suite stays
+    at 800 passed. `rmdir` leaves no git diff, which is the point: the two directories were
+    untracked, so their absence is the only evidence the work happened.'
+  suite_and_gates: 'python3 -m pytest -q -- expected: 800 passed, unchanged. This plan touches
+    diagrams/, scripts/ and one comment; it must not alter product behaviour, so any test
+    delta is a defect in the plan, not an expected cost.'

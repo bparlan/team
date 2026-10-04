@@ -229,7 +229,7 @@ that reason: it is real, and it is nearly free.</div>
 
 <h2>5. Where the document is right</h2>
 <div class="card ok">
-<p><b>The milestones pair is out of sync — and <code>ARCHITECTURE.md:11-24</code> already says so, accurately.</b></p>
+<p><b>The milestones pair is out of sync — and <code>ARCHITECTURE.md:12-32</code> already says so, accurately.</b></p>
 <p>The committed <code>active-usage-milestones.json</code> carries 11 nodes (<code>m0</code>–<code>m10</code>);
 the committed <code>.html</code> renders 7 (<code>m0</code>–<code>m6</code>). The document's claim that
 "<code>archify validate workflow</code> now fails on that committed source as-is" is <b>verified correct</b>:
@@ -323,7 +323,7 @@ written and waiting. p2 of that plan is the 15-minute phase that moves them.</p>
 <div class="card info">
 <b>The pattern across every finding is the same:</b> a measurement was taken correctly, written down, and then
 nothing kept it current. §5.2.1 knows <code>event_bus</code> and <code>health_monitor</code> have no importer.
-<code>__init__.py</code> knows the import chain changed. <code>ARCHITECTURE.md:11-24</code> knows the milestone
+<code>__init__.py</code> knows the import chain changed. <code>ARCHITECTURE.md:12-32</code> knows the milestone
 pair is out of sync. <i>The knowledge is in the repo. The enforcement is not.</i>
 <div class="why">The diagram case is the sharpest version, because the enforcement mechanism <i>exists and
 runs</i> — it is simply answering a different question. Whole-file hashes answer "did this file change?"; the
@@ -348,7 +348,7 @@ different surface.</div>
 
 <p class="meta">Measured 2026-10-04 on <code>main</code> @ <code>02b8b76</code> · suite 800 passed ·
 invariant gate PASSED · diagram gate run (exit 3, 1 changed file) · no source file was modified to produce this
-report. Conflict order per <code>ARCHITECTURE.md:26</code>: this document is intent, the diagrams are rendered
+report. Conflict order per <code>ARCHITECTURE.md:34</code>: this document is intent, the diagrams are rendered
 shape, the code is fact — where a citation disagrees with the code, the citation is the defect.</p>
 
 </div>

@@ -60,19 +60,24 @@
 <p class="sub">Project-wide analysis &middot; 2026-10-04 &middot; measured against <code>main</code> @ <code>02b8b76</code></p>
 
 <div class="grid">
-  <div class="stat"><div class="n n-ok">5<span style="font-size:14px;color:var(--dim)">/14</span></div><div class="l">diagram citations exact</div></div>
+  <div class="stat"><div class="n n-ok">4<span style="font-size:14px;color:var(--dim)">/13</span></div><div class="l">citations correct at authoring</div></div>
   <div class="stat"><div class="n n-ok">13<span style="font-size:14px;color:var(--dim)">/13</span></div><div class="l">diagram edges real</div></div>
-  <div class="stat"><div class="n n-warn">14<span style="font-size:14px;color:var(--dim)">/14</span></div><div class="l">anchors drifted</div></div>
-  <div class="stat"><div class="n n-ok">7<span style="font-size:14px;color:var(--dim)">/10</span></div><div class="l">invariants enforced</div></div>
+  <div class="stat"><div class="n n-ok">13<span style="font-size:14px;color:var(--dim)">/14</span></div><div class="l">anchors still valid</div></div>
+  <div class="stat"><div class="n n-warn">9<span style="font-size:14px;color:var(--dim)">/10</span></div><div class="l">invariants enforced somewhere</div></div>
   <div class="stat"><div class="n n-bad">1</div><div class="l">layer contract violated</div></div>
 </div>
 
 <div class="card ok">
-<b>Shape is sound. Provenance is not.</b> Every architectural relationship the diagrams assert
-— all 13 edges — is real and verified against the source. Every module
+<b>Shape is sound. The citations were never right.</b> Every architectural relationship the diagrams
+assert — all 13 edges — is real and verified against the source. Every module
 <code>ARCHITECTURE.md</code> assigns exists, and all 20 <code>core/</code> modules have a live or
-correctly-documented importer story. What has decayed is <i>traceability</i>: line-number citations,
-content anchors, and the gate that should catch either drifting.
+correctly-documented importer story.
+<div class="why"><b>The decisive measurement:</b> <code>scripts/update_team_check.py</code> compares each cited
+file against the <code>sha256</code> recorded in <code>active-usage-architecture.anchors.json</code>. Thirteen of
+fourteen cited files are <b>byte-identical</b> to when the anchors were recorded at <code>ca3673b</code>. An
+unchanged file cannot have moved its line numbers — so those nine citations were pointing at the wrong line
+<i>the day they were written</i>. This is an authoring defect, not staleness, and it needs a different fix than
+staleness does.</div>
 </div>
 
 <h2>1. Method</h2>
@@ -80,40 +85,57 @@ content anchors, and the gate that should catch either drifting.
 <ul>
   <li><b>AST import scan</b> — 97 modules, 155 in-package edges, imports at any nesting level.</li>
   <li><b>Runtime <code>sys.modules</code></b> — what <code>import theteam</code> actually loads, plus every lazy re-export resolved.</li>
-  <li><b>Symbol resolution</b> — each cited <code>file:line</code> checked against the real <code>def</code>/<code>class</code> line, and each cited file's blob hash against <code>git hash-object</code>.</li>
+  <li><b>Symbol resolution, historical</b> — each cited <code>file:line</code> resolved against the real <code>def</code>/<code>class</code> line <i>at the revision the anchors were recorded</i>, and again at HEAD, so authoring defects are separated from staleness.</li>
 </ul>
 <p>The architecture gate was run, not assumed: <code>bash scripts/check_invariants.sh</code> → <b>PASSED</b> (7 checks). <code>scripts/check_import_graph.py</code> → 88 modules (budget 90), 7 of 7 <code>theteam.core.*</code> (budget 8), no cluster tier. Suite: <b>800 passed</b>.</p>
 
-<h2>2. Architecture diagram — shape right, citations stale</h2>
+<h2>2. Architecture diagram — shape right, citations wrong since authoring</h2>
 
 <h3>2.1 Citation accuracy (<code>diagrams/active-usage-architecture.json</code>)</h3>
 <table>
-<thead><tr><th>Node</th><th>Cited</th><th>Actual</th><th>Δ</th><th>Verdict</th></tr></thead>
+<thead><tr><th>Node</th><th>Cited</th><th>Actual</th><th>Δ</th><th>File changed since <code>ca3673b</code>?</th><th>Verdict</th></tr></thead>
 <tbody>
-<tr><td><code>selector</code></td><td>selector.py:191</td><td>191</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
-<tr><td><code>commentary_controller</code></td><td>commentary.py:111</td><td>111</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
-<tr><td><code>state_store</code></td><td>state.py:35</td><td>35</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
-<tr><td><code>task_scheduler</code></td><td>scheduler.py:32</td><td>32</td><td>0</td><td><span class="tag t-hold">exact</span></td></tr>
-<tr><td><code>session</code></td><td>SKILL.md:117</td><td>line exists</td><td>—</td><td><span class="tag t-hold">exact</span></td></tr>
-<tr><td><code>discussion</code></td><td>__init__.py:690</td><td>710</td><td>+20</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>task_repository</code></td><td>repository.py:123</td><td>144</td><td>+21</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>task_executor</code></td><td>executor.py:57</td><td>77</td><td>+20</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>context_slice</code></td><td>context_slice.py:90</td><td>128</td><td>+38</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>circuit_breaker</code></td><td>circuit_breaker.py:1</td><td>55</td><td>+54</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>llm_runner</code></td><td>llm.py:82</td><td>190</td><td>+108</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>agent_isolation</code></td><td>agent_isolation.py:1</td><td>152</td><td>+151</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>team_manager</code></td><td>manager.py:1</td><td>133</td><td>+132</td><td><span class="tag t-drift">drifted</span></td></tr>
-<tr><td><code>theteam_cli</code></td><td>cli.py:604</td><td>1203</td><td>+599</td><td><span class="tag t-bad">drifted</span></td></tr>
+<tr><td><code>selector</code></td><td>selector.py:191</td><td>191</td><td>0</td><td>no</td><td><span class="tag t-hold">correct</span></td></tr>
+<tr><td><code>commentary_controller</code></td><td>commentary.py:111</td><td>111</td><td>0</td><td>no</td><td><span class="tag t-hold">correct</span></td></tr>
+<tr><td><code>state_store</code></td><td>state.py:35</td><td>35</td><td>0</td><td>no</td><td><span class="tag t-hold">correct</span></td></tr>
+<tr><td><code>task_scheduler</code></td><td>scheduler.py:32</td><td>32</td><td>0</td><td>no</td><td><span class="tag t-hold">correct</span></td></tr>
+<tr><td><code>discussion</code></td><td>__init__.py:690</td><td>710</td><td>+20</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>task_executor</code></td><td>executor.py:57</td><td>77</td><td>+20</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>task_repository</code></td><td>repository.py:123</td><td>144</td><td>+21</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>context_slice</code></td><td>context_slice.py:90</td><td>128</td><td>+38</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>circuit_breaker</code></td><td>circuit_breaker.py:1</td><td>55</td><td>+54</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>llm_runner</code></td><td>llm.py:82</td><td>190</td><td>+108</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>team_manager</code></td><td>manager.py:1</td><td>133</td><td>+132</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>agent_isolation</code></td><td>agent_isolation.py:1</td><td>152</td><td>+151</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>theteam_cli</code></td><td>cli.py:604</td><td>1203</td><td>+599</td><td>no</td><td><span class="tag t-bad">authoring defect</span></td></tr>
+<tr><td><code>session</code></td><td>SKILL.md:117</td><td>line exists, content differs</td><td>—</td><td><b>yes</b></td><td><span class="tag t-drift">managed staleness</span></td></tr>
 </tbody>
 </table>
 
+<div class="card bad">
+<b>Nine of thirteen citations were wrong the moment they were written.</b>
+<div class="why"><b>The proof:</b> <code>scripts/update_team_check.py</code> reports that thirteen of the fourteen
+cited files are <i>byte-identical</i> to their recorded <code>sha256</code>. Independently confirmed with
+<code>git diff ca3673b HEAD -- &lt;file&gt;</code>, which is empty for all thirteen. A file that has not changed
+cannot have moved a line number. Directly settled:
+<code>git show ca3673bf:theteam/cli.py | grep -n '^def build_parser'</code> prints <b>1203</b>, not 604.
+So <code>theteam_cli</code> cited the wrong line at authoring, and has cited it ever since.</div>
+<p style="margin:10px 0 0">This is <b>not</b> the drift the anchors mechanism was built to catch, and that
+distinction decides the fix. Staleness is fixed by re-deriving; an authoring defect is fixed by correcting the
+number, and re-deriving would reproduce the same wrong answer as long as the generator resolves lines the same
+way.</p>
+</div>
+
 <div class="card warn">
-<b>Drift is monotonic in one direction.</b> Every drift is <i>positive</i> — the symbol moved down the file,
-never up. That is the signature of insertions above a definition, not of a wrong reference. No citation points
-at a line that no longer holds its symbol.
-<div class="why"><b>Therefore:</b> the diagram is describing the correct architecture; it is pointing at the
-wrong line of the correct file. This is a cheap class of drift — regenerable — and it is exactly what the
-anchors file was supposed to catch.</div>
+<b>Every wrong citation points at the file's line 1 or into its header comment.</b>
+<code>agent_isolation:1</code>, <code>circuit_breaker:1</code>, <code>team_manager:1</code> — all cite line 1.
+<code>llm.py:82</code>, <code>context_slice.py:90</code>, <code>executor.py:57</code> land inside module
+docstrings. A plausible-looking line inside a docstring is a citation that resolves to nothing.
+<div class="why"><b>Likely cause [INFERENCE]:</b> whoever derived the diagram recorded the line where a symbol
+became <i>mentionable</i> — the module header or the docstring naming it — rather than the line of its
+<code>def</code>. Nothing checked, because a line inside a file that exists looks correct at a glance and to
+<code>grep</code>. A checker that resolves the <i>named symbol</i> rather than testing that the line is non-empty
+would have failed all nine at authoring time.</div>
 </div>
 
 <h3>2.2 Edge verification</h3>
@@ -124,20 +146,38 @@ is real and I was wrong: <code>advisory/commentary.py:31</code> imports <code>se
 <p>The two boundary edges (<code>llm_runner → session</code>, <code>member → output</code>) cross the process
 boundary and are documented as such in <code>README.md:116</code>.</p>
 
-<h2>3. Anchors — the mechanism that should have caught this, and does not</h2>
-<p><code>diagrams/active-usage-architecture.anchors.json</code> records a content hash for each of the 14 cited
-files, plus the revision it was generated from.</p>
-<div class="card bad">
-<b>All 14 hashes have drifted.</b> Anchored at <code>ca3673bf</code>; <code>HEAD</code> is <code>02b8b76</code>.
-Not one cited file still matches.
-<p style="margin:8px 0 0">The anchor records <i>whole-file</i> hashes, so it is a change detector, not a citation
-checker — any edit anywhere trips it, and it says nothing about whether line 604 still holds
-<code>build_parser</code>. It is a coarser instrument than the thing it was meant to protect, and nothing runs it.</p>
+<h2>3. The anchor mechanism — real, working, and blind to the actual defect</h2>
+<div class="card ok">
+<b>The gate exists and works. My first pass missed it.</b>
+<code>scripts/update_team_check.py</code> is the staleness gate for exactly this diagram. Run it:
+<code>python3 scripts/update_team_check.py</code> → exit <b>3</b>, verdict <code>re-derive may be needed</code>,
+and it names <b>one</b> changed file: <code>theteam/SKILL.md</code>. That is correct — SKILL.md is the only
+cited file whose content changed, and it is the one node whose citation is genuine managed staleness
+(<code>:117</code> pointed at roster prose then, and at the spawn-loop section now).
 </div>
-<div class="why"><b>Consequence:</b> the file that exists precisely to detect architectural drift is itself
-undetectable drift, because no script reads it. <code>scripts/check_invariants.sh</code> has 7 checks;
-none touches <code>diagrams/</code>. There is no <code>prompt-truth</code>-style gate for diagrams, which
-is the same gap that plan closed for prompts.</div>
+<div class="card warn">
+<b>But it hashes whole files, so it is structurally incapable of detecting the nine authoring defects.</b>
+<code>_hash()</code> is <code>sha256(bytes)[:16]</code> — a change detector, not a citation checker. It answers
+"did this file change?" and never "does line 604 hold <code>build_parser</code>?". Thirteen unchanged files
+producing nine wrong citations is exactly the case it cannot see.
+<div class="why"><b>Correction to an earlier reading:</b> I first compared anchors with <code>git hash-object</code>
+and concluded 14/14 had drifted. That was my error — a different hash function on the same bytes. Recomputed
+with the gate's own <code>sha256[:16]</code>, 13/14 match. The only drifted anchor is <code>SKILL.md</code>, and
+the gate reports precisely that.</div>
+</div>
+<div class="card bad">
+<b>And the gate stops after the first diagram.</b> <code>check()</code> returns at
+<code>update_team_check.py:176</code>, inside the loop over <code>DIAGRAM_DIR.glob("*.json")</code>.
+<code>sorted()</code> puts <code>active-usage-architecture.json</code> first, so it is evaluated and then the
+function returns — <code>active-usage-milestones.json</code> and <code>llm-phase-spawn.architecture.json</code>
+are never checked at all. <code>_report()</code> also writes one fixed filename
+(<code>.omp/theteam/reports/update-team.md</code>), so even if the loop ran, each diagram would overwrite the last.
+<div class="why"><b>Why it went unnoticed:</b> only one of the three diagrams has a <code>.anchors.json</code>
+sidecar, and the two without one <code>continue</code> past before the <code>return</code> —
+<code>milestones</code> and <code>llm-phase-spawn</code> would be skipped anyway. So the bug is currently
+masked by the absence of the very inputs that would expose it. Recording a second sidecar is what would
+surface it.</div>
+</div>
 
 <h2>4. Where the code contradicts the document</h2>
 
@@ -187,16 +227,18 @@ of the drift §5.3.1 exists to prevent, and the fix is <code>rmdir</code>. Liste
 that reason: it is real, and it is nearly free.</div>
 </div>
 
-<h2>5. Where the document is right and the diagram is stale</h2>
+<h2>5. Where the document is right</h2>
 <div class="card ok">
 <p><b>The milestones pair is out of sync — and <code>ARCHITECTURE.md:11-24</code> already says so, accurately.</b></p>
 <p>The committed <code>active-usage-milestones.json</code> carries 11 nodes (<code>m0</code>–<code>m10</code>);
 the committed <code>.html</code> renders 7 (<code>m0</code>–<code>m6</code>). The document's claim that
 "<code>archify validate workflow</code> now fails on that committed source as-is" is <b>verified correct</b>:
 the node-count mismatch is exactly as described.</p>
-<p>The document also correctly reports that the architecture pair <i>is</i> synced and <code>validate</code>
-returns <code>ok: true</code>. That claim is now falsified in the useful direction — the JSON is synced to the
-code, but the line citations inside it are not (§2.1).</p>
+<p>The document also reports that the architecture pair <i>is</i> synced and <code>validate</code>
+returns <code>ok: true</code>. Both are true and both are beside the point: <code>validate</code> checks that
+the JSON and the HTML agree, and they do. It does not resolve a citation to a symbol. Nine wrong citations
+returned <code>ok: true</code> because the tool is checking pair consistency, not truth — which is precisely
+why §3's anchor mechanism, not <code>validate</code>, is where the real gap sits.</p>
 </div>
 
 <div class="card info">
@@ -204,35 +246,38 @@ code, but the line citations inside it are not (§2.1).</p>
 <code>MetricsStore</code>, <code>Alerting</code>, <code>ConfigStore</code>, <code>ToolManifest</code>,
 <code>AgentRegistry</code>, <code>theteam_cli</code> as absent from the tree. Independent AST + grep
 confirms none exists. The 2026-09-29 correction — <code>StateStore</code> is real and load-bearing at
-<code>state.py:35</code> — is also correct, and it is the one cited node that is still exact.</p>
+<code>state.py:35</code> — is also correct, and it is one of only four citations that were right from the start.</p>
 <p>That <code>theteam_cli</code> was once listed as fabricated is worth noting: it is now a real node in the
-live diagram. The doc records that correction and the diagram has since moved past it.</p>
+live diagram, and its citation (<code>cli.py:604</code>) is wrong. The document caught the component appearing;
+nothing caught its line being wrong when the component appeared. <b>Inventing a component is caught by the
+inventory check. Citing the wrong line inside a real one is not caught at all.</b></p>
 </div>
 
-<h2>6. Invariant coverage: the gate checks 7 of 10</h2>
+<h2>6. Invariant coverage: 9 of 10 enforced, 1 not at all</h2>
 <table>
-<thead><tr><th>#</th><th>Invariant (§7.2)</th><th>Enforced?</th><th>Note</th></tr></thead>
+<thead><tr><th>Doc §7.2 #</th><th>Invariant</th><th>Enforced?</th><th>Where</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>Safety layer has a consumer in <code>tasks/</code></td><td><span class="tag t-hold">yes</span></td><td>import + call, AST-matched</td></tr>
-<tr><td>2</td><td>No bare <code>subprocess</code> in Layer 3</td><td><span class="tag t-hold">yes</span></td><td>AST, not grep</td></tr>
-<tr><td>3</td><td>No hardcoded developer paths</td><td><span class="tag t-hold">yes</span></td><td>carve-out documented at :38-45</td></tr>
-<tr><td>4</td><td>No <code>parents[</code> index trickery</td><td><span class="tag t-hold">yes</span></td><td>—</td></tr>
-<tr><td>5</td><td>No <code>.mp/theteam</code> outside the guard</td><td><span class="tag t-hold">yes</span></td><td>line-number pinning removed, correctly</td></tr>
-<tr><td>6</td><td>No <code>MockAPI</code></td><td><span class="tag t-hold">yes</span></td><td>AST</td></tr>
-<tr><td>7</td><td>Import graph of entry point</td><td><span class="tag t-hold">yes</span></td><td>88/90, 7/8 — measured, not grepped</td></tr>
-<tr><td>8</td><td>Layer 3 has no unguarded <code>subprocess</code></td><td><span class="tag t-drift">no</span></td><td><b>is check 2</b> — superseded, doc still numbers it separately</td></tr>
-<tr><td>9</td><td>No <code>rich</code> import</td><td><span class="tag t-bad">no</span></td><td><b>unenforced.</b> Currently true; nothing keeps it true. §5.2 calls it a CI-green/red hazard.</td></tr>
-<tr><td>10</td><td><code>check_import_graph.py</code> exits 0</td><td><span class="tag t-bad">no</span></td><td><b>is gate check 7</b> — the numbering diverged</td></tr>
+<tr><td>1</td><td>Safety layer has a consumer in <code>tasks/</code></td><td><span class="tag t-hold">yes</span></td><td>gate check 1 — import + call, AST-matched</td></tr>
+<tr><td>2</td><td>No bare <code>subprocess</code> in Layer 3</td><td><span class="tag t-hold">yes</span></td><td>gate check 2 — AST, not grep</td></tr>
+<tr><td>3</td><td>No hardcoded developer paths</td><td><span class="tag t-hold">yes</span></td><td>gate check 3 — carve-out documented at :38-45</td></tr>
+<tr><td>4</td><td>No <code>parents[</code> index trickery</td><td><span class="tag t-hold">yes</span></td><td>gate check 4</td></tr>
+<tr><td>5</td><td>No <code>.mp/theteam</code> outside the guard</td><td><span class="tag t-hold">yes</span></td><td>gate check 5 — line-number pinning removed, correctly</td></tr>
+<tr><td>6</td><td>No <code>MockAPI</code></td><td><span class="tag t-hold">yes</span></td><td>gate check 6 — AST</td></tr>
+<tr><td>7</td><td><code>run_discussion()</code> byte-identical after M5</td><td><span class="tag t-hold">yes</span></td><td><b>struck through in M9 Phase 1</b>; its stated intent is enforced by 15 tests in <code>test_m9_selection_wiring.py</code>, not by the gate (0 references)</td></tr>
+<tr><td>8</td><td>Layer 3 has no unguarded <code>subprocess</code></td><td><span class="tag t-hold">yes</span></td><td><b>as gate check 2</b> — same invariant, renumbered when the gate absorbed it</td></tr>
+<tr><td>9</td><td>No <code>rich</code> import</td><td><span class="tag t-bad">no</span></td><td><b>nowhere.</b> Currently true; nothing keeps it true. §5.2 calls it a CI-green/red hazard.</td></tr>
+<tr><td>10</td><td><code>check_import_graph.py</code> exits 0</td><td><span class="tag t-hold">yes</span></td><td><b>as gate check 7</b> — 88/90 modules, 7/8 <code>core.*</code>, no cluster tier</td></tr>
 </tbody>
 </table>
 <div class="card warn">
-<b>Only invariant 9 is genuinely unenforced.</b> 8 and 10 exist under different numbers (the gate
-renumbered when it absorbed them), so the doc's list is misleading rather than incomplete — a reader
-comparing counts concludes three are missing when one is.
-<div class="why"><b>Reason:</b> §5.2 says <code>rich</code> "is installed in one developer's pyenv transitively
-and declared nowhere, so a module-scope import of it is green locally and red in CI." That is a defect
-waiting to happen, documented as a fact with no check behind it. Given the repo already ships
-<code>check_call_sites.py</code>, adding this is a one-line call — and it is the cheapest unforced invariant.</div>
+<b>Nine of ten are enforced; exactly one is enforced nowhere.</b> The document's list and the gate's list use
+different numbers for the same two invariants — doc 8 is gate check 2, doc 10 is gate check 7 — and the gate
+collapsed doc 7 into a test when M9 deliberately broke it.
+<div class="why"><b>Why the numbering matters more than it looks:</b> comparing the two lists by count is how a
+reader concludes three invariants are unenforced when one is. That is a defect in the document's
+cross-reference, not in the enforcement: the gate covers every invariant except <code>rich</code>. Given the
+repo already ships <code>check_call_sites.py</code> and uses it for checks 2 and 6, wiring
+<code>rich</code> is a one-line addition — the cheapest unforced invariant on the list.</div>
 </div>
 
 <h2>7. Report surface</h2>
@@ -243,9 +288,11 @@ waiting to happen, documented as a fact with no check behind it. Given the repo 
 tracked human surface <code>reports/</code> holds <b>2 HTML</b> and <b>8 Markdown</b> files. One of the two
 HTML files is this report.</p>
 <p><code>reports/.handoff/</code> holds exactly <b>one</b> file, <code>root-organization-scan.md</code> — and it
-is <i>not</i> one of the 8. It is a separate machine handoff that was placed there; the plan's p2 move has not
-happened. <code>git status --short reports/</code> shows only this report as modified, confirming none of the
-8 have been staged or moved.</p>
+is <i>not</i> one of the 8. It is a separate machine handoff already placed there; the plan's p2 move has not
+happened. All 8 of the <code>reports/*.md</code> files are <b>tracked and clean</b>
+(<code>git ls-files</code>: 8/8; <code>git status --short reports/*.md</code>: empty), so they are committed and
+unmodified — clean status here means <i>already committed</i>, not <i>never moved</i>. That is the whole gap:
+they were committed into the human surface as Markdown, and no check inspects the filesystem to object.</p>
 <p>The rule is real and enforced: <code>scripts/check_task_contract.py:41,224-233</code> check&nbsp;5 states
 "reports/ is written only by a task's final phase, and only as HTML". But its scope is
 <i>task-declared outputs</i> — it validates <code>output:</code> fields in <code>tasks/*.yaml</code>. It does
@@ -264,37 +311,45 @@ written and waiting. p2 of that plan is the 15-minute phase that moves them.</p>
 <tr><td>Diagram shape</td><td><span class="tag t-hold">accurate</span></td><td>13/13 edges real</td></tr>
 <tr><td>Layering (downward)</td><td><span class="tag t-hold">holds</span></td><td>executor.py never imports advisory; terminal.py reaches only core + monitor</td></tr>
 <tr><td>Layer 0 contract</td><td><span class="tag t-bad">violated</span></td><td>6 domain symbols in cli.py</td></tr>
-<tr><td>Line citations</td><td><span class="tag t-bad">stale</span></td><td>9/14 drifted, all monotonic</td></tr>
-<tr><td>Anchor hashes</td><td><span class="tag t-bad">stale</span></td><td>14/14 drifted; nothing reads the file</td></tr>
-<tr><td>Invariant enforcement</td><td><span class="tag t-drift">partial</span></td><td>6 of 10 enforced directly; 2 more under different gate numbers; 1 by test, not gate; 1 unenforced</td></tr>
+<tr><td>Diagram citations</td><td><span class="tag t-bad">authoring defect</span></td><td>9/13 wrong when written; 13/13 cited files unchanged since <code>ca3673b</code>, so not staleness</td></tr>
+<tr><td>Anchor hashes</td><td><span class="tag t-hold">valid</span></td><td>13/14 match; gate correctly names the 1 changed file (<code>SKILL.md</code>). Whole-file hashes cannot see line-level defects</td></tr>
+<tr><td>Anchor gate scope</td><td><span class="tag t-drift">partial</span></td><td><code>check()</code> returns after the first diagram (:176); <code>milestones</code> and <code>llm-phase-spawn</code> never evaluated</td></tr>
+<tr><td>Invariant enforcement</td><td><span class="tag t-drift">partial</span></td><td>9 of 10 enforced somewhere — 6 in the gate, 2 under different gate numbers, 1 by test. Only <code>rich</code> (9) is enforced nowhere</td></tr>
 <tr><td>Milestone pair</td><td><span class="tag t-drift">out of sync</span></td><td>JSON 11 nodes vs HTML 7 — documented, tool-blocked</td></tr>
 <tr><td>Orphaned residue</td><td><span class="tag t-drift">untracked</span></td><td><code>theteam/skill/</code>, <code>theteam/automation/</code> — empty, absent from git, invisible to every repo tool</td></tr>
 </tbody>
 </table>
 
 <div class="card info">
-<b>The pattern across every finding is the same:</b> someone measured correctly, wrote the finding down, and
-then nothing kept the measurement current. The doc knows the milestone pair is stale; the comment knows the
-import chain changed; §5.2.1 knows <code>event_bus</code> and <code>health_monitor</code> have no importer.
-<i>The knowledge is in the repo. The enforcement is not.</i>
-<div class="why">This is precisely the failure mode <code>prompt-truth.yaml</code> and
-<code>task-contract.yaml</code> were written to close on the prompt and task surfaces — and the diagram
-surface has no equivalent. A <code>check_diagram_truth.py</code> that resolves each cited
-<code>file:line</code> to its named symbol is the direct analogue, and the task registry already has the
-shape for it.</div>
+<b>The pattern across every finding is the same:</b> a measurement was taken correctly, written down, and then
+nothing kept it current. §5.2.1 knows <code>event_bus</code> and <code>health_monitor</code> have no importer.
+<code>__init__.py</code> knows the import chain changed. <code>ARCHITECTURE.md:11-24</code> knows the milestone
+pair is out of sync. <i>The knowledge is in the repo. The enforcement is not.</i>
+<div class="why">The diagram case is the sharpest version, because the enforcement mechanism <i>exists and
+runs</i> — it is simply answering a different question. Whole-file hashes answer "did this file change?"; the
+defect is "does line 604 hold <code>build_parser</code>?" Nine wrong citations sat inside files that never
+changed, behind a green gate. That is worse than no gate, because it converts an open question into a false
+all-clear. The fix is narrow: resolve the <i>named symbol</i> at the cited line, which is what
+<code>scripts/check_prompt_truth.py</code> already does for prompts — the mechanism exists in the repo, on a
+different surface.</div>
 </div>
 
 <h3>Ranked by cost of being wrong</h3>
 <ol>
+  <li><b>Correct the 9 citations</b> — they have never been right; a reader tracing any node today lands on the wrong line. Mechanical, verified against <code>git show ca3673b</code>.</li>
+  <li><b>Resolve symbols in the anchor gate</b> — turns today's false all-clear into a real check. Same file, same loop; it already has the paths and hashes.</li>
   <li><b>Enforce invariant 9 (<code>rich</code>)</b> — one line, blocks a documented CI hazard.</li>
-  <li><b>Add a diagram-truth check</b> — resolves 9 stale citations and prevents the next 9.</li>
+  <li><b>Move the <code>return</code> out of the loop</b> at <code>update_team_check.py:176</code> — currently masks the other two diagrams; the fix is also what would expose it.</li>
+  <li><b>Re-derive the <code>SKILL.md</code> node</b> — the one genuine staleness case, and the only one the current gate already flags.</li>
   <li><b>Fix <code>__init__.py:30-33</code></b> — a comment that misstates the import graph misleads every reader who reasons from it.</li>
-  <li><b>Record or remove the two empty packages</b> — §5.3.1 requires a reason; there is none.</li>
+  <li><b><code>rmdir</code> the two empty packages</b> — untracked, so invisible to every repo tool.</li>
   <li><b>Layer 0</b> — largest, and genuinely a design question rather than a defect to fix.</li>
 </ol>
 
 <p class="meta">Measured 2026-10-04 on <code>main</code> @ <code>02b8b76</code> · suite 800 passed ·
-invariant gate PASSED · no source file was modified to produce this report</p>
+invariant gate PASSED · diagram gate run (exit 3, 1 changed file) · no source file was modified to produce this
+report. Conflict order per <code>ARCHITECTURE.md:26</code>: this document is intent, the diagrams are rendered
+shape, the code is fact — where a citation disagrees with the code, the citation is the defect.</p>
 
 </div>
 </body>

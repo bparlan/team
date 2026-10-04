@@ -50,18 +50,30 @@ plans:
   depends_on_plans:
   - human-report-surface
   note: p0-p2 are executable now; only p3 waits on a named example project.
+- file: diagram-citation-truth.yaml
+  id: diagram-citation-truth
+  status: not-started
+  phases: 5
+  blocked_on: null
+  one_line: Nine diagram citations were never right, not stale. Correct the 9 numbers, then
+    teach scripts/update_team_check.py to resolve symbols so they cannot come back.
 recommended_order:
-- 1. human-report-surface p2 -- move the 8 unproduced markdown files to reports/.handoff/.
-  Fifteen minutes, no decisions outstanding, and it makes a rule already written in ONBOARDING.md
-  true today.
-- 2. human-report-surface in full -- the html renderer, the boundary check, the skill-copy
-  drift test. Establishes the vocabulary the other two plans reuse.
-- '3. system-awareness-injection p0 -- audit capability claims. One hour, read-only, needs
+- 1. human-report-surface p2 -- move the 8 markdown files already committed into the human
+  surface to reports/.handoff/. Fifteen minutes, no decisions outstanding, and it makes
+  a rule the repo already states true today.
+- 2. diagram-citation-truth p0-p1 -- add the symbol checker, then correct the 9 lines. Independent
+  of everything else here, mechanical, and the only finding where a reader tracing the architecture
+  today lands on the wrong line.
+- 3. diagram-citation-truth p2-p3 -- extend the existing anchor gate to resolve symbols,
+  and move its in-loop return so all three diagrams are checked. Makes the gate able to
+  see the defect it currently waves through.
+- 4. human-report-surface in full -- the html renderer, the boundary check, the skill-copy
+  drift test. Establishes the vocabulary the other plans reuse.
+- '5. system-awareness-injection p0 -- audit capability claims. One hour, read-only, needs
   no example project, and it verifies its own premise: if no false claims exist, the plan
-  is void and an hour was cheap. Nothing here waits on a user decision.'
-- 4. project-convention-infra -- BLOCKED until the user names an example project. Its p1
-  derives the convention set from a real inventory rather than a guess, so starting it earlier
-  would mean guessing.
+  is void and the hour was cheap.'
+- 6. project-convention-infra -- BLOCKED until the user names an example project. Its p1
+  derives the convention set from a real inventory rather than a guess.
 why_this_order: Cost of being wrong, ascending. Step 1 is fifteen minutes and cannot be
   wrong. Step 3 is read-only and can only return 'your premise is false', which is a useful
   answer. Step 4 is the largest and the only one that needs a decision the user has not
@@ -93,3 +105,8 @@ verification:
   expect: invariant gate PASSED
 - command: python3 -c "import yaml,glob;[yaml.safe_load(open(f)) for f in glob.glob('archive/tasks/*.yaml')]"
   expect: exit 0 -- every plan in this directory parses
+evidence:
+- artifact: reports/architecture-reality-analysis.html
+  date: '2026-10-04'
+  measures: 9 of 13 diagram citations wrong at authoring; 13/14 anchor hashes valid; 13/13
+    diagram edges real; 9 of 10 invariants enforced, rich nowhere; Layer 0 contract violated.

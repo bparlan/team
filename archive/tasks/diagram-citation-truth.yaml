@@ -1,0 +1,229 @@
+# Diagram Citation Truth -- implementation plan
+#
+# Fifth plan in this directory, beside human-report-surface.yaml,
+# project-convention-infra.yaml and system-awareness-injection.yaml. It lives
+# here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
+# `*_REPORT.md`.
+#
+# The body is emitted by yaml.safe_dump from a dict, not hand-indented.
+# Hand-written YAML failed to parse three times in one session -- an unquoted
+# ": " inside a folded scalar is enough -- so only the prose in this header is
+# hand-written.
+#
+# Status: not-started. Nothing in this plan has been implemented.
+# Evidence: reports/architecture-reality-analysis.html (2026-10-04).
+# Authored: 2026-10-04.
+
+id: diagram-citation-truth
+name: Diagram Citation Truth
+status: not-started
+status_meaning: 'Roadmap artifacts, not registered tasks, so this vocabulary is local to
+  them and unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal
+  values: not-started (ready to execute), awaiting-input (cannot begin without a user decision),
+  blocked-on-defect (cannot begin until an external fix lands). Add any new value here first.'
+problem: 'Nine of the thirteen source citations in diagrams/active-usage-architecture.json
+  point at the wrong line, and they were never right. Thirteen of the fourteen cited files
+  are byte-identical to their recorded sha256, so nothing moved: git show ca3673bf:theteam/cli.py
+  puts build_parser at line 1203, and the diagram cites 604. This is an authoring defect,
+  not staleness, and the existing gate cannot see it because it hashes whole files and asks
+  whether a file changed, never whether a line holds the named symbol.'
+distinction_that_decides_the_fix:
+  authoring_defect: The cited file has not changed since the anchors were recorded, so the
+    line number was wrong when written. Re-deriving does not fix it; correcting the number
+    does.
+  managed_staleness: 'The cited file changed, so a previously correct line moved. Exactly
+    one case: the session node cites theteam/SKILL.md:117, which pointed at roster prose
+    at ca3673bf and at the spawn-loop section now. This is the only case the current gate
+    already reports.'
+  why_it_matters: Treating both as staleness means re-deriving nine nodes that re-derive
+    to the same wrong answer, and reporting the work as done.
+corrections:
+- node: theteam_cli
+  file: theteam/cli.py
+  wrong: 604
+  right: 1203
+  delta: 599
+- node: agent_isolation
+  file: theteam/core/agent_isolation.py
+  wrong: 1
+  right: 152
+  delta: 151
+- node: team_manager
+  file: theteam/advisory/manager.py
+  wrong: 1
+  right: 133
+  delta: 132
+- node: llm_runner
+  file: theteam/tasks/runners/llm.py
+  wrong: 82
+  right: 190
+  delta: 108
+- node: circuit_breaker
+  file: theteam/core/circuit_breaker.py
+  wrong: 1
+  right: 55
+  delta: 54
+- node: context_slice
+  file: theteam/advisory/context_slice.py
+  wrong: 90
+  right: 128
+  delta: 38
+- node: task_repository
+  file: theteam/tasks/repository.py
+  wrong: 123
+  right: 144
+  delta: 21
+- node: discussion
+  file: theteam/__init__.py
+  wrong: 690
+  right: 710
+  delta: 20
+- node: task_executor
+  file: theteam/tasks/executor.py
+  wrong: 57
+  right: 77
+  delta: 20
+already_correct:
+- selector
+- commentary_controller
+- state_store
+- task_scheduler
+phases:
+- id: p0-baseline
+  name: Freeze the evidence
+  depends_on: []
+  estimated_effort: 20 minutes, read-only
+  rationale: Every number in this plan is already measured, but the measurement was taken
+    in a session that no longer exists. Capture it where a fresh context can verify it before
+    changing a single line, so the corrections are falsifiable rather than asserted.
+  contract:
+  - A checker names all 9 wrong citations by node, file and both line numbers.
+  - Its finding count is reproducible from a clean checkout, and it exits non-zero when
+    it finds any.
+  steps:
+  - 'Add scripts/check_diagram_truth.py. Prefer a new file over extending check_prompt_truth.py:
+    prompt truth and diagram truth are different failure modes and one exit code cannot
+    report both honestly.'
+  - Resolve each cited line to its named symbol with an AST walk over def/class nodes. Do
+    not grep for the symbol name -- a name in a docstring would satisfy a grep, and six
+    of the nine wrong citations point into a docstring or at line 1.
+  - Confirm it reports exactly 9 findings, matching corrections[] in this file.
+  done_when: The checker names all 9 by node, file and both line numbers, and its finding
+    count is reproducible from a clean checkout.
+  rollback: Delete the new script. No diagram or source file is touched in this phase.
+- id: p1-correct-citations
+  name: Write the 9 correct line numbers into the diagram
+  depends_on:
+  - p0-baseline
+  estimated_effort: 30 minutes
+  rationale: 'This is the whole user-visible defect: a reader tracing any of 9 nodes today
+    lands on the wrong line. It is mechanical, verified against git show ca3673bf, and independent
+    of every other phase -- it can ship alone.'
+  contract:
+  - diagrams/active-usage-architecture.json cites the line of the named symbol for all 13
+    nodes.
+  - The p0 checker reports zero findings afterwards.
+  steps:
+  - Apply corrections[] to diagrams/active-usage-architecture.json. Change only the line
+    field; do not touch labels, ids, row, col or connections.
+  - Do NOT re-derive the diagram. Re-deriving reproduces the same nine wrong numbers, because
+    the generator resolves lines the same way it did when they were wrong.
+  - Re-derive only the session node, whose file genuinely changed (SKILL.md:117).
+  - Re-run the p0 checker. It must report 0 findings.
+  done_when: Every symbol-bearing citation resolves to its symbol, and the session node
+    points at the spawn-loop section rather than roster prose.
+  rollback: git checkout diagrams/active-usage-architecture.json. The p0 checker then reports
+    9 again -- the honest pre-state, and proof the checker works rather than passing vacuously.
+- id: p2-enforce-in-the-gate
+  name: Teach the anchor gate to resolve symbols
+  depends_on:
+  - p1-correct-citations
+  estimated_effort: half a day
+  rationale: Without this the nine come back. The mechanism already exists and runs -- it
+    returned exit 3 and named SKILL.md correctly -- so this extends a working gate rather
+    than building a new one.
+  contract:
+  - 'check() reports two distinct classes: a cited file changed (today''s behaviour), and
+    a cited line does not hold its named symbol (new).'
+  - It never reports the second class as the first. A changed file may still have correct
+    lines.
+  steps:
+  - Add symbol resolution to check(), reusing the p0 resolver rather than reimplementing
+    it.
+  - Give the citation class a distinct exit code, so a caller can tell 're-derive this node'
+    from 'fix this number'. Both stay non-zero; neither is a soft warning.
+  - Do not weaken the hash check. It is correct, and it is what caught SKILL.md.
+  done_when: Deliberately corrupting one citation makes the gate name that node; restoring
+    it returns the gate to its current verdict.
+  rollback: Revert the symbol-resolution block. The hash half is untouched and still catches
+    SKILL.md.
+- id: p3-fix-gate-coverage
+  name: Stop the gate returning after the first diagram
+  depends_on:
+  - p2-enforce-in-the-gate
+  estimated_effort: half a day
+  rationale: update_team_check.py:176 returns inside the loop over DIAGRAM_DIR.glob. sorted()
+    puts active-usage-architecture.json first, so the other two diagrams are never evaluated.
+    It is masked today only because those two have no .anchors.json sidecar and continue
+    past first.
+  contract:
+  - Every diagram with a sidecar is checked in one run.
+  - Each verdict is reported separately; _report() stops overwriting one file with the next.
+  steps:
+  - Accumulate per-diagram verdicts across the loop and return once, after it.
+  - Give _report() a per-diagram filename, or write one report with a section per diagram.
+  - Decide explicitly whether milestones and llm-phase-spawn get sidecars. task-update-team.yaml's
+    honest-coverage rule calls a diagram with no sidecar could-not-evaluate, never up to
+    date; this phase should record them or make that rule executable rather than leaving
+    it as prose in a task file.
+  done_when: A run with two sidecars present evaluates both, and the report names both verdicts.
+  rollback: Revert to the single-diagram return. No recorded sidecar is affected.
+- id: p4-close-the-adjacent-gaps
+  name: Fix the small findings the same measurement surfaced
+  depends_on:
+  - p3-fix-gate-coverage
+  estimated_effort: half a day
+  rationale: Each was measured in the same pass and each is a few lines. They are last because
+    none misleads a reader tracing the architecture today, and bundling them earlier would
+    make this plan's diff harder to review.
+  contract:
+  - Invariant 9 (no rich import) is enforced by scripts/check_invariants.sh.
+  - theteam/__init__.py:30-33 describes the import graph as it is, not as it was.
+  - theteam/skill/ and theteam/automation/ no longer exist on disk.
+  steps:
+  - Add the rich check to check_invariants.sh via check_call_sites.py, the same helper checks
+    2 and 6 already use. One line.
+  - 'Correct the __init__.py comment: database.py imports postgres_cluster at point of use,
+    so a bare import theteam loads database but not the cluster tier.'
+  - rmdir theteam/skill/ and theteam/automation/. Both are empty and untracked, so no git
+    diff will ever record that this was done -- which is also why nothing will catch it
+    being undone.
+  done_when: bash scripts/check_invariants.sh reports 8 checks and still exits 0; the comment
+    matches a measured sys.modules; both directories are gone.
+  rollback: The rich check is one line to remove. The comment reverts. The directories return
+    empty, which is what they were.
+not_in_this_plan:
+  layer_0_contract: ARCHITECTURE.md:459 says the entry layer must not know any domain object;
+    cli.py references six. That is a design decision about how much wiring belongs in the
+    CLI, not a defect with a known fix, and it deserves its own plan rather than a line
+    in this one.
+  milestone_pair_resync: 'ARCHITECTURE.md:11-24 documents it accurately: the JSON carries
+    11 nodes, the HTML renders 7, and archify validate fails on the committed source. The
+    document says the blocker is the tool, not the content. Recorded, not planned -- and
+    p3 makes the gate cover the pair once resynced.'
+  event_bus_and_health_monitor: ARCHITECTURE.md records both as having no production importer
+    and explicitly declines to decide whether to wire or delete them. That decision is not
+    this plan's to make.
+risks:
+- - Re-deriving instead of correcting.
+  - An archify re-run regenerates citations the same way and reproduces the nine wrong numbers.
+    p1 forbids re-deriving except for the session node, and says so in its steps, because
+    that is the failure this plan exists to prevent.
+- - Making the gate noisier than the defect.
+  - Symbol resolution will report findings on any commit that legitimately moves a line.
+    That is correct and must be reported, not suppressed -- but it means p2 turns a green
+    gate red on today's tree. Sequence p1 before p2 so the tree is clean before the gate
+    grows teeth.
+- - Conflating the two classes again.
+  - Nine authoring defects and one staleness case look identical from outside. p2's contract
+    requires them reported distinctly; that requirement is the plan's main deliverable.

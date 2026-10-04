@@ -59,6 +59,7 @@ thing a new session is guaranteed to find.
 | `human-report-surface.yaml` | not-started | — |
 | `project-convention-infra.yaml` | awaiting-input | an example project |
 | `system-awareness-injection.yaml` | not-started | — (only p3 needs a project) |
+| `diagram-citation-truth.yaml` | not-started | — |
 
 `awaiting-input` is defined in the index: it cannot begin without a user decision.
 It is not a failure, and it is unrelated to the run statuses the executor uses.

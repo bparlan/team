@@ -1,3 +1,18 @@
+# Project Convention Infrastructure -- implementation plan
+#
+# Second of two plans; the other is human-report-surface.yaml beside it.
+# Both live here because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
+# `*_REPORT.md`. This directory already holds milestone artifacts in the same
+# shape (folder-monitoring.yaml).
+#
+# The body is emitted by yaml.safe_dump from a dict, not hand-indented.
+# Hand-written YAML failed to parse three times in one session -- an unquoted
+# ": " inside a folded scalar is enough -- so only the prose here is authored.
+#
+# Status: awaiting-input. This plan cannot begin until the user names one
+# example project; see status_meaning for the vocabulary.
+# Authored: 2026-10-04.
+
 id: project-convention-infra
 name: Project Convention Infrastructure
 status: awaiting-input

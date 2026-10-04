@@ -171,15 +171,20 @@ defect is fixed. The comment is correct about the past and wrong about the prese
 a reader meets when reasoning about the import graph.</div>
 </div>
 
-<h3>4.3 Two packages are empty and tracked — <span class="tag t-drift">orphan</span></h3>
+<h3>4.3 Two packages are empty on disk and untracked — <span class="tag t-drift">residue</span></h3>
 <div class="card warn">
-<p><code>theteam/skill/</code> and <code>theteam/automation/</code> contain no files and are tracked.
-<code>theteam/skill/</code> is the residue of <code>skill/SKILL_metadata.py</code>, deleted in M10. Neither is
-named in §5.2. §5.3.1 tracks one orphaned directory (<code>config/routine-engine/</code>) as "not removed,
-with the reason" — these two have no such entry.</p>
-<div class="why"><b>Reason:</b> M10's deletion pass removed files, not the directories they emptied.
-The cost is low but the precedent matters: §5.3.1's rule is "an orphan is recorded with a reason," and
-these are unrecorded.</div>
+<p><code>theteam/skill/</code> and <code>theteam/automation/</code> exist as empty directories.
+<code>git ls-files</code> returns <b>nothing</b> for either — git cannot track an empty directory, so they are
+not in the commit at all. They are local residue from <code>skill/SKILL_metadata.py</code>, deleted in M10,
+plus an <code>automation/</code> of unclear origin.</p>
+<p>Neither is named in §5.2, and §5.3.1's table records one orphaned directory
+(<code>config/routine-engine/</code>) as "not removed, with the reason". These two have no entry because they
+cannot have one: nothing is tracked.</p>
+<div class="why"><b>Reason, and why it matters more than it looks:</b> the residue is invisible to every
+tool that reads the repo — <code>git ls-files</code>, the AST scan, the packaging config — so it will never
+appear in a diff, a review, or a clone. It survives only on this machine. That is the cheapest possible form
+of the drift §5.3.1 exists to prevent, and the fix is <code>rmdir</code>. Listed last in priority for exactly
+that reason: it is real, and it is nearly free.</div>
 </div>
 
 <h2>5. Where the document is right and the diagram is stale</h2>
@@ -235,11 +240,19 @@ waiting to happen, documented as a fact with no check behind it. Given the repo 
 <p><code>run_discussion</code> writes <code>{conversation_id}-discussion-report.md</code> into
 <code>.omp/theteam/reports/</code> (<code>__init__.py:513,947-950</code>; <code>SKILL.md:351</code> repeats it).</p>
 <p>That is the most user-facing artifact the product produces, in Markdown, into a dot-directory. Meanwhile the
-tracked human surface <code>reports/</code> holds <b>1 HTML</b> and <b>8 Markdown</b> files — violating the
-rule documented at <code>ONBOARDING.md:114</code>. The invariant test only checks task-declared outputs, so
-these 8 pass.</p>
+tracked human surface <code>reports/</code> holds <b>2 HTML</b> and <b>8 Markdown</b> files. One of the two
+HTML files is this report.</p>
+<p><code>reports/.handoff/</code> holds exactly <b>one</b> file, <code>root-organization-scan.md</code> — and it
+is <i>not</i> one of the 8. It is a separate machine handoff that was placed there; the plan's p2 move has not
+happened. <code>git status --short reports/</code> shows only this report as modified, confirming none of the
+8 have been staged or moved.</p>
+<p>The rule is real and enforced: <code>scripts/check_task_contract.py:41,224-233</code> check&nbsp;5 states
+"reports/ is written only by a task's final phase, and only as HTML". But its scope is
+<i>task-declared outputs</i> — it validates <code>output:</code> fields in <code>tasks/*.yaml</code>. It does
+not inspect the filesystem, so hand-placed Markdown in <code>reports/</code> is invisible to it. Those 8 files
+pass because nothing asks about them.</p>
 <p>This is exactly the <code>human-report-surface.yaml</code> plan in <code>archive/tasks/</code>, already
-written and waiting. p2 of that plan is the 15-minute phase that moves the 8 files.</p>
+written and waiting. p2 of that plan is the 15-minute phase that moves them.</p>
 </div>
 
 <h2>8. Assessment</h2>
@@ -253,9 +266,9 @@ written and waiting. p2 of that plan is the 15-minute phase that moves the 8 fil
 <tr><td>Layer 0 contract</td><td><span class="tag t-bad">violated</span></td><td>6 domain symbols in cli.py</td></tr>
 <tr><td>Line citations</td><td><span class="tag t-bad">stale</span></td><td>9/14 drifted, all monotonic</td></tr>
 <tr><td>Anchor hashes</td><td><span class="tag t-bad">stale</span></td><td>14/14 drifted; nothing reads the file</td></tr>
-<tr><td>Invariant enforcement</td><td><span class="tag t-drift">partial</span></td><td>6 of 10 numbered invariants enforced as written</td></tr>
+<tr><td>Invariant enforcement</td><td><span class="tag t-drift">partial</span></td><td>6 of 10 enforced directly; 2 more under different gate numbers; 1 by test, not gate; 1 unenforced</td></tr>
 <tr><td>Milestone pair</td><td><span class="tag t-drift">out of sync</span></td><td>JSON 11 nodes vs HTML 7 — documented, tool-blocked</td></tr>
-<tr><td>Orphaned dirs</td><td><span class="tag t-drift">unrecorded</span></td><td><code>theteam/skill/</code>, <code>theteam/automation/</code></td></tr>
+<tr><td>Orphaned residue</td><td><span class="tag t-drift">untracked</span></td><td><code>theteam/skill/</code>, <code>theteam/automation/</code> — empty, absent from git, invisible to every repo tool</td></tr>
 </tbody>
 </table>
 

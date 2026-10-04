@@ -1,0 +1,244 @@
+# Human report surface — implementation plan
+#
+# Saved as YAML because AGENTS.md:39-40 bans `*_PLAN.md`, `*_ANALYSIS.md` and
+# `*_REPORT.md`. The rule's intent is that the roadmap is the plan and
+# implementation turns write code; this file is the roadmap entry for one
+# milestone, in the same shape as archive/tasks/folder-monitoring.yaml.
+#
+# Status: NOT STARTED. Nothing in this plan has been implemented.
+# Authored: 2026-10-04, after the two-consumer split session.
+
+id: human-report-surface
+name: Human Report Surface
+status: not-started
+priority: 3
+depends_on: []
+
+intent: >
+  Every artifact a human reads is HTML and lives in reports/. Every artifact
+  an agent reads is JSON or markdown and lives in .omp/ or reports/.handoff/.
+  The boundary is checkable by script, not by convention.
+
+why_now: >
+  The agent-facing architecture is correct -- 9 of 10 producing sites write
+  machine state to the right root. The single defect is at the human
+  boundary, and it has been the location of every other error this session:
+  __init__.py:949 writes the only human-facing artifact theteam produces as
+  markdown into the harness state directory; 8 hand-dropped markdown files sit
+  in reports/ with no producer at all; ONBOARDING.md:114 declares markdown in
+  reports/ a defect while 8 such files exist; and test_m9_llm_runner.py:309
+  validates only task-declared outputs, so it never sees any of them.
+
+scope:
+  in:
+    - HTML output for the discussion report
+    - relocation of the 8 unproduced markdown files out of reports/
+    - a machine check that asserts the human boundary
+    - propagation to the installed skill copy
+  out:
+    - any renderer for task publish phases (already HTML via the publish prompt)
+    - ROADMAP.md as a project-wide index (separate concern, needs its own decision)
+    - the self-measurement loop for the checkers (needs the checkers to have run
+      for real first; sequencing, not scope)
+    - running the 13 unverified LLM phases (tracked here as a phase, not a
+      deliverable of the renderer work)
+
+decisions:
+  - id: html-format
+    question: >
+      Should reports/ hold only HTML?
+    answer: >
+      Yes, for files theteam produces. A human reading a report in a browser
+      should not have to render markdown, and the user confirmed an HTML view
+      path is available. This relaxes the "do not overengineer the renderer"
+      position taken earlier in the session: the cost is low because
+      theteam_report.py is 222 lines and render() already consumes structured
+      JSON, so an HTML sibling is additive rather than a markdown parser.
+  - id: no-orphans-dir
+    question: >
+      Should reports/.orphans/ exist for the 8 unproduced markdown files?
+    answer: >
+      No. reports/.handoff/ already exists, already has a rule, and already
+      holds this exact class of artifact. A third category means an agent
+      scanning reports/ must know a fourth thing. Two rules, no exceptions.
+      If the files are considered finished rather than in-flight, archive/
+      is the honest home -- archive/ already means "done, not current".
+  - id: shared-builder
+    question: >
+      Which theteam_report.py is authoritative?
+    answer: >
+      Neither, alone. bin/theteam_report.py is the git source of truth;
+      ~/.omp/agent/skills/theteam/bin/theteam_report.py is the copy OMP
+      executes. They are byte-identical today (7675 bytes, diff -q clean).
+      scripts/export_skill.py maps bin/theteam_report.py -> the skill dir and
+      exists precisely because "manual copying is how that drift accumulates".
+      Every change in phase 1 must route through export_skill.py.
+
+preconditions:
+  - id: identical-copies
+    verify: 'diff -q bin/theteam_report.py ~/.omp/agent/skills/theteam/bin/theteam_report.py'
+    expect: no output
+    why: >
+      If they have already drifted, the HTML change lands in one copy and the
+      discuss path keeps emitting markdown. Establish the baseline first.
+  - id: baseline-suite
+    verify: python -m pytest -q
+    expect: 800 passed
+    why: Every phase below is verified against this number, not against itself.
+
+phases:
+
+  - id: p0-baseline
+    name: Confirm the baseline
+    estimated_effort: 5 minutes
+    steps:
+      - Run the full suite. Record the exact pass count.
+      - Run scripts/check_invariants.sh. Record pass/fail.
+      - Run the identical-copies precondition above.
+      - Record reports/ contents before any change, so the relocation in p2 is
+        provable rather than asserted.
+    done_when: Baseline numbers written down, not remembered.
+    rollback: Nothing changed.
+
+  - id: p1-html-renderer
+    name: Add --format html to the discussion report
+    depends_on: "p0-baseline"
+    estimated_effort: 1 hour
+    files:
+      - bin/theteam_report.py
+      - theteam/__init__.py
+      - theteam/SKILL.md
+      - theteam/SKILL.md (installed copy, via export_skill.py)
+    contract:
+      - >
+        --format markdown (default) preserves current behaviour byte for byte.
+      - >
+        --format html emits the same sections: header, individual notes,
+        consolidated agreements, disagreements, open questions, recommendation.
+      - >
+        --expected-ids validation is unchanged and runs for BOTH formats. This
+        gate is what catches a dropped subagent; it must not become
+        format-conditional.
+      - >
+        HTML is self-contained: inline CSS, no scripts, no webfonts, readable
+        in light and dark.
+    steps:
+      - Add an html renderer alongside render(). Reuse the loaded notes and
+        synthesis dicts directly; do NOT parse the markdown renderer's output.
+      - Thread --format through the argument parser.
+      - theteam/__init__.py:949 -- choose format and path from one place. The
+        filename and the directory must not be decided independently.
+      - SKILL.md:351 -- document the html invocation. The current line hardcodes
+        .md and would otherwise teach the agent the wrong command.
+      - Run scripts/export_skill.py so the installed copy matches.
+    done_when: >
+      A discussion rendered with --format html produces reports/<conv-id>.html;
+      the markdown path still produces byte-identical output; the two skill
+      copies are identical again; suite is at baseline.
+    rollback: >
+      Single-file revert of the renderer plus the __init__ call site. No data
+      migration, no state format change.
+
+  - id: p2-relocate-orphans
+    name: Move unproduced markdown out of reports/
+    depends_on: "p0-baseline"
+    estimated_effort: 15 minutes
+    rationale: >
+      Independent of p1. This is a git mv, not code, and it is the change that
+      makes ONBOARDING.md true as written.
+    files:
+      - 8 hand-dropped .md files currently in reports/
+    steps:
+      - git mv each to reports/.handoff/ (or archive/ if the user judges them
+        finished -- this is the one decision in the plan that is genuinely the
+        user's to make)
+      - Leave reports/session-analysis-root-organization.html and every
+        task-produced HTML in place.
+    done_when: reports/ contains only .html files.
+    rollback: git mv back; nothing references these files.
+
+  - id: p3-boundary-check
+    name: Make the human boundary machine-checkable
+    depends_on: ["p1-html-renderer", "p2-relocate-orphans"]
+    estimated_effort: 1 hour
+    rationale: >
+      ONBOARDING.md:114 already declares markdown in reports/ a defect. Nothing
+      enforces it -- test_m9_llm_runner.py:309 iterates task-declared outputs
+      and never inspects the directory, so it passes vacuously. This extends the
+      existing checker; it is NOT a new task or a new script.
+    files:
+      - scripts/check_task_contract.py
+      - theteam/tests/test_task_contract.py
+      - theteam/ONBOARDING.md
+    contract:
+      - reports/ contains no .md file
+      - every .html in reports/ is a declared publish output of some task, or a
+        known human artifact listed by name
+      - the check distinguishes what a task writes from what a human drops in;
+        if it cannot, it must not claim to cover the latter
+    steps:
+      - Add a directory-level assertion to check_task_contract.py.
+      - >
+        Add tests: inject a .md into reports/, require the failure; require a
+        stray .html to be reported; require the real reports/ to pass.
+      - Correct ONBOARDING.md to state the check's actual scope.
+    done_when: >
+      Adding a markdown file to reports/ makes task-contract fail, with a
+      mutation test proving it.
+    rollback: Remove the added function and its tests.
+
+  - id: p4-propagation-guard
+    name: Stop the skill copies drifting silently
+    depends_on: "p1-html-renderer"
+    estimated_effort: 30 minutes
+    rationale: >
+      Two byte-identical copies exist today and no test guards them. That is the
+      same shape as the defect class this milestone exists to remove: something
+      true today, unchecked, diverging later.
+    files:
+      - theteam/tests/test_skill_export.py (new)
+    contract:
+      - every path in export_skill.py SOURCES is byte-identical between the
+        repo and the installed skill dir
+      - the test SKIPS with a clear reason when the skill dir is absent, so CI
+        without an installed skill is not a false failure
+    steps:
+      - Write the test.
+      - Do NOT make it write to the home directory from a test. Read and compare
+        only; export_skill.py remains the only writer.
+    done_when: Touching the installed copy fails the suite.
+    rollback: Delete the test file.
+
+verification:
+  - command: python -m pytest -q
+    expect: at least 800 passed, zero failures
+  - command: bash scripts/check_invariants.sh
+    expect: invariant gate PASSED
+  - command: diff -q bin/theteam_report.py ~/.omp/agent/skills/theteam/bin/theteam_report.py
+    expect: no output
+  - command: python3 -c "import pathlib;print([p.suffix for p in pathlib.Path('reports').iterdir() if p.is_file()])"
+    expect: every suffix is .html
+  - command: python3 scripts/check_task_contract.py .
+    expect: reports/ clean, task count 8, zero findings
+
+open_questions_for_user:
+  - >
+    The 8 relocated files: reports/.handoff/ (in-flight) or archive/ (finished)?
+  - Should --format html become the default for discuss, or stay opt-in?
+    Defaulting to html changes the artefact every existing discuss produces.
+  - >
+    ROADMAP.md as a project-wide index: separate decision, not in this scope.
+
+notes_for_implementer:
+  - >
+    Four of nine errors in the originating session were false claims about
+    files the author had not opened. Three were caught by the user, one by a
+    mutation test. The cheapest guard is: every factual claim in a comment or
+    docstring gets verified in the same breath, or marked [UNVERIFIED].
+  - >
+    A checker that reports working code as broken gets tuned out and then
+    catches nothing. test_task_contract.py pins the sa_runner negative on
+    purpose for this reason; keep that discipline in p3.
+  - >
+    Every phase here is verified by running it, not by reading it. A phase whose
+    done_when cannot be executed is not a done_when.

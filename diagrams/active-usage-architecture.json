@@ -67,7 +67,7 @@
       "sources": [
         {
           "path": "theteam/cli.py",
-          "line": 604,
+          "line": 1203,
           "label": "build_parser"
         }
       ],
@@ -82,7 +82,7 @@
       "sources": [
         {
           "path": "theteam/advisory/manager.py",
-          "line": 1,
+          "line": 133,
           "label": "detect_triggers"
         }
       ],
@@ -112,7 +112,7 @@
       "sources": [
         {
           "path": "theteam/advisory/context_slice.py",
-          "line": 90,
+          "line": 128,
           "label": "slice_context"
         }
       ],
@@ -127,7 +127,7 @@
       "sources": [
         {
           "path": "theteam/__init__.py",
-          "line": 690,
+          "line": 710,
           "label": "run_discussion"
         }
       ],
@@ -157,7 +157,7 @@
       "sources": [
         {
           "path": "theteam/tasks/repository.py",
-          "line": 123,
+          "line": 144,
           "label": "TaskRepository"
         }
       ],
@@ -172,7 +172,7 @@
       "sources": [
         {
           "path": "theteam/tasks/executor.py",
-          "line": 57,
+          "line": 77,
           "label": "TaskExecutor"
         }
       ],
@@ -187,7 +187,7 @@
       "sources": [
         {
           "path": "theteam/tasks/runners/llm.py",
-          "line": 82,
+          "line": 190,
           "label": "run_llm_phase"
         }
       ],
@@ -202,7 +202,7 @@
       "sources": [
         {
           "path": "theteam/core/agent_isolation.py",
-          "line": 1,
+          "line": 152,
           "label": "AgentIsolation"
         }
       ],
@@ -217,7 +217,7 @@
       "sources": [
         {
           "path": "theteam/core/circuit_breaker.py",
-          "line": 1,
+          "line": 55,
           "label": "CircuitBreaker"
         }
       ],

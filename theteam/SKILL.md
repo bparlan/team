@@ -27,21 +27,28 @@ Every invocation of this skill starts here:
 
 | Command | What it does | What you do next |
 |---|---|---|
+| `theteam bootstrap <path>` | Generate a team for this project. `--interactive` asks before writing. | The first invocation in a project with no `theteam.config`. See **Bootstrap** below. |
 | `theteam status` | Roster, state dir, task counts, audit chain. | Read it. Nothing else runs. |
 | `theteam tasks` | Every task with `order`, `next_run`, `last_result`, `breaker`. | Pick an id, or schedule one. |
 | `theteam run` | Runs what is due. `script:` phases finish on their own. | See **Running an `llm` task** below for the rest. |
 | `theteam run --only <id>` | One task now, scheduled or not. | If it reports `awaiting`, spawn the named agent and write to the `write:` path, then run it again. |
 | `theteam run --dry-run` | What would run and its worst-case time. Runs nothing. | — |
-| `theteam history` | Success rate, last run, last failure per task. | — |
+| `theteam history` | Success rate, last run, last failure per task. `--task <id>` for one. | — |
 | `theteam task show\|create\|edit\|delete` | Single-task YAML operations. `delete` needs `--yes`. | — |
 | `theteam discuss <topic>` | One-shot team discussion. | **Refuses outside a session** — see below. Do not retry or synthesize. |
 | `theteam manager --topic` | Proposes roster additions. `--apply` persists, `--status` justifies, `--reset` restores. | Ask the user before `--apply`. |
-| `theteam serve` | Runs due tasks on an interval, serves `/metrics` and `/health`. | Long-running. Not needed for a single run. |
-| `theteam loop <id>` | Schedules one task on an interval. | — |
+| `theteam serve` | Runs due tasks on an interval, serves `/metrics` and `/health`. `--port`, `--tick-seconds`. | Long-running. Not needed for a single run. |
+| `theteam loop <id>` | Schedules one task on an interval. `--interval` minutes, default 60. | — |
 | `theteam watch status\|tasks\|history` | The trust surface as a rendered frame. `--once`, `--interval`, `--monitor`. | `--monitor` names transitions worth noticing. |
 | `theteam comment on\|off\|status` | Continuous in-context commentary, cap 4 members. | — |
 
 `--json` works on either side of the subcommand. `--project-root` only before it.
+
+**Measured, not asserted.** `theteam --project-root /tmp status` works; `theteam status
+--project-root /tmp` is rejected with a usage error. `theteam run --json` with nothing
+due returns `ran: 0` rather than an error. `theteam run --only <id> --dry-run` lists the
+phases and their `worst_case_seconds`. Every row above was checked against `theteam <cmd>
+--help` and at least one live call in this project.
 
 ## After a successful implementation
 

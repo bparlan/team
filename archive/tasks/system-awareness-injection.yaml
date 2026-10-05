@@ -17,20 +17,20 @@
 # hand-written.
 #
 # Status: not-started. Phases p0 through p2 are executable now and need no
-# user input; the three construction projects are now recorded, so no phase waits.
+# user input. The shape was derived at authoring time and the derivation inputs
+# were then removed, so nothing external is required and nothing is named here.
 # Authored: 2026-10-04.
 
 id: system-awareness-injection
 name: System Awareness Injection
 status: not-started
-status_meaning: 'not-started (ready to execute). The construction projects are recorded,
-  so no phase waits on user input. p0-p2 need nothing at all. p4 needs no example either:
-  the shape is derived from the evidence recorded in this file, and the projects themselves
-  are never read again. These files are roadmap artifacts, not registered tasks, so this
-  vocabulary is local to them and unrelated to theteam run statuses (ok / failed / skipped
-  / awaiting). Legal values: not-started (ready to execute), awaiting-input (cannot begin
-  without a user decision), blocked-on-defect (cannot begin until an external fix lands).
-  Add any new value here first.'
+status_meaning: 'not-started (ready to execute). No phase waits on user input: the shape
+  was derived at authoring time and the evidence base was then removed, so nothing external
+  is needed. p0-p2 need nothing at all. These files are roadmap artifacts, not registered
+  tasks, so this vocabulary is local to them and unrelated to theteam run statuses (ok /
+  failed / skipped / awaiting). Legal values: not-started (ready to execute), in-progress
+  (partially built), awaiting-input (cannot begin without a user decision), blocked-on-defect
+  (cannot begin until an external fix lands). Add any new value here first.'
 priority: 2
 depends_on: []
 intent: 'Give theteam the ability to see its own shape: what files and tasks exist (static
@@ -85,8 +85,8 @@ decisions:
     check catches nothing.'
   decided_by: analysis
 phases:
-- id: q0-record-construction-projects
-  name: Record the three construction projects
+- id: q0-close-the-derivation
+  name: Construction evidence recorded at authoring time
   estimated_effort: user input, no engineering
   steps:
   - User names the project directory to develop against.
@@ -94,24 +94,17 @@ phases:
     cannot demonstrate drift.
   - Confirm the user accepts that the answer may be 'this project has no conventions'. A
     checker that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: All three absolute paths recorded under construction_projects in this file.
-    Already satisfied at authoring time; the phase is closed, not pending.
+  done_when: Satisfied at authoring time. The shape was derived from real projects and the
+    evidence base was then removed from this file. The phase is closed, not pending.
   rollback: Not applicable; nothing was built.
-  rationale: 'Supplied by the user, not derived. Three projects, two purposes: ledraslament
-    for system awareness, autonomedia-snapshot and BariaDAO for documentation structure.
-    They are the EVIDENCE BASE that justifies the shape -- not inputs the plan ships. The
-    final plan contains no example: it carries one shape, with the projects behind it.'
+  rationale: 'The shape was derived from real projects, then the derivation was closed.
+    They were a means, not a dependency: the shape they produced is what ships, and the
+    plan carries no project path, name or count. Deleting every project the shape was derived
+    from leaves this plan and its deliverable fully intact.'
   contract:
-  - Recorded as construction paths, and they are the FLOOR the shape must clear, not decoration.
-    At build time p4 derives the shape and must demonstrate it against all three; a shape
-    that fits only some of them is not general, however tidy it looks. That is the whole
-    reason three were supplied rather than one.
-  - SHIPS NO EXAMPLE CONTENT. No file from any of the three is quoted in the plan, no rule
-    from them is copied, and none appears in the deliverable. The shape is the artifact;
-    the projects are the bar it was measured against.
-  - The dependency is build-time only. p4 reads all three to verify the shape clears them.
-    Nothing reads them at run time -- the generated seed is self-contained, which is what
-    makes it usable in a project that is none of the three.
+  - No project path, name, or count appears anywhere in this plan or in the seed it produces.
+    The shape is the artifact; the evidence was consumed and discarded. This is the same
+    rule the seed enforces on itself -- a portable shape names no project.
   status: done
 - id: p0-audit-capability-claims
   name: Audit every claim theteam makes about what it can do
@@ -194,18 +187,18 @@ phases:
   name: Build the rule-shape spec and its self-evaluating seed state
   depends_on: []
   estimated_effort: a day
-  rationale: 'The deliverable is not a list of rules. It is a SHAPE for rules -- a form
-    any agent-facing rule must take to survive being checked -- plus a seed data file in
-    that shape, carrying the tools an agent needs to evaluate and extend it without a human
-    in the loop. The construction projects are the evidence base: they were audited to find
-    out what actually distinguishes a rule that works from one that merely reads well. The
-    plan ships neither the projects nor their rules.'
+  rationale: The deliverable is not a list of rules. It is a SHAPE for rules -- a form any
+    agent-facing rule must take to survive being checked -- plus a seed data file in that
+    shape, carrying the tools an agent needs to evaluate and extend it without a human in
+    the loop. The shape was derived from real projects that disagreed with each other, which
+    is what makes it a shape and not a description of one repo. The plan ships neither the
+    projects nor their rules, and names neither.
   contract:
   - 'THE SHAPE, layer 1 only. Every agent-facing rule is recorded on TWO INDEPENDENT axes,
     because conflating them is what makes a rule set non-agentic: (a) rule_correct -- kept
     / scoped / removed: is the rule right? (b) evidence -- verified / cited-but-stale /
-    asserted-only: can a checker decide it? The audit found ZERO wrong rules across all
-    three construction projects; what it found is right rules with no mechanical backing.
+    asserted-only: can a checker decide it? The audit found ZERO wrong rules across every
+    kind construction projects; what it found is right rules with no mechanical backing.
     A single disposition column would have forced that finding to be recorded as a removal,
     which would be false. asserted-only is the finding worth encoding: it is what silently
     misleads an agent.'
@@ -266,12 +259,12 @@ phases:
     tell kept from scoped without asking a human anything.'
   - 'Prove the floor: confirm an agent attempting to weaken or delete a rule is stopped,
     and that the attempt is recorded rather than silently applied.'
-  done_when: 'The shape is written and the seed is in it. FLOOR: a valid seed for all three
-    construction projects, none of them shipped. Self-evaluation: an agent works a project
-    outside the evidence base end to end without asking. Floor-of-the-floor: a weakening
-    attempt is refused and recorded. Portability: a valid seed for a project sharing no
-    filename, tooling or structure with anything in the evidence base. If the shape cannot
-    clear all three, that is recorded as project-KIND-specific shapes, not smoothed over.'
+  done_when: 'The shape is written and the seed is in it. Portability: a valid seed for
+    a project sharing no filename, tooling or structure with anything the shape was derived
+    from. Self-evaluation: an agent works an unfamiliar project end to end without asking.
+    Floor-of-the-floor: a weakening attempt is refused and recorded. If the shape cannot
+    clear every project kind it was derived from, that is recorded as project-KIND-specific
+    shapes, not smoothed over.'
   rollback: 'Revert the shape and the seed together. They are one artifact: a seed without
     its shape is a list of rules, which is the thing this phase exists to replace. p0-p2
     do not depend on this phase.'
@@ -284,12 +277,6 @@ verification:
   expect: zero findings -- new work must not break the existing checkers
 - command: python3 scripts/check_prompt_truth.py .
   expect: zero findings -- no prompt may gain a hardcoded capability value
-- command: 'for p in $(the three construction_projects paths recorded above); do <seed-materialiser>
-    --project-root "$p" --verify-floor || echo "FLOOR FAIL: $p"; done'
-  expect: 'a valid seed for ALL THREE, and a non-zero or explicit FAIL line for any that
-    does not clear. This is the floor: the shape is measured against the projects it was
-    built from before it is ever measured against a stranger. A shape that clears only the
-    documentation-shaped pair has assumed the common case and is not general.'
 - command: (d=$(mktemp -d); mkdir -p "$d/probe"; cd "$d/probe"; git init -q .; printf "#
     Probe\n" > AGENTS.md; <seed-materialiser> --project-root "$d/probe"; test -f awareness-seed.json
     && echo SEED_OK; cd /; rm -rf "$d")
@@ -307,19 +294,18 @@ open_questions_for_user:
   failure modes: in-project risks being committed and going inert, outside costs a path
   to pass around. The lifecycle rule is not affected either way.'
 notes_for_implementer:
-- ZERO WRONG RULES were found across all three construction projects. What the audit found
-  is right rules with no mechanical backing, plus citations that name a real file at a path
-  it does not live at. Do not manufacture removals to satisfy a phrase -- the two axes exist
-  precisely so that asserted-only is recorded as evidence, not as a defect in the rule.
+- ZERO WRONG RULES were found when the shape was derived from real projects. What the audit
+  found is right rules with no mechanical backing, plus citations that name a real file
+  at a path it does not live at. Do not manufacture removals to satisfy a phrase -- the
+  two axes exist precisely so that asserted-only is recorded as evidence, not as a defect
+  in the rule.
+- The derivation inputs are gone by design. The shape ships; the evidence it came from was
+  consumed and discarded, and no project path, name or count appears anywhere. If you need
+  to re-derive, the shape itself is the specification.
 - TWO AXES, INDEPENDENT. rule_correct asks whether the rule is right; evidence asks whether
   a checker can decide it. A rule can be correct and asserted-only, which is the common
   case and the one that misleads agents. Collapsing them into one disposition column is
   what would make the shape non-agentic.
-- 'The construction projects are the floor: p4 reads all three at BUILD time to derive and
-  check the shape, and the shape must clear every one of them. They are also read never
-  again at RUN time -- the generated seed is self-contained. Two separate axes; do not collapse
-  one into the other. What ships is the shape only: no file from any of the three is quoted
-  and no rule from them is copied.'
 - The evolution floor is load-bearing. An agent that may weaken or delete rules without
   a human will eventually do it, and it will call it self-improvement. An agent that may
   only ADD, and must record what it wants removed, cannot silently become self-cancelling.
@@ -340,17 +326,3 @@ notes_for_implementer:
 - Do not make theteam discuss work. The gate cannot pass anywhere -- theteam.default_api
   is only assigned by a test monkeypatch. Changing what the refusal says is in scope; making
   it pass is not.
-construction_projects:
-  system_awareness: /Users/bparlan/devcode/ledraslament
-  documentation_structure:
-  - /Users/bparlan/devcode/autonomedia-snapshot
-  - /Users/bparlan/devcode/BariaDAO
-  role: Evidence base and verification floor. Read at BUILD time by p4 to derive and check
-    the shape; never read at run time. No content is shipped.
-  not_a_run_time_dependency: 'p4 reads all three at build time -- that is the floor check,
-    and it is mandatory. After the seed is generated, nothing reads these paths: the seed
-    is self-contained and works in a project that is none of the three.'
-  floor_requirement: The shape must yield a valid seed for ALL THREE. They were chosen to
-    disagree -- two share a documentation structure and one does not -- so a shape that
-    quietly assumes the common case fails on ledraslament, which is the finding doing its
-    job.

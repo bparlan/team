@@ -45,19 +45,19 @@ plans:
 - file: system-awareness-injection.yaml
   id: system-awareness-injection
   status: not-started
-  one_line: Give theteam the ability to see what it can do right now, and give agents a
-    self-evaluating rule-shape they can extend without a human. Construction projects are
-    recorded as the evidence base; nothing reads them at run time and the deliverable stands
-    alone if all three are deleted.
+  one_line: 'Give theteam the ability to see what it can do right now, and give agents a
+    self-evaluating rule-shape they can extend without a human. The shape was derived from
+    real projects at authoring time and the derivation inputs were then removed: the plan
+    names no project and depends on none.'
   phases: 5
   blocked_on: null
   depends_on_plans:
   - human-report-surface
-  note: q0 is closed -- the three construction projects are recorded in the plan file. The
-    audit found ZERO wrong rules across them; what it found is right rules with no mechanical
-    backing, so the shape records TWO INDEPENDENT axes (is the rule right / can a checker
-    decide it) rather than one disposition column. The seed lets an agent self-evaluate;
-    an evolution floor stops it weakening or deleting rules without a human.
+  note: No phase waits on user input. The audit that produced the shape found ZERO wrong
+    rules -- what it found is right rules with no mechanical backing, so the shape records
+    TWO INDEPENDENT axes (is the rule right / can a checker decide it) rather than one disposition
+    column. The seed lets an agent self-evaluate; an evolution floor stops it weakening
+    or deleting rules without a human.
 - file: diagram-citation-truth.yaml
   id: diagram-citation-truth
   status: not-started

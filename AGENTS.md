@@ -65,6 +65,7 @@ thing a new session is guaranteed to find.
 `awaiting-input` is defined in the index: it cannot begin without a user
 decision. It is not a failure, and it is unrelated to the run statuses the
 executor uses.
+
 ## Project convention infrastructure
 
 `scripts/seed_project.py` is the onboarding mechanism. Run it against any
@@ -84,9 +85,6 @@ The shape is portable: no project paths are recorded, no project content is
 shipped, and the seed works on any project regardless of what it contains.
 `docs/skeletons/` is a capability of the `code-search` skill, not a directory
 the seed creates.
-
-`awaiting-input` is defined in the index: it cannot begin without a user decision.
-It is not a failure, and it is unrelated to the run statuses the executor uses.
 
 **No skipped tests.**
 - Run existing tests after every code change.

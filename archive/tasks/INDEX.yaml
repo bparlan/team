@@ -45,20 +45,19 @@ plans:
 - file: system-awareness-injection.yaml
   id: system-awareness-injection
   status: not-started
-  one_line: Give theteam the ability to see what it can do right now, so a refusal names
-    the missing capability instead of only denying, and give any project a reusable static
-    awareness file. Executable now through p2; the example project is a DESIGN-TIME input
-    for q0 and p4 only, not a run-time dependency.
+  one_line: Give theteam the ability to see what it can do right now, and give agents a
+    self-evaluating rule-shape they can extend without a human. Construction projects are
+    recorded as the evidence base; nothing reads them at run time and the deliverable stands
+    alone if all three are deleted.
   phases: 5
-  blocked_on: q0-needs-one-example-project
+  blocked_on: null
   depends_on_plans:
   - human-report-surface
-  note: The example is a design-time input that shapes the awareness-file schema once; nothing
-    at run time reads that path. The dynamic phases p0-p2 need no example. An earlier draft
-    made p4 wait behind an injection phase that pointed the probe at the example path, which
-    would have made the example a run-time dependency of injection; that phase was removed
-    rather than reordered. p4 reuses tasks/system-awareness/analyze_system_awareness.py
-    rather than writing a second analyzer.
+  note: q0 is closed -- the three construction projects are recorded in the plan file. The
+    audit found ZERO wrong rules across them; what it found is right rules with no mechanical
+    backing, so the shape records TWO INDEPENDENT axes (is the rule right / can a checker
+    decide it) rather than one disposition column. The seed lets an agent self-evaluate;
+    an evolution floor stops it weakening or deleting rules without a human.
 - file: diagram-citation-truth.yaml
   id: diagram-citation-truth
   status: not-started
@@ -167,6 +166,7 @@ phase_entry_points:
   diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone.
   document-citation-truth: p0 -- freeze the measurement. Its first run must reproduce 389/12;
     a mismatch means the parser drifted, not that the docs are wrong.
-  system-awareness-injection: Start at p0 -- audit capability claims. Needs no example project.
-    The example is only needed by q0 and p4, and only to derive a reusable shape.
+  system-awareness-injection: Start at p0 -- audit capability claims. Needs nothing external.
+    p4 builds the rule-shape and its self-evaluating seed; no construction project is read
+    at run time.
   project-convention-infra: BLOCKED at p0 only. p1, p2 and p3 do not need an example project.

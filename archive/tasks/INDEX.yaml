@@ -32,7 +32,7 @@ plans:
   depends_on_plans: []
 - file: project-convention-infra.yaml
   id: project-convention-infra
-  status: not-started
+  status: done
   one_line: Given any project root, inventory it against the seed shape and build a
     checker that reports claim-vs-reality gaps.
   phases: 5
@@ -95,8 +95,7 @@ recommended_order:
 - '7. system-awareness-injection p0 -- audit capability claims. One hour, read-only, needs
   no example project, and it verifies its own premise: if no false claims exist, the plan
   is void and the hour was cheap.'
-- 8. project-convention-infra -- BLOCKED until the user names an example project. Its p1
-  derives the convention set from a real inventory rather than a guess.
+- 8. project-convention-infra -- DONE. Seed shape as baseline, checker built.
 why_this_order: Cost of being wrong, ascending, and cost of being unable to undo it, descending.
   Step 1 is fifteen minutes, needs no decision, and cannot be wrong. Step 2 corrects nine
   line numbers that are wrong today, so a reader tracing the architecture today lands on

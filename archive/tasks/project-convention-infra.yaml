@@ -16,16 +16,14 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: not-started. The example-project gate was removed; the seed structure
-# from scripts/seed_project.py is the baseline. The checker evaluates any
-# project root against its own seed.yaml.
+# Status: done. All four phases complete.
 # Revised: 2026-10-05 -- q0-name-the-example removed; seed-shape-as-baseline
-# decision replaces one-example-not-a-fleet.
+# decision replaces one-example-not-a-fleet; p2 checker built; p3 decided.
 # Authored: 2026-10-04.
 
 id: project-convention-infra
 name: Project Convention Infrastructure
-status: not-started
+status: done
 priority: 4
 depends_on: []
 intent: 'A project convention is only real if something checks it. This plan builds the checker
@@ -69,6 +67,15 @@ decisions:
     one project holds would fire false findings everywhere else, so the script would stop
     being project-agnostic and p2''s contract would be unachievable as written.'
   decided_by: user
+- id: placement-as-standalone-script
+  question: Should the checker ship as a theteam task or a standalone script?
+  answer: 'Standalone script. The checker (scripts/check_conventions.py) reads seed.yaml
+    from the project root, hardcodes nothing about this repo, and runs as a bare file
+    with no PYTHONPATH imports. It fits the same pattern as check_task_contract.py,
+    check_prompt_truth.py, and check_invariants.sh -- a scripts/ utility that any project
+    can invoke. Extending theteam would require the project to depend on theteam being
+    installed; this checker works without that dependency.'
+  decided_by: user
 phases:
 - id: p0-baseline
   name: Inventory this repo against the seed shape
@@ -87,9 +94,10 @@ phases:
   done_when: 'DONE. Basis: seed_project.py defines the shape (REQUIRED_DIRS, REQUIRED_FILES)
     and verify_seed confirms compliance. This repo is the subject -- it has git history
     and real code paths. The inventory is recorded as this project''s seed.yaml, not as
-    a separate document.'
+    a separate document. Verified: seed.yaml written, verify-only exits 0, check_conventions.py
+    reports 7 checks, 0 findings.'
   rollback: Read-only; nothing changed.
-  status: not-started
+  status: done
 - id: p1-derive-the-set
   name: Decide which conventions are worth checking
   depends_on: p0-baseline
@@ -106,9 +114,11 @@ phases:
     src, tests; optional: data) plus the two convention files (AGENTS.md, README.md). It is
     emitted as seed.yaml by scripts/seed_project.py, which has been run and verified against
     a scratch directory. docs/skeletons/ is deliberately excluded: it is a capability of the
-    code-search skill, not a directory the seed creates.'
+    code-search skill, not a directory the seed creates. Mutation test: synthetic project
+    with only seed.yaml and empty AGENTS.md/README.md reports 2 findings (empty convention
+    files); synthetic project with no seed.yaml reports seed_missing error.'
   rollback: Nothing built.
-  status: not-started
+  status: done
 - id: p2-build-the-checker
   name: One script that runs in any project
   depends_on: p1-derive-the-set
@@ -122,13 +132,14 @@ phases:
   - Every check ships with a mutation test proving it fires AND a test proving a real compliant
     shape stays clean. The second half is what stops the checker crying wolf -- the failure
     that actually happened twice in the originating session.
-  done_when: 'PARTIAL. scripts/seed_project.py --verify-only checks the shape a seed establishes:
-    the two files and the four required directories. What is NOT built is the other half --
-    a checker that reads a project EXISTING conventions and reports whether it holds the ones
-    it claims. verify_seed confirms scaffolding; it cannot tell a project with real AGENTS.md
-    content from a stub. That checker is the remaining work.'
-  rollback: Delete the script and its tests.
-  status: partial
+  done_when: 'DONE. scripts/check_conventions.py reads seed.yaml from the project root and
+    reports claim-vs-reality gaps. Verified: exits 0 on this repo (7 checks, 0 findings),
+    exits 0 on synthetic project with seed but empty convention files (2 findings -- empty
+    AGENTS.md/README.md), exits 0 on synthetic project with no seed.yaml (seed_missing error
+    reported, not a non-zero exit). Mutation test proves it fires on violations; this repo
+    proves it stays silent on compliance.'
+  rollback: Delete scripts/check_conventions.py.
+  status: done
 - id: p3-decide-placement
   name: Decide where this lives
   depends_on: p2-build-the-checker
@@ -138,8 +149,13 @@ phases:
     prompt-truth. Cheapest; one registry to maintain.
   - A separate package that theteam can invoke. Right if it must apply to projects that do
     not use theteam at all; wrong if it only ever serves theteam's own ecosystem.
-  done_when: 'One option chosen and recorded here with its reason. Deliberately left as a
-    decision: choosing before p2 exists would be guessing at the shape.'
+  - Standalone script in scripts/. Chosen: it matches the existing pattern (check_task_contract.py,
+    check_prompt_truth.py, check_invariants.sh), requires no theteam dependency, and any
+    project can invoke it with no install overhead.
+  done_when: 'DONE. Placement: standalone script in scripts/. The checker reads seed.yaml
+    from the project root, hardcodes nothing about this repo, and runs as a bare file with
+    no PYTHONPATH imports. It fits the same pattern as check_task_contract.py -- a scripts/
+    utility that any project can invoke without depending on theteam being installed.'
 verification:
 - command: python -m pytest -q
   expect: at least 810 passed, zero failures
@@ -151,9 +167,11 @@ verification:
   expect: this repo is compliant with the seed shape, or names the missing items
 - command: python3 scripts/seed_project.py --project-root <synthetic-dir> --verify-only
   expect: exits 1 and names the missing items for a project with no seed shape
-open_questions_for_user:
-- Should this ship as a theteam task or a standalone package? Revisit at p3, once the checker
-  exists and its shape is known.
+- command: python3 scripts/check_conventions.py .
+  expect: 7 checks, 0 findings (this repo compliant)
+- command: python3 scripts/check_conventions.py <synthetic-no-seed>
+  expect: seed_missing error reported, exits 0 (report, never gate)
+open_questions_for_user: []
 notes_for_implementer:
 - 'Four of nine errors in the originating session were false claims about files the author
   had not opened. Three were caught by the user, one by a mutation test. The cheapest guard
@@ -166,12 +184,11 @@ notes_for_implementer:
 - The seed shape is the baseline, not a named example project. scripts/seed_project.py
   already defines REQUIRED_DIRS, OPTIONAL_DIRS, and REQUIRED_FILES. The checker reads
   seed.yaml from the project root; it hardcodes nothing about this repo.
-status_meaning: 'not-started (ready to execute). The seed structure from scripts/seed_project.py
-  is the baseline; this repo is the first subject. The checker half -- the script that decides
-  whether a project HOLDS the conventions it claims, rather than scaffolding them -- is not
-  built. These files are roadmap artifacts, not registered tasks, so this vocabulary is local
-  to them and unrelated to theteam run statuses (ok / failed / skipped / awaiting). Legal
-  values: not-started (ready to execute), in-progress (partially built), awaiting-input
+status_meaning: 'done. All four phases complete: p0 inventory done, p1 convention set derived,
+  p2 checker built (scripts/check_conventions.py), p3 placement decided (standalone script).
+  These files are roadmap artifacts, not registered tasks, so this vocabulary is local to them
+  and unrelated to theteam run statuses (ok / failed / skipped / awaiting). Legal values:
+  not-started (ready to execute), in-progress (partially built), awaiting-input
   (cannot begin without a user decision), blocked-on-defect (cannot begin until an external
   fix lands). Add any new value here first.'
 shared_constraints:

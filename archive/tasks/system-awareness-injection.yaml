@@ -25,10 +25,10 @@ id: system-awareness-injection
 name: System Awareness Injection
 status: not-started
 status_meaning: 'not-started (ready to execute). No phase waits on user input: the shape
-  was derived at authoring time and the evidence base was then removed, so nothing external
-  is needed. p0-p2 need nothing at all. These files are roadmap artifacts, not registered
-  tasks, so this vocabulary is local to them and unrelated to theteam run statuses (ok /
-  failed / skipped / awaiting). Legal values: not-started (ready to execute), in-progress
+  was derived at authoring time and the derivation inputs were then removed, so nothing
+  external is needed. p0-p2 need nothing at all. These files are roadmap artifacts, not
+  registered tasks, so this vocabulary is local to them and unrelated to theteam run statuses
+  (ok / failed / skipped / awaiting). Legal values: not-started (ready to execute), in-progress
   (partially built), awaiting-input (cannot begin without a user decision), blocked-on-defect
   (cannot begin until an external fix lands). Add any new value here first.'
 priority: 2
@@ -95,7 +95,7 @@ phases:
   - Confirm the user accepts that the answer may be 'this project has no conventions'. A
     checker that reports nothing must be distinguishable from a checker that is not installed.
   done_when: Satisfied at authoring time. The shape was derived from real projects and the
-    evidence base was then removed from this file. The phase is closed, not pending.
+    derivation inputs were then removed from this file. The phase is closed, not pending.
   rollback: Not applicable; nothing was built.
   rationale: 'The shape was derived from real projects, then the derivation was closed.
     They were a means, not a dependency: the shape they produced is what ships, and the
@@ -185,7 +185,8 @@ phases:
     a capability value is worse than one that never had it.
 - id: p4-shape-the-static-awareness-file
   name: Build the rule-shape spec and its self-evaluating seed state
-  depends_on: []
+  depends_on:
+  - q0-close-the-derivation
   estimated_effort: a day
   rationale: The deliverable is not a list of rules. It is a SHAPE for rules -- a form any
     agent-facing rule must take to survive being checked -- plus a seed data file in that
@@ -198,8 +199,8 @@ phases:
     because conflating them is what makes a rule set non-agentic: (a) rule_correct -- kept
     / scoped / removed: is the rule right? (b) evidence -- verified / cited-but-stale /
     asserted-only: can a checker decide it? The audit found ZERO wrong rules across every
-    kind construction projects; what it found is right rules with no mechanical backing.
-    A single disposition column would have forced that finding to be recorded as a removal,
+    real project it examined; what it found is right rules with no mechanical backing. A
+    single disposition column would have forced that finding to be recorded as a removal,
     which would be false. asserted-only is the finding worth encoding: it is what silently
     misleads an agent.'
   - 'AGENTIC BY CONSTRUCTION. A rule that cannot be decided by a checker is prose, and prose
@@ -242,10 +243,10 @@ phases:
     are all plausible, none is read, and loop_health_check.py:25-33 is the only thing that
     notices. It is the exact outcome this phase must not produce.'
   - 'PORTABILITY is proven, not asserted: the shape yields a valid seed for a project sharing
-    no filenames with anything in the evidence base. If it only fits the projects it was
-    built from, it is a description, not a shape. If no single shape fits all construction
-    projects, the honest outcome is project-KIND-specific shapes recorded as such -- the
-    same category as an empty result being valid.'
+    no filenames with anything the shape was derived from. If it only fits the projects
+    it came from, it is a description, not a shape. If no single shape fits every project
+    kind it was derived from, the honest outcome is project-KIND-specific shapes recorded
+    as such -- the same category as an empty result being valid.'
   steps:
   - 'Write the shape: the two axes, the enforcement ladder, the falsification-test requirement,
     and the evolution floor. This is the deliverable; the seed is an instance of it.'
@@ -254,9 +255,9 @@ phases:
     It determines every path in the later steps.'
   - 'Write the seed: rules in the shape, each with its falsification test and evidence axis
     set. Seed minimal and general -- it is the starting state, not the answer key.'
-  - 'Prove self-evaluation: take a project NOT in the evidence base and confirm an agent
-    following only the seed can classify its candidate rules, mark the evidence axis, and
-    tell kept from scoped without asking a human anything.'
+  - 'Prove self-evaluation: take a project NOT in what the shape was derived from and confirm
+    an agent following only the seed can classify its candidate rules, mark the evidence
+    axis, and tell kept from scoped without asking a human anything.'
   - 'Prove the floor: confirm an agent attempting to weaken or delete a rule is stopped,
     and that the attempt is recorded rather than silently applied.'
   done_when: 'The shape is written and the seed is in it. Portability: a valid seed for
@@ -281,9 +282,9 @@ verification:
     Probe\n" > AGENTS.md; <seed-materialiser> --project-root "$d/probe"; test -f awareness-seed.json
     && echo SEED_OK; cd /; rm -rf "$d")
   expect: a valid seed for a project sharing no filename, no tooling and no AGENTS.md structure
-    with anything in the evidence base, from a single empty git repo. This proves the shape
-    generalises rather than describing the three projects it was built from. Proving it
-    against a near-copy of a construction project would prove nothing.
+    with anything the shape was derived from, from a single empty git repo. This proves
+    the shape generalises rather than describing its own sources. Proving it against a near-copy
+    of a construction project would prove nothing.
 open_questions_for_user:
 - 'Should scripts/system-awareness-config.json be deleted once p0 confirms nothing reads
   it, or kept with a comment marking it inert? Deletion is cleaner; the repo has an archive/

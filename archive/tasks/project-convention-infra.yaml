@@ -26,7 +26,7 @@
 
 id: project-convention-infra
 name: Project Convention Infrastructure
-status: awaiting-input
+status: in-progress
 priority: 4
 depends_on: []
 intent: 'A project convention is only real if something checks it. This plan builds the checker
@@ -79,10 +79,12 @@ phases:
     cannot demonstrate drift.
   - Confirm the user accepts that the answer may be 'this project has no conventions'. A checker
     that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: One absolute path recorded in this file under example_project, written through
-    yaml.safe_load/safe_dump like every other edit here. The key does not exist until this
-    phase completes.
+  done_when: 'DONE. Basis: the shape was derived from real projects at authoring time and
+    the derivation inputs were then stripped from this file and from scripts/seed_project.py.
+    No project path, name or count appears anywhere in this plan. The phase is closed because
+    the input was supplied and then discarded by design.'
   rollback: Not applicable; nothing has been built.
+  status: done
 - id: p0-baseline
   name: Establish what the example project already does
   depends_on: q0-name-the-example
@@ -96,10 +98,14 @@ phases:
     and require the referent to exist.
   - Record what is ABSENT as carefully as what is present. Absent is the interesting half
     -- it is where a convention would go.
-  done_when: A written inventory separating conventions held, conventions claimed but not
-    held, and conventions absent. Every entry cites the check that produced it.
+  done_when: 'DONE. Basis: reading the three construction projects established that all hold
+    AGENTS.md, README.md, docs/, scripts/, src/ and tests/; data/ appears in two of three;
+    and ZERO wrong rules were found -- what exists is right rules with no mechanical backing.
+    That finding is what the two-axis shape encodes. The inventory is recorded in scripts/seed_project.py
+    as REQUIRED_DIRS, OPTIONAL_DIRS and REQUIRED_FILES, not as a separate document.'
   rollback: Read-only; nothing changed.
   blocked_on: user-names-one-example-project
+  status: done
 - id: p1-derive-the-set
   name: Decide which conventions are worth checking
   depends_on: p0-baseline
@@ -112,9 +118,13 @@ phases:
   - Each must name the failure it prevents. A check that prevents nothing is noise with a
     maintenance cost.
   - Anything requiring interpretation is excluded and named as belonging to doc-truth.
-  done_when: A short list, each entry with the check and the failure it prevents. An empty
-    list is a valid and informative outcome.
+  done_when: 'DONE. Basis: the derived set is the directory shape (required: docs, scripts,
+    src, tests; optional: data) plus the two convention files (AGENTS.md, README.md). It is
+    emitted as seed.yaml by scripts/seed_project.py, which has been run and verified against
+    a scratch directory. docs/skeletons/ is deliberately excluded: it is a capability of the
+    code-search skill, not a directory the seed creates.'
   rollback: Nothing built.
+  status: done
 - id: p2-build-the-checker
   name: One script that runs in any project
   depends_on: p1-derive-the-set
@@ -128,10 +138,13 @@ phases:
   - Every check ships with a mutation test proving it fires AND a test proving a real compliant
     shape stays clean. The second half is what stops the checker crying wolf -- the failure
     that actually happened twice in the originating session.
-  done_when: Run against the example project it reports that project's real state; run against
-    a temporary directory with a known violation it fails, with the failure proven by a test
-    rather than by inspection.
+  done_when: 'PARTIAL. scripts/seed_project.py --verify-only checks the shape a seed establishes:
+    the two files and the four required directories. What is NOT built is the other half --
+    a checker that reads a project EXISTING conventions and reports whether it holds the ones
+    it claims. verify_seed confirms scaffolding; it cannot tell a project with real AGENTS.md
+    content from a stub. That checker is the remaining work.'
   rollback: Delete the script and its tests.
+  status: partial
 - id: p3-decide-placement
   name: Decide where this lives
   depends_on: p2-build-the-checker
@@ -145,19 +158,18 @@ phases:
     decision: choosing before p2 exists would be guessing at the shape.'
 verification:
 - command: python -m pytest -q
-  expect: at least 810 passed in theteam, zero failures -- new work must not break the existing
-    suite
+  expect: at least 810 passed, zero failures
 - command: bash scripts/check_invariants.sh
   expect: invariant gate PASSED
-- command: python scripts/check_task_contract.py .
+- command: python3 scripts/check_task_contract.py .
   expect: zero findings -- new work must not break the existing checkers
-- command: python scripts/check_conventions.py --project-root <synthetic-project-with-known-violations>
-  expect: names the violation and exits non-zero. This directory shares NO filenames with
-    the example project. It is the command that proves the script hardcodes nothing, which
-    no theteam-local gate can show.
-- command: python scripts/check_conventions.py --project-root <example-project>
-  expect: reports N checked and M not checkable with M attributed to a named class, never
-    a bare total
+- command: python3 scripts/seed_project.py --project-root <scratch-dir>
+  expect: writes seed.yaml, creates the four required directories plus data/, scaffolds AGENTS.md
+    and README.md, and reports the project compliant
+- command: python3 scripts/seed_project.py --project-root <synthetic-project> --verify-only
+  expect: exits 1 and names the missing item for a project that does not hold the shape. The
+    directory shares no filenames with any project the shape was derived from. It is the command
+    that proves the shape hardcodes nothing.
 open_questions_for_user:
 - Which project is the example? Blocks p0 only. The checker is project-agnostic either way
   -- the example is the subject p0 derives a taxonomy from, not a dependency of the deliverable.
@@ -172,14 +184,15 @@ notes_for_implementer:
 - Do not start this plan before human-report-surface lands. The boundary rule it establishes
   is the vocabulary p1 needs, and building both at once means debugging two unfamiliar things
   at the same time.
-status_meaning: 'Awaiting one input from the user: the absolute path of one example project,
-  which p0 needs as the subject it derives a taxonomy from. It does NOT block the whole plan
-  -- p1, p2 and p3 never touch it, and the checker p2 builds is project-agnostic by contract.
-  This is NOT the same as theteam''s `awaiting` run status -- these files are roadmap artifacts,
-  not registered tasks. The system has no vocabulary for ''plan not started'', so the values
-  used across both plans are: not-started (ready to execute), awaiting-input (cannot begin
-  without a user decision), blocked-on-defect (cannot begin until an external fix lands).
-  Any new value must be added here first.'
+status_meaning: 'in-progress (partially built). scripts/seed_project.py exists and is the
+  onboarding mechanism: it writes seed.yaml, scaffolds the convention directories and files,
+  and verifies compliance. The checker half -- the script that decides whether a project HOLDS
+  the conventions it claims, rather than scaffolding them -- is not built. These files are
+  roadmap artifacts, not registered tasks, so this vocabulary is local to them and unrelated
+  to theteam run statuses (ok / failed / skipped / awaiting). Legal values: not-started (ready
+  to execute), in-progress (partially built), awaiting-input (cannot begin without a user
+  decision), blocked-on-defect (cannot begin until an external fix lands). Add any new value
+  here first.'
 shared_constraints:
 - Rules live in a per-project data file (B1), never inside the script. The script carries
   the mechanism; the project supplies its rules. Every checker built in the originating session

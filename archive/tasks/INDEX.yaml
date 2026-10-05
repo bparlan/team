@@ -32,16 +32,16 @@ plans:
   depends_on_plans: []
 - file: project-convention-infra.yaml
   id: project-convention-infra
-  status: awaiting-input
-  one_line: Given one named project, establish which conventions it holds, which it claims
-    but does not hold, and make the second set fail a check.
+  status: not-started
+  one_line: Given any project root, inventory it against the seed shape and build a
+    checker that reports claim-vs-reality gaps.
   phases: 5
-  blocked_on: p0-needs-one-example-project
+  blocked_on: null
   depends_on_plans:
   - human-report-surface
-  note: Only p0 needs a named example; the checker p2 builds is project-agnostic by contract
-    and reads its rules from a per-project data file. blocked_on moved off file scope because
-    it read as a runtime dependency and stalled the plan for a session.
+  note: Seed shape from scripts/seed_project.py is the baseline; no named example
+    project needed. p0 inventories this repo against the seed, p1 derives the set,
+    p2 builds the checker, p3 decides placement.
 - file: system-awareness-injection.yaml
   id: system-awareness-injection
   status: not-started

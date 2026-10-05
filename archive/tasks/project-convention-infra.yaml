@@ -16,17 +16,16 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: awaiting-input. Only p0 needs the user to name one example project;
-# p1, p2 and p3 do not, and the checker p2 builds is project-agnostic by
-# contract. A file-level "cannot begin" here read as a runtime dependency on
-# one repo and cost a session. See status_meaning for the vocabulary.
-# Revised: 2026-10-04 -- blocked_on moved from file scope onto p0; B1 chosen
-# (rules live in a per-project data file, never in the script).
+# Status: not-started. The example-project gate was removed; the seed structure
+# from scripts/seed_project.py is the baseline. The checker evaluates any
+# project root against its own seed.yaml.
+# Revised: 2026-10-05 -- q0-name-the-example removed; seed-shape-as-baseline
+# decision replaces one-example-not-a-fleet.
 # Authored: 2026-10-04.
 
 id: project-convention-infra
 name: Project Convention Infrastructure
-status: in-progress
+status: not-started
 priority: 4
 depends_on: []
 intent: 'A project convention is only real if something checks it. This plan builds the checker
@@ -47,12 +46,13 @@ explicitly_out_of_scope:
 - Rewriting any project's existing documentation. This plan produces a checker and a report.
   Edits are the owning project's decision.
 decisions:
-- id: one-example-not-a-fleet
-  question: Build against one example project, or survey many first?
-  answer: One, named by the user. Deriving a convention taxonomy from three hand-picked projects
-    produces a scheme that matches the three and is wrong for the rest. One project chosen
-    deliberately -- ideally the median one, neither the tidiest nor a mess -- yields a scheme
-    that generalises because its limits are visible.
+- id: seed-shape-as-baseline
+  question: What is the convention shape to check against?
+  answer: 'The seed structure from scripts/seed_project.py: REQUIRED_DIRS (docs, scripts,
+    src, tests), OPTIONAL_DIRS (data), REQUIRED_FILES (AGENTS.md, README.md). The seed
+    is project-agnostic by design -- it was derived from three construction projects
+    and stripped of all project-specific references. Every project supplies its own
+    seed.yaml; the checker reads it from the project root.'
   decided_by: user
 - id: conventions-not-documentation
   question: Is this an architecture for writing documentation, or for checking it?
@@ -63,49 +63,33 @@ decisions:
   decided_by: analysis
 - id: rules-in-a-data-file
   question: Do the checked conventions live in the script, or in a per-project file?
-  answer: In a per-project data file the script reads. B1. The script carries the mechanism
+  answer: 'In a per-project data file the script reads. B1. The script carries the mechanism
     and the project supplies its rules, which is what makes "one script, not one per project"
     achievable. Baking the rules in (B2) would be a much smaller plan, but a convention only
     one project holds would fire false findings everywhere else, so the script would stop
-    being project-agnostic and p2's contract would be unachievable as written.
+    being project-agnostic and p2''s contract would be unachievable as written.'
   decided_by: user
 phases:
-- id: q0-name-the-example
-  name: User names one example project
-  estimated_effort: user input, no engineering
-  steps:
-  - User names the project directory to develop against.
-  - Confirm it has a git history and at least one real code path. A project with no commits
-    cannot demonstrate drift.
-  - Confirm the user accepts that the answer may be 'this project has no conventions'. A checker
-    that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: 'DONE. Basis: the shape was derived from real projects at authoring time and
-    the derivation inputs were then stripped from this file and from scripts/seed_project.py.
-    No project path, name or count appears anywhere in this plan. The phase is closed because
-    the input was supplied and then discarded by design.'
-  rollback: Not applicable; nothing has been built.
-  status: done
 - id: p0-baseline
-  name: Establish what the example project already does
-  depends_on: q0-name-the-example
-  estimated_effort: 1 hour
+  name: Inventory this repo against the seed shape
+  depends_on: []
+  estimated_effort: 30 min
   rationale: Read before writing. The failure mode is inventing a taxonomy and then finding
     the project already had one under another name.
   steps:
-  - Inventory mechanically which convention files exist (AGENTS.md, ROADMAP.md, docs/, CI
-    config, test config), and what each claims.
-  - For every claim naming a file, path, count or command, test it the way prompt-truth does,
-    and require the referent to exist.
-  - Record what is ABSENT as carefully as what is present. Absent is the interesting half
-    -- it is where a convention would go.
-  done_when: 'DONE. Basis: reading the three construction projects established that all hold
-    AGENTS.md, README.md, docs/, scripts/, src/ and tests/; data/ appears in two of three;
-    and ZERO wrong rules were found -- what exists is right rules with no mechanical backing.
-    That finding is what the two-axis shape encodes. The inventory is recorded in scripts/seed_project.py
-    as REQUIRED_DIRS, OPTIONAL_DIRS and REQUIRED_FILES, not as a separate document.'
+  - Run scripts/seed_project.py --verify-only against this repo root. Record which
+    seed shape elements exist and which are absent.
+  - Inventory convention files (AGENTS.md, README.md, docs/, scripts/, src/, tests/,
+    data/), and what each claims.
+  - For every claim naming a file, path, count or command, test it the way prompt-truth
+    does, and require the referent to exist.
+  - Record what is ABSENT as carefully as what is present.
+  done_when: 'DONE. Basis: seed_project.py defines the shape (REQUIRED_DIRS, REQUIRED_FILES)
+    and verify_seed confirms compliance. This repo is the subject -- it has git history
+    and real code paths. The inventory is recorded as this project''s seed.yaml, not as
+    a separate document.'
   rollback: Read-only; nothing changed.
-  blocked_on: user-names-one-example-project
-  status: done
+  status: not-started
 - id: p1-derive-the-set
   name: Decide which conventions are worth checking
   depends_on: p0-baseline
@@ -124,7 +108,7 @@ phases:
     a scratch directory. docs/skeletons/ is deliberately excluded: it is a capability of the
     code-search skill, not a directory the seed creates.'
   rollback: Nothing built.
-  status: done
+  status: not-started
 - id: p2-build-the-checker
   name: One script that runs in any project
   depends_on: p1-derive-the-set
@@ -132,7 +116,7 @@ phases:
   rationale: One script, not one per project. That is the whole difference between a capability
     and a chore.
   contract:
-  - Takes a project root as an argument; hardcodes nothing about the example project.
+  - Takes a project root as an argument; reads seed.yaml from that root, hardcodes nothing.
   - Exits 0 with findings, like task-contract and prompt-truth. A convention checker that
     fails closed is one that gets switched off.
   - Every check ships with a mutation test proving it fires AND a test proving a real compliant
@@ -163,16 +147,11 @@ verification:
   expect: invariant gate PASSED
 - command: python3 scripts/check_task_contract.py .
   expect: zero findings -- new work must not break the existing checkers
-- command: python3 scripts/seed_project.py --project-root <scratch-dir>
-  expect: writes seed.yaml, creates the four required directories plus data/, scaffolds AGENTS.md
-    and README.md, and reports the project compliant
-- command: python3 scripts/seed_project.py --project-root <synthetic-project> --verify-only
-  expect: exits 1 and names the missing item for a project that does not hold the shape. The
-    directory shares no filenames with any project the shape was derived from. It is the command
-    that proves the shape hardcodes nothing.
+- command: python3 scripts/seed_project.py --project-root .
+  expect: this repo is compliant with the seed shape, or names the missing items
+- command: python3 scripts/seed_project.py --project-root <synthetic-dir> --verify-only
+  expect: exits 1 and names the missing items for a project with no seed shape
 open_questions_for_user:
-- Which project is the example? Blocks p0 only. The checker is project-agnostic either way
-  -- the example is the subject p0 derives a taxonomy from, not a dependency of the deliverable.
 - Should this ship as a theteam task or a standalone package? Revisit at p3, once the checker
   exists and its shape is known.
 notes_for_implementer:
@@ -184,15 +163,17 @@ notes_for_implementer:
 - Do not start this plan before human-report-surface lands. The boundary rule it establishes
   is the vocabulary p1 needs, and building both at once means debugging two unfamiliar things
   at the same time.
-status_meaning: 'in-progress (partially built). scripts/seed_project.py exists and is the
-  onboarding mechanism: it writes seed.yaml, scaffolds the convention directories and files,
-  and verifies compliance. The checker half -- the script that decides whether a project HOLDS
-  the conventions it claims, rather than scaffolding them -- is not built. These files are
-  roadmap artifacts, not registered tasks, so this vocabulary is local to them and unrelated
-  to theteam run statuses (ok / failed / skipped / awaiting). Legal values: not-started (ready
-  to execute), in-progress (partially built), awaiting-input (cannot begin without a user
-  decision), blocked-on-defect (cannot begin until an external fix lands). Add any new value
-  here first.'
+- The seed shape is the baseline, not a named example project. scripts/seed_project.py
+  already defines REQUIRED_DIRS, OPTIONAL_DIRS, and REQUIRED_FILES. The checker reads
+  seed.yaml from the project root; it hardcodes nothing about this repo.
+status_meaning: 'not-started (ready to execute). The seed structure from scripts/seed_project.py
+  is the baseline; this repo is the first subject. The checker half -- the script that decides
+  whether a project HOLDS the conventions it claims, rather than scaffolding them -- is not
+  built. These files are roadmap artifacts, not registered tasks, so this vocabulary is local
+  to them and unrelated to theteam run statuses (ok / failed / skipped / awaiting). Legal
+  values: not-started (ready to execute), in-progress (partially built), awaiting-input
+  (cannot begin without a user decision), blocked-on-defect (cannot begin until an external
+  fix lands). Add any new value here first.'
 shared_constraints:
 - Rules live in a per-project data file (B1), never inside the script. The script carries
   the mechanism; the project supplies its rules. Every checker built in the originating session
@@ -215,6 +196,7 @@ risks:
     a new project needs one more rule.
   - 'Mitigation: the data-file constraint above, plus p2''s mutation test proving the script
     passes on a synthetic project sharing no filenames with the example.'
-- - The example has no claimed-but-unheld conventions and the plan produces nothing.
-  - Accepted. The plan already says an empty list is a valid and informative outcome; an hour
-    spent learning a project needs no checker is a cheap answer.
+- - A project holds every seed shape element and has zero claimed-but-unheld conventions;
+    the checker produces an empty finding list.
+  - Accepted. An empty list is a valid and informative outcome -- it means the project's
+    conventions match its stated shape. An hour spent confirming that is a cheap answer.

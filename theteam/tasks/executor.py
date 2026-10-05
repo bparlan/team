@@ -286,11 +286,15 @@ class TaskExecutor:
             }
 
         if not AgentIsolation.available():
+            from theteam.core.capability import capability_surface
+            surface = capability_surface(str(self.project_root))
             return {
                 "success": False,
                 "error": (
                     f"Phase '{name}' refused: container isolation unavailable "
-                    f"(no Docker daemon), and an unguarded run is not permitted"
+                    f"(measured docker_available={surface['docker_available']}, "
+                    f"disk_free_mb={surface['disk_free_mb']}), and an unguarded "
+                    f"run is not permitted"
                 ),
             }
 

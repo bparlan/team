@@ -168,11 +168,13 @@ def resolve_phase(project_root: str, task: Dict[str, Any],
 
     agent = agent_type_for(phase)
     if agent not in AGENT_TYPES:
+        from theteam.core.capability import capability_surface
+        surface = capability_surface(project_root)
         return {"done": False, "phase": name,
-                "error": (f"phase '{name}': agent_type '{agent}' is not one a "
-                          f"session can spawn (available: "
-                          f"{', '.join(AGENT_TYPES)})")}
-
+                "error": (f"phase '{name}': agent_type '{agent}' is not "
+                          f"one a session can spawn (measured "
+                          f"spawnable_agents has {len(surface['spawnable_agents'])} "
+                          f"entries: {', '.join(surface['spawnable_agents'])})")}
     return {
         "done": False,
         "phase": name,

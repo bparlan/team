@@ -1,88 +1,69 @@
-# System Awareness Injection -- implementation plan
-#
-# One of five plans in this directory. The others are
-# human-report-surface.yaml, project-convention-infra.yaml and
-# diagram-citation-truth.yaml. All five live here because AGENTS.md:39-40 bans
-# `*_PLAN.md`, `*_ANALYSIS.md` and `*_REPORT.md`.
-#
-# NOTE: folder-monitoring.yaml also sits in this directory but is NOT the same
-# shape. It is a `type: loop` registered task -- schedule, outputs, actions,
-# script-only phases -- the tasks/*.yaml contract. These five are roadmap
-# plans: status, phases with contract/steps/done_when/rollback, no schedule.
-# Cite a sibling plan as precedent, not folder-monitoring.
-#
-# The body is emitted by yaml.safe_dump from a dict, not hand-indented.
-# Hand-written YAML failed to parse three times in one session -- an unquoted
-# ": " inside a folded scalar is enough -- so only the prose in this header is
-# hand-written.
-#
-# Status: not-started. Phases p0 through p2 are executable now and need no
-# user input. The shape was derived at authoring time and the derivation inputs
-# were then removed, so nothing external is required and nothing is named here.
-# Authored: 2026-10-04.
-
 id: system-awareness-injection
 name: System Awareness Injection
-status: not-started
-status_meaning: 'not-started (ready to execute). No phase waits on user input: the shape
-  was derived at authoring time and the derivation inputs were then removed, so nothing
-  external is needed. p0-p2 need nothing at all. These files are roadmap artifacts, not
-  registered tasks, so this vocabulary is local to them and unrelated to theteam run statuses
-  (ok / failed / skipped / awaiting). Legal values: not-started (ready to execute), in-progress
-  (partially built), awaiting-input (cannot begin without a user decision), blocked-on-defect
-  (cannot begin until an external fix lands). Add any new value here first.'
+status: in-progress
+status_meaning: 'not-started (ready to execute). No phase waits on user input: the
+  shape was derived at authoring time and the derivation inputs were then removed,
+  so nothing external is needed. p0-p2 need nothing at all. These files are roadmap
+  artifacts, not registered tasks, so this vocabulary is local to them and unrelated
+  to theteam run statuses (ok / failed / skipped / awaiting). Legal values: not-started
+  (ready to execute), in-progress (partially built), awaiting-input (cannot begin
+  without a user decision), blocked-on-defect (cannot begin until an external fix
+  lands). Add any new value here first.'
 priority: 2
 depends_on: []
-intent: 'Give theteam the ability to see its own shape: what files and tasks exist (static
-  awareness), and what it can actually do right now -- whether a provider is bound, whether
-  Docker answers, which agent types are spawnable (dynamic awareness). Today it cannot,
-  and the symptom is visible: theteam discuss refuses with a flat error because no environment
-  binds a provider, when the useful answer is a named list of what it needs instead.'
-why_this_shape: 'The static half already exists as two checkers, task-contract and prompt-truth,
-  both mechanical and both proven non-vacuous by mutation tests. The dynamic half has no
-  representation at all. This plan closes it, and deliberately reuses the same shape: measure
-  mechanically, report rather than gate, and pin both the fires and the stays-quiet halves
-  with tests.'
-design_principle: 'System awareness has two halves and they must not be confused. STATIC
-  is what exists -- files, configs, registered tasks, factual citations, and it is per-project
-  and authored ONCE against one example, then reusable by shape. DYNAMIC is what the machine
-  can do at this moment -- provider bound, docker available, agent types spawnable, disk
-  and memory -- and it is measured per run. Mixing them produces the failure already seen
-  in this repo: scripts/system-awareness-config.json declares enabled/priority/timeout/health_threshold
-  and is read by nobody, while loop_health_check.py:25-33 documents that nothing has read
-  its contents. A static file pretending to be a dynamic capability is the exact defect
-  this plan exists to remove. This plan owns the DYNAMIC half and the reuse of the STATIC
-  half; it does not reinvent static analysis, which tasks/system-awareness/analyze_system_awareness.py
+intent: 'Give theteam the ability to see its own shape: what files and tasks exist
+  (static awareness), and what it can actually do right now -- whether a provider
+  is bound, whether Docker answers, which agent types are spawnable (dynamic awareness).
+  Today it cannot, and the symptom is visible: theteam discuss refuses with a flat
+  error because no environment binds a provider, when the useful answer is a named
+  list of what it needs instead.'
+why_this_shape: 'The static half already exists as two checkers, task-contract and
+  prompt-truth, both mechanical and both proven non-vacuous by mutation tests. The
+  dynamic half has no representation at all. This plan closes it, and deliberately
+  reuses the same shape: measure mechanically, report rather than gate, and pin both
+  the fires and the stays-quiet halves with tests.'
+design_principle: 'System awareness has two halves and they must not be confused.
+  STATIC is what exists -- files, configs, registered tasks, factual citations, and
+  it is per-project and authored ONCE against one example, then reusable by shape.
+  DYNAMIC is what the machine can do at this moment -- provider bound, docker available,
+  agent types spawnable, disk and memory -- and it is measured per run. Mixing them
+  produces the failure already seen in this repo: scripts/system-awareness-config.json
+  declares enabled/priority/timeout/health_threshold and is read by nobody, while
+  loop_health_check.py:25-33 documents that nothing has read its contents. A static
+  file pretending to be a dynamic capability is the exact defect this plan exists
+  to remove. This plan owns the DYNAMIC half and the reuse of the STATIC half; it
+  does not reinvent static analysis, which tasks/system-awareness/analyze_system_awareness.py
   already performs.'
-relationship_to_bootstrap: 'Composes with bootstrap rather than competing with it. Bootstrap
-  is static and authored: the user declares what team they want. This is dynamic and measured:
-  the machine reports what it can currently run. Both answer ''what do I have'', and together
-  they let a prompt say something true. Bootstrap designs the team; awareness tells that
-  team what it may attempt.'
+relationship_to_bootstrap: 'Composes with bootstrap rather than competing with it.
+  Bootstrap is static and authored: the user declares what team they want. This is
+  dynamic and measured: the machine reports what it can currently run. Both answer
+  ''what do I have'', and together they let a prompt say something true. Bootstrap
+  designs the team; awareness tells that team what it may attempt.'
 explicitly_out_of_scope:
-- 'Making discuss work. Its gate cannot pass anywhere: theteam.default_api is only ever
-  assigned by a monkeypatch in a test, so the check is not a condition that sometimes fails
-  -- it cannot pass. This plan does not attempt to bind a provider. It changes what the
-  refusal SAYS, not whether it happens.'
+- 'Making discuss work. Its gate cannot pass anywhere: theteam.default_api is only
+  ever assigned by a monkeypatch in a test, so the check is not a condition that sometimes
+  fails -- it cannot pass. This plan does not attempt to bind a provider. It changes
+  what the refusal SAYS, not whether it happens.'
 - Rendering HTML or any report format work; that is human-report-surface.
 - Fleet-wide scanning across ~/devcode; the user excluded it.
-- Rewriting scripts/system-awareness-config.json in place. It is a stale artifact and the
-  honest outcome is deletion, but that is a decision with its own evidence, not a side effect
-  of this plan.
+- Rewriting scripts/system-awareness-config.json in place. It is a stale artifact
+  and the honest outcome is deletion, but that is a decision with its own evidence,
+  not a side effect of this plan.
 decisions:
 - id: dynamic-not-a-config-file
   question: Should capability state live in a JSON file the way system-awareness-config.json
     does?
-  answer: No. A file records an intention; capability is measured at the moment of use and
-    changes without anyone editing anything. A checked-in config for a dynamic fact is stale
-    the moment the environment changes, and the existing one has been stale since its task
-    was retired. The capability surface is computed, cached per run, and never committed.
+  answer: No. A file records an intention; capability is measured at the moment of
+    use and changes without anyone editing anything. A checked-in config for a dynamic
+    fact is stale the moment the environment changes, and the existing one has been
+    stale since its task was retired. The capability surface is computed, cached per
+    run, and never committed.
   decided_by: analysis
 - id: measure-dont-gate
   question: Should a missing capability fail the run, or be reported?
-  answer: 'Report. Consistent with task-contract and prompt-truth: both exit 0 with findings.
-    A capability check that fails closed is one that gets switched off, and a switched-off
-    check catches nothing.'
+  answer: 'Report. Consistent with task-contract and prompt-truth: both exit 0 with
+    findings. A capability check that fails closed is one that gets switched off,
+    and a switched-off check catches nothing.'
   decided_by: analysis
 phases:
 - id: q0-close-the-derivation
@@ -90,76 +71,84 @@ phases:
   estimated_effort: user input, no engineering
   steps:
   - User names the project directory to develop against.
-  - Confirm it has a git history and at least one real code path; a project with no commits
-    cannot demonstrate drift.
-  - Confirm the user accepts that the answer may be 'this project has no conventions'. A
-    checker that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: Satisfied at authoring time. The shape was derived from real projects and the
-    derivation inputs were then removed from this file. The phase is closed, not pending.
+  - Confirm it has a git history and at least one real code path; a project with no
+    commits cannot demonstrate drift.
+  - Confirm the user accepts that the answer may be 'this project has no conventions'.
+    A checker that reports nothing must be distinguishable from a checker that is
+    not installed.
+  done_when: Satisfied at authoring time. The shape was derived from real projects
+    and the derivation inputs were then removed from this file. The phase is closed,
+    not pending.
   rollback: Not applicable; nothing was built.
   rationale: 'The shape was derived from real projects, then the derivation was closed.
-    They were a means, not a dependency: the shape they produced is what ships, and the
-    plan carries no project path, name or count. Deleting every project the shape was derived
-    from leaves this plan and its deliverable fully intact.'
+    They were a means, not a dependency: the shape they produced is what ships, and
+    the plan carries no project path, name or count. Deleting every project the shape
+    was derived from leaves this plan and its deliverable fully intact.'
   contract:
-  - No project path, name, or count appears anywhere in this plan or in the seed it produces.
-    The shape is the artifact; the evidence was consumed and discarded. This is the same
-    rule the seed enforces on itself -- a portable shape names no project.
+  - No project path, name, or count appears anywhere in this plan or in the seed it
+    produces. The shape is the artifact; the evidence was consumed and discarded.
+    This is the same rule the seed enforces on itself -- a portable shape names no
+    project.
   status: done
 - id: p0-audit-capability-claims
   name: Audit every claim theteam makes about what it can do
   estimated_effort: 1 hour
-  rationale: 'Read before writing, and the same discipline prompt-truth applies to citations.
-    The originating session found four false claims about files the author had not opened;
-    this phase asks the same question about a different layer -- not ''does this file exist''
-    but ''is this claim about capability true''. This phase audits theteam''s own refusal
-    strings, so it needs nothing external and is a ROOT phase. Gating it behind q0 was wrong:
-    it is the phase that decides whether the rest of this plan is worth building, so making
-    it wait on an input it does not use delays the one cheap check that can void the plan.
-    The STATIC half is not audited here: tasks/system-awareness/analyze_system_awareness.py
-    already exists and already parameterises on project_root. Auditing claims about capability
-    is the DYNAMIC half''s job, and that is what this phase covers.'
+  rationale: 'Read before writing, and the same discipline prompt-truth applies to
+    citations. The originating session found four false claims about files the author
+    had not opened; this phase asks the same question about a different layer -- not
+    ''does this file exist'' but ''is this claim about capability true''. This phase
+    audits theteam''s own refusal strings, so it needs nothing external and is a ROOT
+    phase. Gating it behind q0 was wrong: it is the phase that decides whether the
+    rest of this plan is worth building, so making it wait on an input it does not
+    use delays the one cheap check that can void the plan. The STATIC half is not
+    audited here: tasks/system-awareness/analyze_system_awareness.py already exists
+    and already parameterises on project_root. Auditing claims about capability is
+    the DYNAMIC half''s job, and that is what this phase covers.'
   contract:
   - 'Enumerate every refusal and readiness message in the codebase: grep for the strings
     the CLI and runner emit when they decline to act.'
-  - For each, determine what would have to be true for it to be false, and whether anything
-    currently tests that.
-  - 'Record each as: claim, source file and line, how to falsify it, and whether it is currently
-    checked.'
+  - For each, determine what would have to be true for it to be false, and whether
+    anything currently tests that.
+  - 'Record each as: claim, source file and line, how to falsify it, and whether it
+    is currently checked.'
   steps:
-  - 'Grep for refusal text: ''requires an OMP session'', ''needs Docker'', ''is not one
-    a session can spawn'', ''names no output'', ''dependency_unmet''.'
+  - 'Grep for refusal text: ''requires an OMP session'', ''needs Docker'', ''is not
+    one a session can spawn'', ''names no output'', ''dependency_unmet''.'
   - For each, write the falsification test before deciding whether to fix it.
-  - Report the inventory as HTML through the publish phase, if one is added; otherwise as
-    the JSON handoff.
-  done_when: A written inventory of capability claims, each with a falsification test that
-    has been RUN and its result recorded. An empty inventory is a valid and informative
+  - Report the inventory as HTML through the publish phase, if one is added; otherwise
+    as the JSON handoff.
+  done_when: A written inventory of capability claims, each with a falsification test
+    that has been RUN and its result recorded. An empty inventory is a valid and informative
     outcome, and would mean this plan is unnecessary.
   rollback: Read-only; nothing changed.
+  status: done
 - id: p1-build-the-capability-surface
   name: Compute the capability surface as JSON
   depends_on: p0-audit-capability-claims
   estimated_effort: 1 hour
-  rationale: One function, called where the refusals are produced, so the refusal and the
-    capability report cannot disagree.
+  rationale: One function, called where the refusals are produced, so the refusal
+    and the capability report cannot disagree.
   contract:
-  - 'Keys, each computed at call time and never cached across runs: provider_bound (bool),
-    docker_available (bool), spawnable_agents (list), python_version (str), writable_project
-    (bool), disk_free_mb (int).'
+  - 'Keys, each computed at call time and never cached across runs: provider_bound
+    (bool), docker_available (bool), spawnable_agents (list), python_version (str),
+    writable_project (bool), disk_free_mb (int).'
   - Values are measured, not declared. provider_bound is hasattr(theteam, 'default_api');
-    docker_available is AgentIsolation.available(). No config file is consulted and none
-    may be added.
+    docker_available is AgentIsolation.available(). No config file is consulted and
+    none may be added.
   - Exits 0 always. This reports the world; it does not judge it.
   steps:
   - Implement the probe in theteam, near the code that raises refusals.
-  - Emit it as a JSON handoff under .omp/theteam/reports/ -- machine consumer, so it does
-    not belong in reports/.
-  - 'Rewrite each refusal from p0 to name the missing capability and the value found, instead
-    of only denying. The refusal itself does not change: discuss still cannot run.'
-  done_when: Every refusal identified in p0 now names what it measured and what it found,
-    and each is proven by a test that asserts the message, not by reading the source.
-  rollback: Revert the probe and the message changes together. They are one change and splitting
-    them would leave the messages lying again.
+  - Emit it as a JSON handoff under .omp/theteam/reports/ -- machine consumer, so
+    it does not belong in reports/.
+  - 'Rewrite each refusal from p0 to name the missing capability and the value found,
+    instead of only denying. The refusal itself does not change: discuss still cannot
+    run.'
+  done_when: Every refusal identified in p0 now names what it measured and what it
+    found, and each is proven by a test that asserts the message, not by reading the
+    source.
+  rollback: Revert the probe and the message changes together. They are one change
+    and splitting them would leave the messages lying again.
+  status: done
 - id: p2-inject-into-member-prompts
   name: Give members the surface so prompts fail closed
   depends_on: p1-build-the-capability-surface
@@ -167,108 +156,115 @@ phases:
   rationale: 'The last mile, and the one that prevents a whole class of silent failure:
     a prompt instructing a member to use a tool that is not available.'
   contract:
-  - Every member prompt carries the capability surface under a '## Runtime Capability' heading,
-    alongside the existing '## Tool Inventory' section that lists permitted_skills.
-  - A prompt naming a capability absent from the surface must be refused at load time, the
-    same way the runner already refuses a missing prompt_file. Fail closed, loudly, naming
-    the capability.
-  - The surface is per-run and never committed, so no prompt may quote a specific value.
+  - Every member prompt carries the capability surface under a '## Runtime Capability'
+    heading, alongside the existing '## Tool Inventory' section that lists permitted_skills.
+  - A prompt naming a capability absent from the surface must be refused at load time,
+    the same way the runner already refuses a missing prompt_file. Fail closed, loudly,
+    naming the capability.
+  - The surface is per-run and never committed, so no prompt may quote a specific
+    value.
   steps:
-  - Add the heading to the prompt assembly path, not to each prompt file by hand; hand-editing
-    prompts is how prompt-truth findings get created.
+  - Add the heading to the prompt assembly path, not to each prompt file by hand;
+    hand-editing prompts is how prompt-truth findings get created.
   - Add the refusal for a prompt requiring an unavailable capability.
-  - 'Add tests: a prompt requiring docker_available when docker is absent is refused; the
-    same prompt passes when the surface reports it present.'
-  done_when: A prompt requiring an absent capability is refused with the capability named,
-    proven by a test that runs both the present and absent cases.
-  rollback: Remove the heading injection and the refusal together; a prompt that still hardcodes
-    a capability value is worse than one that never had it.
+  - 'Add tests: a prompt requiring docker_available when docker is absent is refused;
+    the same prompt passes when the surface reports it present.'
+  done_when: A prompt requiring an absent capability is refused with the capability
+    named, proven by a test that runs both the present and absent cases.
+  rollback: Remove the heading injection and the refusal together; a prompt that still
+    hardcodes a capability value is worse than one that never had it.
+  status: done
 - id: p4-shape-the-static-awareness-file
   name: Build the rule-shape spec and its self-evaluating seed state
   depends_on:
   - q0-close-the-derivation
   estimated_effort: a day
-  rationale: The deliverable is not a list of rules. It is a SHAPE for rules -- a form any
-    agent-facing rule must take to survive being checked -- plus a seed data file in that
-    shape, carrying the tools an agent needs to evaluate and extend it without a human in
-    the loop. The shape was derived from real projects that disagreed with each other, which
-    is what makes it a shape and not a description of one repo. The plan ships neither the
-    projects nor their rules, and names neither.
+  rationale: The deliverable is not a list of rules. It is a SHAPE for rules -- a
+    form any agent-facing rule must take to survive being checked -- plus a seed data
+    file in that shape, carrying the tools an agent needs to evaluate and extend it
+    without a human in the loop. The shape was derived from real projects that disagreed
+    with each other, which is what makes it a shape and not a description of one repo.
+    The plan ships neither the projects nor their rules, and names neither.
   contract:
-  - 'THE SHAPE, layer 1 only. Every agent-facing rule is recorded on TWO INDEPENDENT axes,
-    because conflating them is what makes a rule set non-agentic: (a) rule_correct -- kept
-    / scoped / removed: is the rule right? (b) evidence -- verified / cited-but-stale /
-    asserted-only: can a checker decide it? The audit found ZERO wrong rules across every
-    real project it examined; what it found is right rules with no mechanical backing. A
-    single disposition column would have forced that finding to be recorded as a removal,
-    which would be false. asserted-only is the finding worth encoding: it is what silently
-    misleads an agent.'
-  - 'AGENTIC BY CONSTRUCTION. A rule that cannot be decided by a checker is prose, and prose
-    rules are how agents go wrong silently. The shape therefore requires every rule to carry
-    its own falsification test: the exact check that would prove it false. A rule whose
-    falsification test cannot be written is recorded as asserted-only and inherits the floor
-    below. Enforceability is not an optional annotation; it is the form.'
-  - 'SEED STATE that lets an agent self-evaluate without a human. The seed ships with the
-    tools, not just the data: every rule carries its falsification test, an enforcement
-    ladder, and a path-resolution rule, so an agent meeting a new project can decide each
-    candidate rule itself rather than asking what to do. Self-evaluation is the default
-    path; asking is the exception.'
-  - EVOLUTION FLOOR, and this is the part that keeps the shape from eating itself. An agent
-    may add evidence, add rules, and propose changes. An agent may NOT weaken or delete
-    a rule, or move one off asserted-only, without a human. Without that floor an agent
-    silently widens a narrow rule into a broad one and calls it self-improvement, which
-    is how a checker becomes self-cancelling. The seed is a data file, so evolution is a
-    reviewable diff and revertible -- but the floor is what makes it safe to allow at all.
+  - 'THE SHAPE, layer 1 only. Every agent-facing rule is recorded on TWO INDEPENDENT
+    axes, because conflating them is what makes a rule set non-agentic: (a) rule_correct
+    -- kept / scoped / removed: is the rule right? (b) evidence -- verified / cited-but-stale
+    / asserted-only: can a checker decide it? The audit found ZERO wrong rules across
+    every real project it examined; what it found is right rules with no mechanical
+    backing. A single disposition column would have forced that finding to be recorded
+    as a removal, which would be false. asserted-only is the finding worth encoding:
+    it is what silently misleads an agent.'
+  - 'AGENTIC BY CONSTRUCTION. A rule that cannot be decided by a checker is prose,
+    and prose rules are how agents go wrong silently. The shape therefore requires
+    every rule to carry its own falsification test: the exact check that would prove
+    it false. A rule whose falsification test cannot be written is recorded as asserted-only
+    and inherits the floor below. Enforceability is not an optional annotation; it
+    is the form.'
+  - 'SEED STATE that lets an agent self-evaluate without a human. The seed ships with
+    the tools, not just the data: every rule carries its falsification test, an enforcement
+    ladder, and a path-resolution rule, so an agent meeting a new project can decide
+    each candidate rule itself rather than asking what to do. Self-evaluation is the
+    default path; asking is the exception.'
+  - EVOLUTION FLOOR, and this is the part that keeps the shape from eating itself.
+    An agent may add evidence, add rules, and propose changes. An agent may NOT weaken
+    or delete a rule, or move one off asserted-only, without a human. Without that
+    floor an agent silently widens a narrow rule into a broad one and calls it self-improvement,
+    which is how a checker becomes self-cancelling. The seed is a data file, so evolution
+    is a reviewable diff and revertible -- but the floor is what makes it safe to
+    allow at all.
   - 'ASKING is bounded and specified, not vibes. Ask only at a genuine fork with material
     tradeoffs the agent cannot resolve from evidence -- never for ordinary uncertainty,
-    which is the agent work. Before asking, the agent consolidates internally: theteam consolidation
-    over its own notes (__init__.py:143 consolidate_notes) is the one external rung that
-    is mechanically real today. Responsibility for the answer stays with the agent; asking
-    transfers the decision, not the duty.'
-  - 'SELF-APPLICATION, and this clause is the plan holding itself to its own schema. A web
-    search rung was drafted here and REMOVED as asserted-only: theteam/SKILL.md:5 declares
-    tools bash, read, write, edit, glob, grep, hub, task, todo, ask -- no search tool --
-    and a repo-wide ^tools: grep finds none. Writing it as a capability would have been
-    the exact defect this plan exists to encode, in the plan encoding it. The rung is recorded
-    here as evidence=asserted-only, not silently dropped: if a search tool is ever declared,
-    this becomes verified and the ladder gains a rung. Until then the ladder is consolidate,
-    then ask. bash can issue a fetch, but a fetch with no declared tool behind it has no
-    defined success and does not meet the falsifiability bar this shape sets.'
-  - 'LIFECYCLE, decided before any file is derived. analyze_system_awareness.py:46-47 puts
-    system-awareness-ledger.json and <root>/theteam/reports/ inside the scanned root, so
-    running it mutates the project. The seed is GENERATED per project, never hand-edited,
-    never committed: regenerated, gitignored or written outside the repo. A committed seed
-    is scripts/system-awareness-config.json again -- stale the moment the project moves,
-    read by nobody. Note the shape of that failure: enabled/priority/timeout/health_threshold
-    are all plausible, none is read, and loop_health_check.py:25-33 is the only thing that
-    notices. It is the exact outcome this phase must not produce.'
-  - 'PORTABILITY is proven, not asserted: the shape yields a valid seed for a project sharing
-    no filenames with anything the shape was derived from. If it only fits the projects
-    it came from, it is a description, not a shape. If no single shape fits every project
-    kind it was derived from, the honest outcome is project-KIND-specific shapes recorded
-    as such -- the same category as an empty result being valid.'
+    which is the agent work. Before asking, the agent consolidates internally: theteam
+    consolidation over its own notes (__init__.py:143 consolidate_notes) is the one
+    external rung that is mechanically real today. Responsibility for the answer stays
+    with the agent; asking transfers the decision, not the duty.'
+  - 'SELF-APPLICATION, and this clause is the plan holding itself to its own schema.
+    A web search rung was drafted here and REMOVED as asserted-only: theteam/SKILL.md:5
+    declares tools bash, read, write, edit, glob, grep, hub, task, todo, ask -- no
+    search tool -- and a repo-wide ^tools: grep finds none. Writing it as a capability
+    would have been the exact defect this plan exists to encode, in the plan encoding
+    it. The rung is recorded here as evidence=asserted-only, not silently dropped:
+    if a search tool is ever declared, this becomes verified and the ladder gains
+    a rung. Until then the ladder is consolidate, then ask. bash can issue a fetch,
+    but a fetch with no declared tool behind it has no defined success and does not
+    meet the falsifiability bar this shape sets.'
+  - 'LIFECYCLE, decided before any file is derived. analyze_system_awareness.py:46-47
+    puts system-awareness-ledger.json and <root>/theteam/reports/ inside the scanned
+    root, so running it mutates the project. The seed is GENERATED per project, never
+    hand-edited, never committed: regenerated, gitignored or written outside the repo.
+    A committed seed is scripts/system-awareness-config.json again -- stale the moment
+    the project moves, read by nobody. Note the shape of that failure: enabled/priority/timeout/health_threshold
+    are all plausible, none is read, and loop_health_check.py:25-33 is the only thing
+    that notices. It is the exact outcome this phase must not produce.'
+  - 'PORTABILITY is proven, not asserted: the shape yields a valid seed for a project
+    sharing no filenames with anything the shape was derived from. If it only fits
+    the projects it came from, it is a description, not a shape. If no single shape
+    fits every project kind it was derived from, the honest outcome is project-KIND-specific
+    shapes recorded as such -- the same category as an empty result being valid.'
   steps:
-  - 'Write the shape: the two axes, the enforcement ladder, the falsification-test requirement,
-    and the evolution floor. This is the deliverable; the seed is an instance of it.'
+  - 'Write the shape: the two axes, the enforcement ladder, the falsification-test
+    requirement, and the evolution floor. This is the deliverable; the seed is an
+    instance of it.'
   - 'Decide and write down the lifecycle BEFORE deriving any file: generated per project,
     written where it is gitignored or outside the repo, regenerated rather than edited.
     It determines every path in the later steps.'
-  - 'Write the seed: rules in the shape, each with its falsification test and evidence axis
-    set. Seed minimal and general -- it is the starting state, not the answer key.'
-  - 'Prove self-evaluation: take a project NOT in what the shape was derived from and confirm
-    an agent following only the seed can classify its candidate rules, mark the evidence
-    axis, and tell kept from scoped without asking a human anything.'
+  - 'Write the seed: rules in the shape, each with its falsification test and evidence
+    axis set. Seed minimal and general -- it is the starting state, not the answer
+    key.'
+  - 'Prove self-evaluation: take a project NOT in what the shape was derived from
+    and confirm an agent following only the seed can classify its candidate rules,
+    mark the evidence axis, and tell kept from scoped without asking a human anything.'
   - 'Prove the floor: confirm an agent attempting to weaken or delete a rule is stopped,
     and that the attempt is recorded rather than silently applied.'
-  done_when: 'The shape is written and the seed is in it. Portability: a valid seed for
-    a project sharing no filename, tooling or structure with anything the shape was derived
-    from. Self-evaluation: an agent works an unfamiliar project end to end without asking.
-    Floor-of-the-floor: a weakening attempt is refused and recorded. If the shape cannot
-    clear every project kind it was derived from, that is recorded as project-KIND-specific
-    shapes, not smoothed over.'
-  rollback: 'Revert the shape and the seed together. They are one artifact: a seed without
-    its shape is a list of rules, which is the thing this phase exists to replace. p0-p2
-    do not depend on this phase.'
+  done_when: 'The shape is written and the seed is in it. Portability: a valid seed
+    for a project sharing no filename, tooling or structure with anything the shape
+    was derived from. Self-evaluation: an agent works an unfamiliar project end to
+    end without asking. Floor-of-the-floor: a weakening attempt is refused and recorded.
+    If the shape cannot clear every project kind it was derived from, that is recorded
+    as project-KIND-specific shapes, not smoothed over.'
+  rollback: 'Revert the shape and the seed together. They are one artifact: a seed
+    without its shape is a list of rules, which is the thing this phase exists to
+    replace. p0-p2 do not depend on this phase.'
 verification:
 - command: python -m pytest -q
   expect: at least 810 passed, zero failures
@@ -278,52 +274,53 @@ verification:
   expect: zero findings -- new work must not break the existing checkers
 - command: python3 scripts/check_prompt_truth.py .
   expect: zero findings -- no prompt may gain a hardcoded capability value
-- command: (d=$(mktemp -d); mkdir -p "$d/probe"; cd "$d/probe"; git init -q .; printf "#
-    Probe\n" > AGENTS.md; <seed-materialiser> --project-root "$d/probe"; test -f awareness-seed.json
-    && echo SEED_OK; cd /; rm -rf "$d")
-  expect: a valid seed for a project sharing no filename, no tooling and no AGENTS.md structure
-    with anything the shape was derived from, from a single empty git repo. This proves
-    the shape generalises rather than describing its own sources. Proving it against a near-copy
-    of a construction project would prove nothing.
+- command: (d=$(mktemp -d); mkdir -p "$d/probe"; cd "$d/probe"; git init -q .; printf
+    "# Probe\n" > AGENTS.md; <seed-materialiser> --project-root "$d/probe"; test -f
+    awareness-seed.json && echo SEED_OK; cd /; rm -rf "$d")
+  expect: a valid seed for a project sharing no filename, no tooling and no AGENTS.md
+    structure with anything the shape was derived from, from a single empty git repo.
+    This proves the shape generalises rather than describing its own sources. Proving
+    it against a near-copy of a construction project would prove nothing.
 open_questions_for_user:
-- 'Should scripts/system-awareness-config.json be deleted once p0 confirms nothing reads
-  it, or kept with a comment marking it inert? Deletion is cleaner; the repo has an archive/
-  convention for exactly this. This is the one genuine fork left in the plan: both options
-  are defensible and they leave the repo in materially different states.'
-- 'Where does the generated seed live by default -- gitignored in-project, or outside the
-  repo entirely? p4 must decide before deriving any file, and the two options have different
-  failure modes: in-project risks being committed and going inert, outside costs a path
-  to pass around. The lifecycle rule is not affected either way.'
+- 'Should scripts/system-awareness-config.json be deleted once p0 confirms nothing
+  reads it, or kept with a comment marking it inert? Deletion is cleaner; the repo
+  has an archive/ convention for exactly this. This is the one genuine fork left in
+  the plan: both options are defensible and they leave the repo in materially different
+  states.'
+- 'Where does the generated seed live by default -- gitignored in-project, or outside
+  the repo entirely? p4 must decide before deriving any file, and the two options
+  have different failure modes: in-project risks being committed and going inert,
+  outside costs a path to pass around. The lifecycle rule is not affected either way.'
 notes_for_implementer:
-- ZERO WRONG RULES were found when the shape was derived from real projects. What the audit
-  found is right rules with no mechanical backing, plus citations that name a real file
-  at a path it does not live at. Do not manufacture removals to satisfy a phrase -- the
-  two axes exist precisely so that asserted-only is recorded as evidence, not as a defect
-  in the rule.
-- The derivation inputs are gone by design. The shape ships; the evidence it came from was
-  consumed and discarded, and no project path, name or count appears anywhere. If you need
-  to re-derive, the shape itself is the specification.
-- TWO AXES, INDEPENDENT. rule_correct asks whether the rule is right; evidence asks whether
-  a checker can decide it. A rule can be correct and asserted-only, which is the common
-  case and the one that misleads agents. Collapsing them into one disposition column is
-  what would make the shape non-agentic.
+- ZERO WRONG RULES were found when the shape was derived from real projects. What
+  the audit found is right rules with no mechanical backing, plus citations that name
+  a real file at a path it does not live at. Do not manufacture removals to satisfy
+  a phrase -- the two axes exist precisely so that asserted-only is recorded as evidence,
+  not as a defect in the rule.
+- The derivation inputs are gone by design. The shape ships; the evidence it came
+  from was consumed and discarded, and no project path, name or count appears anywhere.
+  If you need to re-derive, the shape itself is the specification.
+- TWO AXES, INDEPENDENT. rule_correct asks whether the rule is right; evidence asks
+  whether a checker can decide it. A rule can be correct and asserted-only, which
+  is the common case and the one that misleads agents. Collapsing them into one disposition
+  column is what would make the shape non-agentic.
 - The evolution floor is load-bearing. An agent that may weaken or delete rules without
-  a human will eventually do it, and it will call it self-improvement. An agent that may
-  only ADD, and must record what it wants removed, cannot silently become self-cancelling.
-- 'Ask only at a genuine fork with material tradeoffs. Consolidate first -- theteam consolidation
-  over the agent''s own notes, __init__.py:143 consolidate_notes -- then ask. There is no
-  search rung: theteam/SKILL.md:5 declares bash, read, write, edit, glob, grep, hub, task,
-  todo, ask and no search tool, so the ladder is two rungs, not three. If you find yourself
-  wanting to search, that is the fork to bring to the user, not a step to perform. Asking
-  transfers the DECISION, never the duty: the answer still lands in the seed and the agent
-  still owns the consequence.'
+  a human will eventually do it, and it will call it self-improvement. An agent that
+  may only ADD, and must record what it wants removed, cannot silently become self-cancelling.
+- 'Ask only at a genuine fork with material tradeoffs. Consolidate first -- theteam
+  consolidation over the agent''s own notes, __init__.py:143 consolidate_notes --
+  then ask. There is no search rung: theteam/SKILL.md:5 declares bash, read, write,
+  edit, glob, grep, hub, task, todo, ask and no search tool, so the ladder is two
+  rungs, not three. If you find yourself wanting to search, that is the fork to bring
+  to the user, not a step to perform. Asking transfers the DECISION, never the duty:
+  the answer still lands in the seed and the agent still owns the consequence.'
 - 'analyze_system_awareness.py:46-47 writes system-awareness-ledger.json and <root>/theteam/reports/
-  INSIDE the project it analyses, so running it mutates that project. There is no path bug
-  -- the path derives correctly from the root. The consequence is the lifecycle: generated
-  per project, gitignored or outside the repo, never hand-edited.'
+  INSIDE the project it analyses, so running it mutates that project. There is no
+  path bug -- the path derives correctly from the root. The consequence is the lifecycle:
+  generated per project, gitignored or outside the repo, never hand-edited.'
 - If p0 finds no false capability claims, stop and say so. This plan premise is unverified;
-  p0 is the phase that verifies it, and a void plan found in an hour is cheaper than a wrong
-  one built in a day.
+  p0 is the phase that verifies it, and a void plan found in an hour is cheaper than
+  a wrong one built in a day.
 - Do not make theteam discuss work. The gate cannot pass anywhere -- theteam.default_api
-  is only assigned by a test monkeypatch. Changing what the refusal says is in scope; making
-  it pass is not.
+  is only assigned by a test monkeypatch. Changing what the refusal says is in scope;
+  making it pass is not.

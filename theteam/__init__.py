@@ -74,12 +74,17 @@ def _require_provider():
         # always a fresh subprocess. Measured in an OMP eval kernel — the one
         # place a live session's Python runs — `default_api` was absent there
         # too, so being "inside OMP" was never the variable. See SKILL.md.
+        from theteam.core.capability import capability_surface
+        surface = capability_surface()
         raise ProviderUnavailable(
-            "theteam requires an OMP session. A shell is a fresh subprocess "
-            "and can never bind a provider; an in-process host must bind one "
-            "that answers the contract run_discussion reads. For tasks, run "
-            "`theteam run --only <id>` instead — it names the next phase, and "
-            "the session spawns the member. No run id, no provider."
+            "theteam requires an OMP session. Measured: provider_bound="
+            f"{surface['provider_bound']}, docker_available="
+            f"{surface['docker_available']}, spawnable_agents="
+            f"{len(surface['spawnable_agents'])}. A shell is a fresh "
+            "subprocess and can never bind a provider; an in-process host "
+            "must bind one that answers the contract run_discussion reads. "
+            "For tasks, run `theteam run --only <id>` instead — it names the "
+            "next phase, and the session spawns the member. No run id, no provider."
         )
 
 
@@ -107,6 +112,8 @@ def spawn_member_task(member, topic, project_context, permitted_skills):
         topic,
         "\n## Project Architecture Context",
         _member_context(project_context, member),
+        "\n## Runtime Capability",
+        _render_capability_surface(),
         "\n## Tool Inventory",
         _render_skills(permitted_skills),
         "\n## Your Task",
@@ -647,8 +654,30 @@ def _render_skills(permitted_skills):
         # §3.3: a blank section is a boundary nobody can see. Name the
         # absence instead of rendering nothing under the heading.
         return "none declared by this project's theteam.config"
-    return "\n".join(f"- {skill}" for skill in permitted_skills)
+    return "\n".join(f'- {skill}' for skill in permitted_skills)
 
+
+def _render_capability_surface():
+    """The dynamic capability surface as a prompt reads it, under `## Runtime Capability`."""
+    from theteam.core.capability import capability_surface
+    from theteam.bin.theteam_config import _load_yaml
+    import os
+    project_root = os.environ.get("THETEAM_PROJECT_ROOT", os.getcwd())
+    try:
+        config = _load_yaml(os.path.join(project_root, "theteam.config"))
+        project_root = config.get("project", {}).get("root", project_root)
+    except Exception:
+        pass
+    surface = capability_surface(project_root)
+    lines = [
+        f"provider_bound: {surface['provider_bound']}",
+        f"docker_available: {surface['docker_available']}",
+        f"spawnable_agents: {', '.join(surface['spawnable_agents']) or 'none'}",
+        f"python_version: {surface['python_version']}",
+        f"writable_project: {surface['writable_project']}",
+        f"disk_free_mb: {surface['disk_free_mb']}",
+    ]
+    return "\n".join(lines)
 
 def _topic_slice(topic):
     """A minimal `SessionSlice` built from a discussion topic.
@@ -751,6 +780,11 @@ def run_discussion(project_root, topic):
 
     project_context = aggregate_project_context(project_root)
     permitted_skills = _permitted_skills(config)
+
+    # Emit the dynamic capability surface as a JSON handoff for
+    # machine consumers under .omp/ -- the agent-facing root.
+    from theteam.core.capability import write_handoff
+    write_handoff(project_root, out_dir=os.path.join(project_root, '.omp', 'theteam', 'reports'))
 
     # Imported here, not at module scope: a module-scope import of the
     # advisory selector pushes `import theteam` to 91 modules and check 7

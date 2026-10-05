@@ -102,9 +102,16 @@ phases:
     They are the EVIDENCE BASE that justifies the shape -- not inputs the plan ships. The
     final plan contains no example: it carries one shape, with the projects behind it.'
   contract:
-  - Recorded as construction paths only. No file from any of the three is quoted in the
-    plan, no rule from them is copied, and none appears in the deliverable. The plan stands
-    alone if all three directories are deleted.
+  - Recorded as construction paths, and they are the FLOOR the shape must clear, not decoration.
+    At build time p4 derives the shape and must demonstrate it against all three; a shape
+    that fits only some of them is not general, however tidy it looks. That is the whole
+    reason three were supplied rather than one.
+  - SHIPS NO EXAMPLE CONTENT. No file from any of the three is quoted in the plan, no rule
+    from them is copied, and none appears in the deliverable. The shape is the artifact;
+    the projects are the bar it was measured against.
+  - The dependency is build-time only. p4 reads all three to verify the shape clears them.
+    Nothing reads them at run time -- the generated seed is self-contained, which is what
+    makes it usable in a project that is none of the three.
   status: done
 - id: p0-audit-capability-claims
   name: Audit every claim theteam makes about what it can do
@@ -218,12 +225,21 @@ phases:
     silently widens a narrow rule into a broad one and calls it self-improvement, which
     is how a checker becomes self-cancelling. The seed is a data file, so evolution is a
     reviewable diff and revertible -- but the floor is what makes it safe to allow at all.
-  - ASKING is bounded and specified, not vibes. Ask only at a genuine fork with material
+  - 'ASKING is bounded and specified, not vibes. Ask only at a genuine fork with material
     tradeoffs the agent cannot resolve from evidence -- never for ordinary uncertainty,
-    which is the agent work. Before asking, the agent consolidates internally (theteam consensus
-    over its own notes) and searches for prior art, so the question it asks is a decision,
-    not a lookup. Responsibility for the answer stays with the agent; asking transfers the
-    decision, not the duty.
+    which is the agent work. Before asking, the agent consolidates internally: theteam consolidation
+    over its own notes (__init__.py:143 consolidate_notes) is the one external rung that
+    is mechanically real today. Responsibility for the answer stays with the agent; asking
+    transfers the decision, not the duty.'
+  - 'SELF-APPLICATION, and this clause is the plan holding itself to its own schema. A web
+    search rung was drafted here and REMOVED as asserted-only: theteam/SKILL.md:5 declares
+    tools bash, read, write, edit, glob, grep, hub, task, todo, ask -- no search tool --
+    and a repo-wide ^tools: grep finds none. Writing it as a capability would have been
+    the exact defect this plan exists to encode, in the plan encoding it. The rung is recorded
+    here as evidence=asserted-only, not silently dropped: if a search tool is ever declared,
+    this becomes verified and the ladder gains a rung. Until then the ladder is consolidate,
+    then ask. bash can issue a fetch, but a fetch with no declared tool behind it has no
+    defined success and does not meet the falsifiability bar this shape sets.'
   - 'LIFECYCLE, decided before any file is derived. analyze_system_awareness.py:46-47 puts
     system-awareness-ledger.json and <root>/theteam/reports/ inside the scanned root, so
     running it mutates the project. The seed is GENERATED per project, never hand-edited,
@@ -250,11 +266,12 @@ phases:
     tell kept from scoped without asking a human anything.'
   - 'Prove the floor: confirm an agent attempting to weaken or delete a rule is stopped,
     and that the attempt is recorded rather than silently applied.'
-  done_when: 'The shape is written; the seed is in it; both halves are proven. Self-evaluation:
-    an agent works a project outside the evidence base end to end without asking. Floor:
-    a weakening attempt is refused and recorded. Portability: a valid seed for a project
-    sharing no filenames with the evidence base. If the shape cannot fit every construction
-    project, that is recorded as project-kind-specific shapes, not smoothed over.'
+  done_when: 'The shape is written and the seed is in it. FLOOR: a valid seed for all three
+    construction projects, none of them shipped. Self-evaluation: an agent works a project
+    outside the evidence base end to end without asking. Floor-of-the-floor: a weakening
+    attempt is refused and recorded. Portability: a valid seed for a project sharing no
+    filename, tooling or structure with anything in the evidence base. If the shape cannot
+    clear all three, that is recorded as project-KIND-specific shapes, not smoothed over.'
   rollback: 'Revert the shape and the seed together. They are one artifact: a seed without
     its shape is a list of rules, which is the thing this phase exists to replace. p0-p2
     do not depend on this phase.'
@@ -267,6 +284,12 @@ verification:
   expect: zero findings -- new work must not break the existing checkers
 - command: python3 scripts/check_prompt_truth.py .
   expect: zero findings -- no prompt may gain a hardcoded capability value
+- command: 'for p in $(the three construction_projects paths recorded above); do <seed-materialiser>
+    --project-root "$p" --verify-floor || echo "FLOOR FAIL: $p"; done'
+  expect: 'a valid seed for ALL THREE, and a non-zero or explicit FAIL line for any that
+    does not clear. This is the floor: the shape is measured against the projects it was
+    built from before it is ever measured against a stranger. A shape that clears only the
+    documentation-shaped pair has assumed the common case and is not general.'
 - command: (d=$(mktemp -d); mkdir -p "$d/probe"; cd "$d/probe"; git init -q .; printf "#
     Probe\n" > AGENTS.md; <seed-materialiser> --project-root "$d/probe"; test -f awareness-seed.json
     && echo SEED_OK; cd /; rm -rf "$d")
@@ -292,14 +315,21 @@ notes_for_implementer:
   a checker can decide it. A rule can be correct and asserted-only, which is the common
   case and the one that misleads agents. Collapsing them into one disposition column is
   what would make the shape non-agentic.
-- The construction projects are the evidence base and nothing more. They are recorded in
-  this file and never read again. The deliverable stands alone if all three are deleted.
+- 'The construction projects are the floor: p4 reads all three at BUILD time to derive and
+  check the shape, and the shape must clear every one of them. They are also read never
+  again at RUN time -- the generated seed is self-contained. Two separate axes; do not collapse
+  one into the other. What ships is the shape only: no file from any of the three is quoted
+  and no rule from them is copied.'
 - The evolution floor is load-bearing. An agent that may weaken or delete rules without
   a human will eventually do it, and it will call it self-improvement. An agent that may
   only ADD, and must record what it wants removed, cannot silently become self-cancelling.
-- 'Ask only at a genuine fork with material tradeoffs. Consolidate first (theteam consensus
-  over the agent own notes), search second, then ask. Asking transfers the DECISION, never
-  the duty: the answer still lands in the seed and the agent still owns the consequence.'
+- 'Ask only at a genuine fork with material tradeoffs. Consolidate first -- theteam consolidation
+  over the agent''s own notes, __init__.py:143 consolidate_notes -- then ask. There is no
+  search rung: theteam/SKILL.md:5 declares bash, read, write, edit, glob, grep, hub, task,
+  todo, ask and no search tool, so the ladder is two rungs, not three. If you find yourself
+  wanting to search, that is the fork to bring to the user, not a step to perform. Asking
+  transfers the DECISION, never the duty: the answer still lands in the seed and the agent
+  still owns the consequence.'
 - 'analyze_system_awareness.py:46-47 writes system-awareness-ledger.json and <root>/theteam/reports/
   INSIDE the project it analyses, so running it mutates that project. There is no path bug
   -- the path derives correctly from the root. The consequence is the lifecycle: generated
@@ -315,7 +345,12 @@ construction_projects:
   documentation_structure:
   - /Users/bparlan/devcode/autonomedia-snapshot
   - /Users/bparlan/devcode/BariaDAO
-  role: Evidence base for the shape only. Not shipped, not quoted, not required at run time.
-    Delete all three and the plan is unaffected.
-  not_a_run_time_dependency: No phase reads these paths. They informed the shape at authoring
-    time; nothing downstream consumes them.
+  role: Evidence base and verification floor. Read at BUILD time by p4 to derive and check
+    the shape; never read at run time. No content is shipped.
+  not_a_run_time_dependency: 'p4 reads all three at build time -- that is the floor check,
+    and it is mandatory. After the seed is generated, nothing reads these paths: the seed
+    is self-contained and works in a project that is none of the three.'
+  floor_requirement: The shape must yield a valid seed for ALL THREE. They were chosen to
+    disagree -- two share a documentation structure and one does not -- so a shape that
+    quietly assumes the common case fails on ledraslament, which is the finding doing its
+    job.

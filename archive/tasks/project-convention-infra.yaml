@@ -69,14 +69,6 @@ decisions:
     one project holds would fire false findings everywhere else, so the script would stop
     being project-agnostic and p2's contract would be unachievable as written.
   decided_by: user
-- id: rules-in-a-data-file
-  question: Do the checked conventions live in the script, or in a per-project file?
-  answer: In a per-project data file the script reads. B1. The script carries the mechanism
-    and the project supplies its rules, which is what makes "one script, not one per project"
-    achievable. Baking the rules in (B2) would be a smaller plan, but a convention only one
-    project holds would fire false findings everywhere else, so the script would stop being
-    project-agnostic and p2's contract would be unachievable as written.
-  decided_by: user
 phases:
 - id: q0-name-the-example
   name: User names one example project

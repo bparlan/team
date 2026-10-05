@@ -265,6 +265,7 @@ phases:
   rollback: 'Revert the shape and the seed together. They are one artifact: a seed
     without its shape is a list of rules, which is the thing this phase exists to
     replace. p0-p2 do not depend on this phase.'
+  status: done
 verification:
 - command: python -m pytest -q
   expect: at least 810 passed, zero failures

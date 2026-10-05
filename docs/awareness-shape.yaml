@@ -1,0 +1,224 @@
+# System Awareness Shape Specification
+#
+# This is the SHAPE for agent-facing rules. It is not a list of rules.
+# It is the form any rule must take to survive being checked.
+#
+# The shape was derived from real projects that disagreed with each other.
+# The plan ships neither the projects nor their rules, and names neither.
+#
+# Authored: 2026-10-06
+# Plan: system-awareness-injection / p4-shape-the-static-awareness-file
+# Status: in-progress
+
+version: "1.0"
+kind: "shape"
+
+# -----------------------------------------------------------------------------
+# THE SHAPE — Layer 1
+# -----------------------------------------------------------------------------
+# Every agent-facing rule is recorded on TWO INDEPENDENT axes.
+# Conflating them is what makes a rule set non-agentic.
+#
+# Axis A: rule_correct — is the rule right?
+#   kept   — the rule is correct and applies
+#   scoped — the rule is correct but only in a specific context
+#   removed — the rule was wrong
+#
+# Axis B: evidence — can a checker decide it?
+#   verified        — a mechanical check exists and passes
+#   cited-but-stale — a citation exists but the cited file no longer says it
+#   asserted-only   — no mechanical check exists; the rule is prose
+#
+# The audit found ZERO wrong rules. What it found is right rules with no
+# mechanical backing. A single disposition column would have forced
+# asserted-only to be recorded as removed, which would be false.
+# asserted-only is the finding worth encoding: it is what silently misleads.
+# -----------------------------------------------------------------------------
+
+axes:
+  rule_correct:
+    type: "enum"
+    values: ["kept", "scoped", "removed"]
+    description: "Is the rule correct?"
+
+  evidence:
+    type: "enum"
+    values: ["verified", "cited-but-stale", "asserted-only"]
+    description: "Can a checker mechanically decide this rule?"
+
+# -----------------------------------------------------------------------------
+# ENFORCEMENT LADDER
+# -----------------------------------------------------------------------------
+# Every rule MUST carry its own falsification test: the exact check that
+# would prove it false. A rule whose falsification test cannot be written
+# is recorded as evidence=asserted-only and inherits the floor below.
+# Enforceability is not an optional annotation; it is the form.
+# -----------------------------------------------------------------------------
+
+enforcement_ladder:
+  - level: 1
+    name: "verified"
+    requirement: "A mechanical checker exists and passes. The falsification test is the checker itself."
+    action: "Auto-enforced. Agent may add evidence, add rules, propose changes. May NOT weaken, delete, or move off asserted-only without a human."
+
+  - level: 2
+    name: "cited-but-stale"
+    requirement: "A citation exists but the cited file no longer says it. The falsification test is: the citation resolves and matches."
+    action: "Flagged. Agent must update citation or reclassify as asserted-only. May NOT move to verified without human."
+
+  - level: 3
+    name: "asserted-only"
+    requirement: "No mechanical check exists. The rule is prose. The falsification test CANNOT be written."
+    action: "Floor. Agent may NOT weaken, delete, or move off asserted-only without a human. This is the floor-of-the-floor."
+
+# -----------------------------------------------------------------------------
+# EVOLUTION FLOOR
+# -----------------------------------------------------------------------------
+# An agent may add evidence, add rules, and propose changes.
+# An agent may NOT weaken or delete a rule, or move one off asserted-only,
+# without a human. Without that floor an agent silently widens a narrow
+# rule into a broad one and calls it self-improvement, which is how a
+# checker becomes self-cancelling.
+# The seed is a data file, so evolution is a reviewable diff and revertible.
+# The floor is what makes it safe to allow at all.
+# -----------------------------------------------------------------------------
+
+evolution_floor:
+  agent_may:
+    - "add evidence to an existing rule (upgrade evidence axis)"
+    - "add a new rule with its falsification test"
+    - "propose a change to rule_correct with justification"
+  agent_may_not:
+    - "weaken a rule (e.g., change 'must' to 'should')"
+    - "delete a rule"
+    - "move a rule from asserted-only to cited-but-stale or verified"
+  human_required_for:
+    - "any change that weakens or removes a rule"
+    - "moving a rule off asserted-only"
+    - "deleting the shape or seed file"
+
+# -----------------------------------------------------------------------------
+# SEED STATE — Self-Evaluation Without a Human
+# -----------------------------------------------------------------------------
+# The seed ships with the tools, not just the data: every rule carries its
+# falsification test, an enforcement ladder, and a path-resolution rule,
+# so an agent meeting a new project can decide each candidate rule itself
+# rather than asking what to do. Self-evaluation is the default path;
+# asking is the exception.
+# -----------------------------------------------------------------------------
+
+seed_template:
+  description: |
+    The minimal seed for an agent to self-evaluate an unfamiliar project.
+    Each rule carries its falsification test, enforcement ladder reference,
+    and path-resolution rule.
+
+  rule_schema:
+    id: "string"                    # unique identifier
+    text: "string"                  # the rule as prose
+    rule_correct: "enum[kept,scoped,removed]"
+    evidence: "enum[verified,cited-but-stale,asserted-only]"
+    falsification_test: "string"    # the exact check that would prove it false
+    path_resolution: "string"       # how to find the cited file from project root
+    enforcement_level: "integer"    # 1=verified, 2=cited-but-stale, 3=asserted-only
+    created_by: "string"            # "seed" or "agent" or "human"
+    created_at: "ISO8601 timestamp"
+
+  path_resolution_rules:
+    - "Citations must be relative to project root"
+    - "Path must be resolvable without environment variables"
+    - "If a file does not exist at the resolved path, evidence becomes asserted-only"
+
+# -----------------------------------------------------------------------------
+# ASKING — Bounded and Specified
+# -----------------------------------------------------------------------------
+# Ask only at a genuine fork with material tradeoffs the agent cannot
+# resolve from evidence — never for ordinary uncertainty, which is the
+# agent work. Before asking, the agent consolidates internally:
+# theteam consolidation over its own notes (__init__.py:143
+# consolidate_notes) is the one external rung that is mechanically real
+# today. Responsibility for the answer stays with the agent; asking
+# transfers the decision, not the duty.
+# -----------------------------------------------------------------------------
+
+asking_protocol:
+  when_to_ask:
+    - "A genuine fork with material tradeoffs"
+    - "Evidence is exhausted and the agent cannot resolve it"
+  when_not_to_ask:
+    - "Ordinary uncertainty"
+    - "The agent just hasn't tried yet"
+  required_before_asking:
+    - "Internal consolidation over the agent's own notes (consolidate_notes)"
+  consequence: "The answer lands in the seed; the agent still owns the consequence"
+
+# -----------------------------------------------------------------------------
+# LIFECYCLE
+# -----------------------------------------------------------------------------
+# Decided before any file is derived. analyze_system_awareness.py:46-47
+# puts system-awareness-ledger.json and <root>/theteam/reports/ inside
+# the scanned root, so running it mutates the project.
+#
+# The seed is GENERATED per project, never hand-edited, never committed:
+# regenerated, gitignored, or written outside the repo.
+#
+# A committed seed is scripts/system-awareness-config.json again -- stale
+# the moment the project moves, read by nobody.
+# -----------------------------------------------------------------------------
+
+lifecycle:
+  generation: "per project, on demand"
+  location: "project root / .omp/theteam/awareness-seed.json (gitignored)"
+  editing: "never hand-edited; regenerate instead"
+  commitment: "never committed to git"
+  staleness: "regenerate when project structure changes"
+
+# -----------------------------------------------------------------------------
+# PORTABILITY
+# -----------------------------------------------------------------------------
+# The shape yields a valid seed for a project sharing no filenames with
+# anything the shape was derived from. If it only fits the projects it
+# came from, it is a description, not a shape.
+# -----------------------------------------------------------------------------
+
+portability_requirement:
+  test: "A single empty git repo with only AGENTS.md produces a valid seed"
+  expectation: "Shape generalizes rather than describing its own sources"
+
+# -----------------------------------------------------------------------------
+# SELF-APPLICATION
+# -----------------------------------------------------------------------------
+# This clause is the plan holding itself to its own schema.
+# A web search rung was drafted here and REMOVED as asserted-only:
+# theteam/SKILL.md:5 declares tools bash, read, write, edit, glob, grep,
+# hub, task, todo, ask -- no search tool -- and a repo-wide ^tools: grep
+# finds none. Writing it as a capability would have been the exact defect
+# this plan exists to encode, in the plan encoding it.
+# The rung is recorded here as evidence=asserted-only, not silently
+# dropped: if a search tool is ever declared, this becomes verified and
+# the ladder gains a rung. Until then the ladder is consolidate, then ask.
+# bash can issue a fetch, but a fetch with no declared tool behind it has
+# no defined success and does not meet the falsifiability bar this shape
+# sets.
+# -----------------------------------------------------------------------------
+
+self_application:
+  search_rung:
+    rule_correct: "removed"
+    evidence: "asserted-only"
+    falsification_test: "grep -r 'web_search' theteam/SKILL.md; test -n '$(grep ^tools: theteam/SKILL.md | grep search)'"
+    path_resolution: "theteam/SKILL.md"
+    enforcement_level: 3
+    note: "No search tool declared in SKILL.md; bash fetch has no defined success"
+  consolidation_rung:
+    rule_correct: "kept"
+    evidence: "verified"
+    falsification_test: "grep -n 'consolidate_notes' theteam/__init__.py"
+    path_resolution: "theteam/__init__.py"
+    enforcement_level: 1
+  ask_rung:
+    rule_correct: "kept"
+    evidence: "verified"
+    falsification_test: "test -x theteam/tools/ask.py"
+    path_resolution: "theteam/tools/ask.py"
+    enforcement_level: 1

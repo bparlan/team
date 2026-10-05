@@ -57,10 +57,33 @@ thing a new session is guaranteed to find.
 | Plan | Status | Waits on |
 |---|---|---|
 | `human-report-surface.yaml` | not-started | — |
-| `project-convention-infra.yaml` | awaiting-input | an example project |
-| `system-awareness-injection.yaml` | not-started | — (only p3 needs a project) |
+| `project-convention-infra.yaml` | not-started | — |
+| `system-awareness-injection.yaml` | not-started | — |
 | `diagram-citation-truth.yaml` | not-started | — |
 | `document-citation-truth.yaml` | not-started | — |
+
+`awaiting-input` is defined in the index: it cannot begin without a user
+decision. It is not a failure, and it is unrelated to the run statuses the
+executor uses.
+## Project convention infrastructure
+
+`scripts/seed_project.py` is the onboarding mechanism. Run it against any
+project root to scaffold the convention shape:
+
+```bash
+python3 scripts/seed_project.py --project-root /path/to/project
+```
+
+It writes `seed.yaml` (the directory shape, the rule template with its two
+independent axes, and the evolution floor), creates the required directories
+(`docs/`, `scripts/`, `src/`, `tests/`) and the optional `data/`, and
+scaffolds `AGENTS.md` and `README.md`. `--verify-only` checks compliance
+without writing.
+
+The shape is portable: no project paths are recorded, no project content is
+shipped, and the seed works on any project regardless of what it contains.
+`docs/skeletons/` is a capability of the `code-search` skill, not a directory
+the seed creates.
 
 `awaiting-input` is defined in the index: it cannot begin without a user decision.
 It is not a failure, and it is unrelated to the run statuses the executor uses.

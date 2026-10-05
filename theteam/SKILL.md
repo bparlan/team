@@ -2,7 +2,7 @@
 name: theteam
 version: 1.0.0
 description: Orchestrates independent reviewer subagents into deterministic team discussions, consensus-building, and actionable engineering reports.
-tools: bash, read, write, edit, glob, grep, hub, task, todo, ask
+tools: bash, read, write, edit, glob, grep, hub, task, todo, ask, code-search
 user-invocable: true
 ---
 

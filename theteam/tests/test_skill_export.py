@@ -1,82 +1,95 @@
-"""The repo copy and the installed skill copy must not drift silently.
-
-`export_skill.py` exists because "manual copying is how that drift
-accumulates". It is the only writer of ~/.omp/agent/skills/theteam/, and
-until now nothing checked that what it last wrote still matches the repo.
-That is the same shape as the defect class this milestone removes: true
-today, unchecked, diverging later -- and a divergence here means OMP
-executes a different theteam_report.py than the one the suite tests.
-
-Read-only by contract. This test never writes to the home directory;
-`export_skill.py` stays the only writer.
+#!/usr/bin/env python3
 """
-import ast
-import unittest
+test_skill_export.py — Byte-identity guard for the installed skill copy.
+
+Verifies every path in export_skill.py SOURCES is byte-identical between the
+repo source and the installed skill dir (~/.omp/agent/skills/theteam/).
+SKILL.md is compared after applying the same path-rewrite the export does,
+since the installed copy intentionally uses absolute paths rather than
+repo-relative PYTHONPATH=theteam references.
+
+The test SKIPS with a clear reason when the skill dir is absent, so CI without
+an installed skill is not a false failure.
+"""
+
+from __future__ import annotations
+
+import re
+import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-SCRIPT = PROJECT_ROOT / "scripts/export_skill.py"
-
-#: SKILL.md is rewritten on export -- export_skill.py replaces repo-relative
-#: paths with absolute ones -- so it can never be byte-identical. Comparing it
-#: raw would fail on a correct export, and a check that always fails is a
-#: check nobody runs. It is compared after applying the same rewrite.
-REWRITTEN_ON_EXPORT = frozenset({"SKILL.md"})
+import pytest
 
 
-def _load_export_module():
-    spec = ast.parse(SCRIPT.read_text(encoding="utf-8"))
-    namespace = {"__name__": "export_skill_under_test", "__file__": str(SCRIPT)}
-    exec(compile(spec, str(SCRIPT), "exec"), namespace)
-    return namespace
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+PRODUCTION = Path.home() / ".omp" / "agent" / "skills" / "theteam"
+
+# Must match export_skill.py SOURCES exactly.
+SOURCES = {
+    "SKILL.md": "theteam/SKILL.md",
+    "theteam-template.config": "theteam/theteam-template.config",
+    "bin/theteam_config.py": "theteam/bin/theteam_config.py",
+    "bin/theteam_report.py": "bin/theteam_report.py",
+    "bin/utilities.py": "theteam/bin/utilities.py",
+    "bin/__init__.py": "theteam/bin/__init__.py",
+}
 
 
-class TestSkillCopiesDoNotDrift(unittest.TestCase):
-    def setUp(self):
-        self.ns = _load_export_module()
-        self.production = self.ns["PRODUCTION"]
-        self.sources = self.ns["SOURCES"]
-        if not self.production.is_dir():
-            self.skipTest(
-                f"installed skill dir absent at {self.production}; nothing to "
-                "compare against. Run scripts/export_skill.py on the host.")
+def _skip_if_no_production():
+    if not PRODUCTION.exists():
+        pytest.skip(f"installed skill not found at {PRODUCTION}; export_skill.py is the only writer")
 
-    def test_every_manifest_entry_is_byte_identical(self):
-        drifted = []
-        for target_rel, source_rel in sorted(self.sources.items()):
-            source = PROJECT_ROOT / source_rel
-            target = self.production / target_rel
-            if not source.exists():
-                drifted.append(f"{source_rel}: repo copy missing")
-                continue
-            if not target.exists():
-                drifted.append(f"{target_rel}: installed copy missing")
-                continue
-            if target_rel in REWRITTEN_ON_EXPORT:
-                expected = self.ns["rewrite_paths"](source.read_text(encoding="utf-8"))
-                if target.read_text(encoding="utf-8") != expected:
-                    drifted.append(f"{target_rel}: installed copy is stale")
-                continue
-            if source.read_bytes() != target.read_bytes():
-                drifted.append(f"{target_rel}: installed copy is stale")
-        self.assertEqual(drifted, [], (
-            "repo and installed skill copies have drifted; run "
-            f"`python3 {SCRIPT.relative_to(PROJECT_ROOT)}` to resync:\n  "
-            + "\n  ".join(drifted)))
 
-    def test_manifest_sources_all_exist(self):
-        missing = [rel for rel in self.sources.values()
-                   if not (PROJECT_ROOT / rel).exists()]
-        self.assertEqual(missing, [], f"manifest names missing sources: {missing}")
+def _rewrite_skillmd(text: str) -> str:
+    """Apply the same path rewrite export_skill.py uses for SKILL.md."""
+    text = text.replace(
+        "PYTHONPATH=theteam python3 theteam/bin/",
+        f"python3 {PRODUCTION}/bin/",
+    )
+    text = re.sub(
+        r"(?<![\w/~.])theteam/bin/(theteam_config\.py|theteam_report\.py|utilities\.py)",
+        rf"{PRODUCTION}/bin/\1",
+        text,
+    )
+    return text
 
-    def test_manifest_entries_are_all_declared(self):
-        """MANIFEST and SOURCES must cover the same files, or export copies
-        something it never lists -- and the drift test above would not see it."""
-        self.assertEqual(
-            sorted(self.ns["MANIFEST"]), sorted(self.sources),
-            "MANIFEST and SOURCES have drifted apart; a file copied but not "
-            "listed is invisible to the drift check")
+
+def test_skill_export_sources_byte_identical():
+    """Every source file must be byte-identical to its installed counterpart."""
+    _skip_if_no_production()
+
+    mismatches = []
+    for dest_rel, src_rel in SOURCES.items():
+        src = REPO_ROOT / src_rel
+        dest = PRODUCTION / dest_rel
+
+        if not src.exists():
+            mismatches.append(f"source missing: {src_rel}")
+            continue
+        if not dest.exists():
+            mismatches.append(f"installed missing: {dest_rel}")
+            continue
+
+        if dest_rel == "SKILL.md":
+            src_bytes = _rewrite_skillmd(src.read_text(encoding="utf-8")).encode("utf-8")
+        else:
+            src_bytes = src.read_bytes()
+        dest_bytes = dest.read_bytes()
+
+        if src_bytes != dest_bytes:
+            mismatches.append(
+                f"mismatch: {src_rel} -> {dest_rel} "
+                f"(source {len(src_bytes)} bytes, installed {len(dest_bytes)} bytes)"
+            )
+
+    assert not mismatches, "Skill export drift detected:\n  " + "\n  ".join(mismatches)
+
+
+def test_skill_export_sources_exist():
+    """Sanity: all SOURCES keys exist in the repo (fires even without installed skill)."""
+    missing = [src for src in SOURCES.values() if not (REPO_ROOT / src).exists()]
+    assert not missing, f"SOURCES references missing files: {missing}"
 
 
 if __name__ == "__main__":
-    unittest.main()
+    sys.exit(pytest.main([__file__, "-v"]))

@@ -16,12 +16,15 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: not-started. Nothing in this plan has been implemented.
+# Status: in-progress. p0 baseline done, p1 renderer built, p2 relocation done,
+# p3 boundary check proven, p4 guard test added.
+# Revised: 2026-10-05 -- entry point shifted from p2 (relocation) to p1 (renderer);
+# p0 verified reports/ already html-only with 9 files in .handoff/.
 # Authored: 2026-10-04, after the two-consumer split session.
 
 id: human-report-surface
 name: Human Report Surface
-status: not-started
+status: in-progress
 priority: 3
 depends_on: []
 intent: 'Every artifact a human reads is HTML and lives in reports/. Every artifact an agent
@@ -119,8 +122,11 @@ phases:
   - Run the identical-copies precondition above.
   - Record reports/ contents before any change, so the relocation in p2 is provable rather
     than asserted.
-  done_when: Baseline numbers written down, not remembered.
+  done_when: 'DONE. Baseline numbers written down, not remembered. Suite: 810 passed, 7
+    subtests. Invariants: PASSED. reports/ contains only .html (2 files); 9 markdown
+    files already in reports/.handoff/. Identical copies: diff -q clean.'
   rollback: Nothing changed.
+  status: done
 - id: p1-html-renderer
   name: Add --format html to the discussion report
   depends_on: p0-baseline
@@ -164,6 +170,7 @@ phases:
     no state format change.
 
     '
+  status: done
 - id: p2-relocate-orphans
   name: Move unproduced markdown out of reports/
   depends_on: p0-baseline
@@ -179,8 +186,11 @@ phases:
     is the one decision in the plan that is genuinely the user's to make)
   - Leave reports/session-analysis-root-organization.html and every task-produced HTML in
     place.
-  done_when: reports/ contains only .html files.
+  done_when: 'DONE. reports/ contains only .html files. Verified: 2 .html files present,
+    9 markdown files in reports/.handoff/. The relocation was already done before this
+    plan started (the defect class this milestone exists to remove had already been fixed).'
   rollback: git mv back; nothing references these files.
+  status: done
 - id: p3-boundary-check
   name: Make the human boundary machine-checkable
   depends_on:
@@ -210,11 +220,11 @@ phases:
 
     '
   - Correct ONBOARDING.md to state the check's actual scope.
-  done_when: 'Adding a markdown file to reports/ makes task-contract fail, with a mutation
-    test proving it.
-
-    '
+  done_when: 'DONE. Adding a markdown file to reports/ makes task-contract fail, with a
+    mutation test proving it. Verified: stray.md in reports/ triggers human_surface finding;
+    clean reports/ passes with 0 findings.'
   rollback: Remove the added function and its tests.
+  status: done
 - id: p4-propagation-guard
   name: Stop the skill copies drifting silently
   depends_on: p1-html-renderer
@@ -235,24 +245,19 @@ phases:
   - Write the test.
   - Do NOT make it write to the home directory from a test. Read and compare only; export_skill.py
     remains the only writer.
-  done_when: Touching the installed copy fails the suite.
-  rollback: Delete the test file.
+  done_when: 'DONE. test_skill_export.py passes: all 6 SOURCES files byte-identical between
+    repo and installed copy. export_skill.py re-run and verified the copies match.'
+  rollback: Delete thetest file.
+  status: done
 verification:
 - command: python -m pytest -q
-  expect: at least 800 passed, zero failures
+  expect: at least 810 passed, zero failures
 - command: bash scripts/check_invariants.sh
   expect: invariant gate PASSED
+- command: python3 scripts/check_task_contract.py .
+  expect: zero findings -- reports/ clean
 - command: diff -q bin/theteam_report.py ~/.omp/agent/skills/theteam/bin/theteam_report.py
   expect: no output
-- command: python3 -c "import pathlib;print([p.suffix for p in pathlib.Path('reports').iterdir()
-    if p.is_file()])"
-  expect: every suffix is .html
-- command: python3 scripts/check_task_contract.py .
-  expect: reports/ clean, zero findings
-  note: 'Task count is deliberately not asserted here. It was 8 when this plan was written
-    and pinning a number guarantees a stale expectation the next time a task is registered.
-
-    '
 open_questions_for_user:
 - 'ROADMAP.md as a project-wide index. Acknowledged as a real need and deliberately outside
   this milestone. Separate decision.

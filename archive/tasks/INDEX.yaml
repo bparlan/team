@@ -24,8 +24,8 @@ purpose: 'One index over the plans in this directory: what exists, what order it
 plans:
 - file: human-report-surface.yaml
   id: human-report-surface
-  status: in-progress
-  one_line: reports/ is HTML; .omp/ and reports/.handoff/ hold machine artifacts.
+  status: done
+  one_line: reports/ is HTML; .omp/ and reports/.handoff/ hold machine artifacts. All phases complete.
   phases: 5
   blocked_on: null
   depends_on_plans: []

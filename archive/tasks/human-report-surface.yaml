@@ -16,15 +16,14 @@
 # ": " inside a folded scalar is enough -- so only the prose in this header is
 # hand-written.
 #
-# Status: in-progress. p0 baseline done, p1 renderer built, p2 relocation done,
-# p3 boundary check proven, p4 guard test added.
+# Status: done. All five phases complete.
 # Revised: 2026-10-05 -- entry point shifted from p2 (relocation) to p1 (renderer);
 # p0 verified reports/ already html-only with 9 files in .handoff/.
 # Authored: 2026-10-04, after the two-consumer split session.
 
 id: human-report-surface
 name: Human Report Surface
-status: in-progress
+status: done
 priority: 3
 depends_on: []
 intent: 'Every artifact a human reads is HTML and lives in reports/. Every artifact an agent

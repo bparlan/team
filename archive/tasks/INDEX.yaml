@@ -46,13 +46,19 @@ plans:
   id: system-awareness-injection
   status: not-started
   one_line: Give theteam the ability to see what it can do right now, so a refusal names
-    the missing capability instead of only denying. Executable now through p2; only p3 needs
-    a named project.
+    the missing capability instead of only denying, and give any project a reusable static
+    awareness file. Executable now through p2; the example project is a DESIGN-TIME input
+    for q0 and p4 only, not a run-time dependency.
   phases: 5
-  blocked_on: null
+  blocked_on: q0-needs-one-example-project
   depends_on_plans:
   - human-report-surface
-  note: p0-p2 are executable now; only p3 waits on a named example project.
+  note: The example is a design-time input that shapes the awareness-file schema once; nothing
+    at run time reads that path. The dynamic phases p0-p2 need no example. An earlier draft
+    made p4 wait behind an injection phase that pointed the probe at the example path, which
+    would have made the example a run-time dependency of injection; that phase was removed
+    rather than reordered. p4 reuses tasks/system-awareness/analyze_system_awareness.py
+    rather than writing a second analyzer.
 - file: diagram-citation-truth.yaml
   id: diagram-citation-truth
   status: not-started
@@ -161,5 +167,6 @@ phase_entry_points:
   diagram-citation-truth: p0-p1 -- the checker and the 9 corrections. Ships alone.
   document-citation-truth: p0 -- freeze the measurement. Its first run must reproduce 389/12;
     a mismatch means the parser drifted, not that the docs are wrong.
-  system-awareness-injection: p0 -- audit capability claims. Needs no example project.
+  system-awareness-injection: Start at p0 -- audit capability claims. Needs no example project.
+    The example is only needed by q0 and p4, and only to derive a reusable shape.
   project-convention-infra: BLOCKED at p0 only. p1, p2 and p3 do not need an example project.

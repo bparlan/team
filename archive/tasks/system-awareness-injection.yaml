@@ -17,18 +17,21 @@
 # hand-written.
 #
 # Status: not-started. Phases p0 through p2 are executable now and need no
-# user input; only p3 waits on a named example project.
+# user input; only the design-time pair q0 and p4 waits on a named example project.
 # Authored: 2026-10-04.
 
 id: system-awareness-injection
 name: System Awareness Injection
 status: not-started
-status_meaning: 'Awaiting one input from the user: the absolute path of one example project.
-  These files are roadmap artifacts, not registered tasks, so this vocabulary is local to
-  them and unrelated to theteam''s run statuses (ok / failed / skipped / awaiting). Legal
-  values: not-started (ready to execute), awaiting-input (cannot begin without a user decision),
-  blocked-on-defect (cannot begin until an external fix lands). Add any new value here first.'
-blocked_on: user-names-one-example-project
+status_meaning: 'not-started (ready to execute). Phases p0 through p2 are executable today.
+  Only the static-build pair q0 and p4 waits on one input: the absolute path of one example
+  project, used at DESIGN time to derive the shape of the awareness file. It is not a run-time
+  dependency -- no code path reads that path, and the injection that uses the derived shape
+  runs against any project. These files are roadmap artifacts, not registered tasks, so
+  this vocabulary is local to them and unrelated to theteam''s run statuses (ok / failed
+  / skipped / awaiting). Legal values: not-started (ready to execute), awaiting-input (cannot
+  begin without a user decision), blocked-on-defect (cannot begin until an external fix
+  lands). Add any new value here first.'
 priority: 2
 depends_on: []
 intent: 'Give theteam the ability to see its own shape: what files and tasks exist (static
@@ -42,12 +45,16 @@ why_this_shape: 'The static half already exists as two checkers, task-contract a
   mechanically, report rather than gate, and pin both the fires and the stays-quiet halves
   with tests.'
 design_principle: 'System awareness has two halves and they must not be confused. STATIC
-  is what exists -- files, configs, registered tasks, factual citations. DYNAMIC is what
-  the machine can do at this moment -- provider bound, docker available, agent types spawnable,
-  disk and memory. Mixing them produces the failure already seen in this repo: scripts/system-awareness-config.json
-  declares enabled/priority/timeout/health_threshold and is read by nobody, while loop_health_check.py:25-33
-  documents that nothing has read its contents. A static file pretending to be a dynamic
-  capability is the exact defect this plan exists to remove.'
+  is what exists -- files, configs, registered tasks, factual citations, and it is per-project
+  and authored ONCE against one example, then reusable by shape. DYNAMIC is what the machine
+  can do at this moment -- provider bound, docker available, agent types spawnable, disk
+  and memory -- and it is measured per run. Mixing them produces the failure already seen
+  in this repo: scripts/system-awareness-config.json declares enabled/priority/timeout/health_threshold
+  and is read by nobody, while loop_health_check.py:25-33 documents that nothing has read
+  its contents. A static file pretending to be a dynamic capability is the exact defect
+  this plan exists to remove. This plan owns the DYNAMIC half and the reuse of the STATIC
+  half; it does not reinvent static analysis, which tasks/system-awareness/analyze_system_awareness.py
+  already performs.'
 relationship_to_bootstrap: 'Composes with bootstrap rather than competing with it. Bootstrap
   is static and authored: the user declares what team they want. This is dynamic and measured:
   the machine reports what it can currently run. Both answer ''what do I have'', and together
@@ -80,7 +87,7 @@ decisions:
   decided_by: analysis
 phases:
 - id: q0-name-the-example
-  name: User names one example project
+  name: User names one example project to derive the awareness-file shape from
   estimated_effort: user input, no engineering
   steps:
   - User names the project directory to develop against.
@@ -88,8 +95,23 @@ phases:
     cannot demonstrate drift.
   - Confirm the user accepts that the answer may be 'this project has no conventions'. A
     checker that reports nothing must be distinguishable from a checker that is not installed.
-  done_when: One absolute path recorded in this file under example_project.
+  done_when: One absolute path recorded in this file under example_project, and the static
+    awareness contract derived from it is written down as a shape, not a list of this repo's
+    filenames.
   rollback: Not applicable; nothing has been built.
+  blocked_on: user-names-one-example-project
+  rationale: 'The example is a DESIGN-TIME input, not a run-time dependency. It is used
+    once to work out what an awareness file must contain and in what shape, so that shape
+    can then be applied to any project. Nothing downstream requires this specific path at
+    run time. That distinction is the whole reason q0 sits here and not at file scope: a
+    reader who sees a file-level blocked_on concludes the plan cannot start, when in truth
+    every injection phase is executable today.'
+  contract:
+  - 'One example is enough to derive a SHAPE, and the shape must be stated as a shape: "names
+    files that exist", not "references these five files". A rule that could only apply to
+    the example is a coincidence, not a convention.'
+  - The derived shape must demonstrably apply to a second, unrelated project with no shared
+    filenames, or it is not a shape yet.
 - id: p0-audit-capability-claims
   name: Audit every claim theteam makes about what it can do
   estimated_effort: 1 hour
@@ -100,7 +122,9 @@ phases:
     strings, so it needs no example project and is a ROOT phase. Gating it behind q0 was
     wrong: it is the phase that decides whether the rest of this plan is worth building,
     so making it wait on an input it does not use delays the one cheap check that can void
-    the plan.'
+    the plan. The STATIC half is not audited here: tasks/system-awareness/analyze_system_awareness.py
+    already exists and already parameterises on project_root. Auditing claims about capability
+    is the DYNAMIC half''s job, and that is what this phase covers.'
   contract:
   - 'Enumerate every refusal and readiness message in the codebase: grep for the strings
     the CLI and runner emit when they decline to act.'
@@ -165,42 +189,70 @@ phases:
     proven by a test that runs both the present and absent cases.
   rollback: Remove the heading injection and the refusal together; a prompt that still hardcodes
     a capability value is worse than one that never had it.
-- id: p3-example-project-conventions
-  name: Apply the capability surface to a named example project
+- id: p4-shape-the-static-awareness-file
+  name: Shape the static awareness file from the example, reusable by any project
   depends_on:
-  - p2-inject-into-member-prompts
   - q0-name-the-example
   estimated_effort: half a day
-  rationale: The only phase that genuinely needs a project path. Until the user names one,
-    this plan is fully executable through p2 and the work is not idle.
+  rationale: The design principle named a static awareness file, and no phase built one.
+    tasks/system-awareness/analyze_system_awareness.py performs the ANALYSIS, but it emits
+    a report and a ledger, not a stable contract another project can be measured against.
+    This phase derives that contract from the q0 example -- used once, at design time --
+    and proves it is a shape rather than a description of one repo. The earlier plan made
+    this wait behind an injection phase that pointed the probe at the example path, which
+    would have made the example a run-time dependency of injection. That is exactly what
+    the design-time framing forbids, so the dependency was removed rather than reordered.
   contract:
-  - Run the p1 capability surface against the named project root and confirm it reports
-    that project's reality rather than this repo's.
-  - A member prompt in that project that names an unavailable capability is refused, proving
-    p2 works outside the repo it was written in.
+  - 'A static awareness file with a documented, versioned schema: what files exist, what
+    tasks are registered, what the project claims about itself. It is derived from the example
+    ONCE and then applicable to any project that satisfies it.'
+  - The file is produced by shaping the EXISTING analyzer output, not by writing a second
+    analyzer. Two overlapping analyzers in one repo is the duplication this repo already
+    suffers with scripts/system-awareness-config.json.
+  - 'Proven portable: run the analyzer against a synthetic project sharing no filenames
+    with the example and get a valid file. If it only works for the example, it is not a
+    shape and the phase has failed.'
+  - No run-time dependency on the example. The example was the design-time input; the file
+    this phase produces is reusable by any project, which is the entire point of the design-time
+    framing.
   steps:
-  - Point the p1 probe at the example project root.
-  - Exercise one prompt requiring an absent capability, and one requiring a present one,
-    in that project.
-  done_when: The capability surface is reported for the example project, and both the present
-    and absent prompt cases behave as specified there -- not only in this repo.
-  rollback: Revert the example-project wiring; p1 and p2 stand alone.
+  - Read the existing analyzer output (system-awareness-ledger.json and its report) and
+    decide which parts are genuinely per-project facts versus one-repo accidents.
+  - 'Write the schema: field name, meaning, and how it is derived. Anything that cannot
+    be derived for an arbitrary project is cut, not documented as optional.'
+  - Derive the file for the example project.
+  - Run the same derivation against a synthetic project sharing no filenames with the example
+    and confirm a valid file comes out. This is the phase's own done_when; do not skip it.
+  done_when: A documented static awareness schema, a file derived from the example, and
+    a valid file derived from an unrelated synthetic project. Portability is proven by the
+    second derivation, not asserted. No run-time code references the example path.
+  rollback: Revert the schema and derived files. p0-p2 do not depend on this phase; the
+    dynamic capability surface stands alone.
 verification:
 - command: python -m pytest -q
-  expect: at least 800 passed, zero failures
+  expect: at least 810 passed, zero failures
 - command: bash scripts/check_invariants.sh
   expect: invariant gate PASSED
 - command: python3 scripts/check_task_contract.py .
   expect: zero findings -- new work must not break the existing checkers
 - command: python3 scripts/check_prompt_truth.py .
   expect: zero findings -- no prompt may gain a hardcoded capability value
+- command: python3 tasks/system-awareness/analyze_system_awareness.py --project-root <synthetic-project>
+  expect: 'emits a valid static awareness file for a project that shares NO filenames with
+    the example. This is the command that proves the design-time/run-time distinction: the
+    example shaped the schema, but nothing at run time depends on that path. Without it
+    the plan cannot distinguish a shape from a description of one repo.'
 open_questions_for_user:
-- Which project is the example? Blocks p3 only. Phases p0 through p2 are executable now
-  and do not need it.
+- Which project is the example? Blocks q0 and p4 only. The dynamic capability phases p0-p2
+  are executable today and do not need it. It is a design-time input that shapes a reusable
+  schema; nothing at run time reads that path.
 - Should scripts/system-awareness-config.json be deleted once p0 confirms nothing reads
   it, or kept with a comment marking it inert? Deletion is cleaner; the repo has an archive/
   convention for exactly this.
 notes_for_implementer:
+- The example project is a DESIGN-TIME input. It shapes the awareness-file schema once.
+  Nothing at run time reads that path. If you find yourself making run-time code depend
+  on it, that is the defect this framing exists to prevent.
 - Four of nine errors in the originating session were false claims about files the author
   had not opened. Three were caught by the user, one by a mutation test. Verify a factual
   claim in the same breath you write it, or mark it [UNVERIFIED].
@@ -212,3 +264,6 @@ notes_for_implementer:
 - Do not make theteam discuss work. The gate cannot pass anywhere -- theteam.default_api
   is only assigned by a test monkeypatch. Changing what the refusal says is in scope; making
   it pass is not.
+- Reuse tasks/system-awareness/analyze_system_awareness.py. It already parameterises on
+  project_root and already runs against any project. p4 shapes its output; p4 must not become
+  a second analyzer.

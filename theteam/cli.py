@@ -332,6 +332,23 @@ def cmd_discuss(args: argparse.Namespace) -> int:
 
     project_root = _project_root(args)
     return EXIT_OK if run_discussion(project_root, args.topic) else EXIT_ERROR
+def cmd_capability(args: argparse.Namespace) -> int:
+    """Report the dynamic capability surface: what theteam can actually do right now."""
+    from theteam.core.capability import capability_surface, write_handoff
+
+    project_root = _project_root(args)
+    surface = capability_surface(project_root)
+
+    if getattr(args, 'json', False):
+        return _emit(args, surface, '')
+
+    # Machine-readable handoff for agent consumers, under the dot-prefix
+    # so it sits in the machine root and is skipped by human viewers.
+    handoff = write_handoff(project_root)
+    print(f'capability surface written to {handoff}')
+    return EXIT_OK
+
+
 
 
 def cmd_loop(args: argparse.Namespace) -> int:
@@ -1231,6 +1248,11 @@ def build_parser() -> argparse.ArgumentParser:
     discuss.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                         help="Machine-readable output.")
     discuss.set_defaults(func=cmd_discuss)
+
+    capability = sub.add_parser('capability', help='Report the dynamic capability surface.')
+    capability.add_argument('--json', action='store_true', default=argparse.SUPPRESS,
+                              help='Machine-readable output.')
+    capability.set_defaults(func=cmd_capability)
 
     serve = sub.add_parser(
         "serve", help="Run due tasks on an interval and publish /metrics.")

@@ -43,7 +43,7 @@ plans:
     p2 builds the checker, p3 decides placement.
 - file: system-awareness-injection.yaml
   id: system-awareness-injection
-  status: not-started
+  status: done
   one_line: 'Give theteam the ability to see what it can do right now, and give agents a
     self-evaluating rule-shape they can extend without a human. The shape was derived from
     real projects at authoring time and the derivation inputs were then removed: the plan

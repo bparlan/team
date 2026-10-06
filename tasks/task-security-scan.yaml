@@ -1,0 +1,39 @@
+id: security-scan
+name: Security Scan
+type: monitoring
+priority: 8
+description: >-
+  Run the security policy checker against the project.
+  SECURITY_POLICY.yaml defines four rules: no-destructive-commands,
+  no-secret-access, require-isolation, max-execution-time.
+  This task runs a script that checks all four and reports
+  findings. Exit 0 = all pass, exit 3 = findings, exit 2 =
+  cannot evaluate (policy file missing).
+
+  Why this task: theteam has no security gate. The policy
+  exists but nothing enforces it on a schedule. A destructive
+  command in a prompt or script is a blast-radius defect
+  that should fire before it ships, not after.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/security-scan.json — per-rule
+  verdict, the matched line (if any), and a summary:
+  total_rules, total_findings, cannot_evaluate.
+phases:
+  - name: check
+    script: scripts/check_security_policy.py
+    args: []
+    timeout_seconds: 120
+    memory_limit_mb: 128
+  - name: publish
+    runner: llm
+    member: skeptic
+    agent_type: reviewer
+    prompt_file: prompts/security-scan-publish.md
+    output: reports/security-scan.html
+    memory_limit_mb: 64
+    order: 2
+
+order: 3
+depends_on: [project-integrity]

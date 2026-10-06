@@ -1,0 +1,75 @@
+id: self-improvement
+name: Agentic Self-Improvement
+type: maintenance
+priority: 6
+description: >-
+  Keep the agentic infrastructure within its own stated bounds.
+  Three phases, one pass:
+
+  1. `scripts/loop_infrastructure_check.py` reports on required
+     directories, configs, scripts, tools, Python version, and
+     loop-state existence/parses. This phase runs it and records
+     the findings.
+
+  2. `scripts/loop_health_check.py` reports on REQUIRED_CONFIGS
+     (JSON parse validation) and REQUIRED_DIRS. This phase runs
+     it and records the findings.
+
+  3. The synthesizer compares both reports against the current
+     task-contract (check_task_contract.py), the invariants
+     (check_invariants.sh), and the diagram truth gate
+     (check_diagram_truth.py). Any checker that is green but
+     guards a known-defective shape is a silent false positive;
+     any checker that is red on a shape it cannot mechanically
+     verify is noise. The output is a triage list: keep,
+     tighten, or remove each gate, with the evidence for the
+     decision.
+
+  Why this task exists: theteam has 9 checkers today (3 in
+  check_invariants.sh, 3 in check_diagram_truth.py, 3 in
+  check_task_contract.py) and no task owns their mutual
+  consistency. A checker that fires on a shape it cannot
+  verify is a confidence problem, not a code problem. This
+  task makes the confidence problem visible and actionable.
+
+  Self-care rule: a checker that never fires on a compliant
+  shape is a dead weight. A checker that fires on everything
+  is noise. This task finds the boundary.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/self-improvement.json — per-checker
+  verdict (keep / tighten / remove), the evidence for each
+  decision, and a confidence score (0-1) for each gate based
+  on how often it has fired in the last 10 runs.
+phases:
+  - name: infrastructure-check
+    script: scripts/loop_infrastructure_check.py
+    args: []
+    timeout_seconds: 300
+    memory_limit_mb: 64
+  - name: health-check
+    script: scripts/loop_health_check.py
+    args: []
+    timeout_seconds: 300
+    memory_limit_mb: 64
+  - name: synthesize
+    runner: llm
+    member: skeptic
+    agent_type: reviewer
+    prompt_file: prompts/self-improvement-synthesize.md
+    output: .omp/theteam/reports/self-improvement.md
+    memory_limit_mb: 64
+    order: 3
+
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/self-improvement-publish.md
+    output: reports/self-improvement.html
+    memory_limit_mb: 64
+    order: 4
+
+order: 2
+depends_on: [project-integrity]

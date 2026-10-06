@@ -1,0 +1,64 @@
+id: doc-truth-mechanical
+name: Doc Truth Mechanical
+type: monitoring
+priority: 8
+description: >-
+  Mechanical claim extraction for doc-truth. The audit phase (llm) reads
+  documents and reports findings; this phase extracts every path-shaped
+  citation from the three audited documents and writes them as machine-state
+  so the audit phase can adjudicate only mismatches instead of re-reading
+  everything from scratch.
+
+  The doc-truth plan documents this phase as the fix for the unbounded
+  audit: a 34m41s unbounded run, then a 1h27m bounded run that read fewer
+  files but checked each harder. The mechanical/judgement split is the
+  fix — this phase is the mechanical half. Without it the audit phase
+  re-types every citation it checks, which is the exact defect class
+  check_diagram_truth.py was built to close.
+
+  Measures: claims_extracted, citations_by_type (path-only / line-cited /
+  package-relative), irreducibly_ambiguous (package-relative matches >1
+  file), and the same 389/12 counts that check_task_contract.py reports
+  so parser drift surfaces as a number change, not a silent rot.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/doc-truth-claims.json — claims_extracted,
+  citations_by_type, irreducibly_ambiguous, and one entry per citation
+  naming the document, the path, the line number (if line-cited), and
+  the raw claim text. Empty claims is a valid output (nothing to audit).
+phases:
+  - name: extract
+    script: scripts/measure_citations.py
+    args: []
+    timeout_seconds: 120
+    memory_limit_mb: 128
+  - name: audit
+    runner: llm
+    member: architect
+    agent_type: reviewer
+    prompt_file: prompts/doc-truth-audit.md
+    output: .omp/theteam/reports/doc-truth-audit.md
+    memory_limit_mb: 64
+    order: 2
+
+  - name: harmonize
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/doc-truth-harmonize.md
+    output: .omp/theteam/reports/doc-truth-harmonize.md
+    memory_limit_mb: 64
+    order: 3
+
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/doc-truth-publish.md
+    output: reports/doc-truth.html
+    memory_limit_mb: 64
+    order: 4
+
+order: 4
+depends_on: [doc-truth]

@@ -1,0 +1,44 @@
+id: test-gate
+name: Test Gate
+type: monitoring
+priority: 6
+description: >-
+  Run the test suite and gate on the result.
+  The project's test suite is pytest. This task
+  runs it and reports pass/fail with the count
+  of passed, failed, and subtests.
+
+  Why this task: every other task in this project
+  has a script phase that does something mechanical.
+  The test suite is the mechanical proof that the
+  code works. Without a scheduled test gate,
+  regressions can land and go unnoticed until a
+  human runs the suite by hand.
+
+  The gate exits 0 on all pass, exit 1 on any
+  failure. The count of passed tests is reported
+  so a sudden drop is visible even when nothing
+  fails.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/test-gate.json — passed,
+  failed, subtests, duration, and per-failure
+  details (test name, error message, line).
+phases:
+  - name: run
+    script: scripts/run_pytest.py
+    args: []
+    timeout_seconds: 900
+    memory_limit_mb: 512
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/test-gate-publish.md
+    output: reports/test-gate.html
+    memory_limit_mb: 64
+    order: 2
+
+order: 5
+depends_on: [project-integrity]

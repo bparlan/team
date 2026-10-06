@@ -5,17 +5,17 @@ rules:
     pattern: "rm -rf|sudo|chmod 777|dd if=|mkfs"
     action: "block"
     severity: "critical"
-    
+
   - name: "no-secret-access"
-    pattern: "\.env|credentials|secrets|id_rsa"
+    pattern: "\\.env|credentials|secrets|id_rsa"
     action: "warn"
     severity: "high"
-    
+
   - name: "require-isolation"
     pattern: "task.*--isolated"
     action: "require"
     severity: "medium"
-    
+
   - name: "max-execution-time"
     value: 300
     action: "timeout"

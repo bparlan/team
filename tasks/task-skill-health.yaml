@@ -1,0 +1,43 @@
+id: skill-health
+name: Skill Health Check
+type: monitoring
+priority: 7
+description: >-
+  Verify the agent skills used by this project are
+  healthy: SKILL.md files parse, referenced scripts
+  exist, and no skill depends on a removed or renamed
+  module. Each skill is a directory under
+  ~/.omp/agent/skills/ (or the project's own skill
+  directory). The check reads each SKILL.md, extracts
+  the commands and their script references, and verifies
+  every referenced file exists.
+
+  Why this task: skills are the primary way agents
+  interact with the project. A broken skill command
+  (missing script, stale reference) is a silent
+  failure — the agent reads the skill, trusts it, and
+  runs a command that does not exist. The skill is the
+  trust boundary between the agent and the project.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/skill-health.json — per-skill
+  verdict, missing files list, and a summary:
+  total_skills, total_commands, missing_references.
+phases:
+  - name: check
+    script: scripts/check_skill_health.py
+    args: []
+    timeout_seconds: 120
+    memory_limit_mb: 128
+  - name: publish
+    runner: llm
+    member: architect
+    agent_type: reviewer
+    prompt_file: prompts/skill-health-publish.md
+    output: reports/skill-health.html
+    memory_limit_mb: 64
+    order: 2
+
+order: 4
+depends_on: [project-integrity]

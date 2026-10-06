@@ -1,0 +1,54 @@
+id: truth-gate
+name: Truth Gate Wiring
+type: monitoring
+priority: 6
+description: >-
+  Wire every truth checker into a single task so the gate
+  cannot be bypassed by deleting one checker from the loop.
+
+  Today the checkers live as standalone scripts:
+  - check_diagram_truth.py (diagram citation truth)
+  - check_task_contract.py (task contract)
+  - check_prompt_truth.py (prompt truth)
+  - check_doc_truth.py (doc truth)
+  - check_invariants.sh (9 invariant checks)
+  - measure_citations.py (citation measurement)
+
+  Each is runnable but none is scheduled. A checker that
+  is not scheduled is a checker that is not run. This task
+  runs all of them in one pass and reports which fired,
+  which were silent, and which could not evaluate.
+
+  The output is a single truth report: one entry per checker
+  with its exit code, finding count, and the top finding
+  (if any). Exit 0 = all pass or report-only; exit 3 = a
+  finder fired; exit 2 = cannot evaluate (missing sidecar,
+  missing input).
+
+  Why this task: the update-team task covers one diagram.
+  The prompt-truth task covers prompts. The doc-truth task
+  covers docs. But there is no single run that tells you
+  whether the truth infrastructure itself is healthy. This
+  task is that run.
+
+failure_handling: retry
+expected_output: >-
+  .omp/theteam/reports/truth-gate.json — per-checker
+  exit_code, findings, top_finding, and a summary:
+  total_checked, total_findings, cannot_evaluate count.
+phases:
+  - name: run-all
+    script: scripts/truth_gate_runner.py
+    args: []
+    timeout_seconds: 300
+    memory_limit_mb: 256
+  - name: publish
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/truth-gate-publish.md
+    output: reports/truth-gate.html
+    memory_limit_mb: 64
+    order: 2
+
+order: 1

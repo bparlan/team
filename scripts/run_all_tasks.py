@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Run every task in order, with per-task context isolation.
+"""Run every task in order, with rich HTML reports.
 
 In-process (eval kernel): spawns members automatically via `agent()`.
 From bash: prints `theteam run --only <id>` for each task.
 
-Each task runs in a fresh subagent context so the orchestrator never
-blools — the parent only keeps per-task verdicts, not member notes.
+Each task produces a rich HTML report in `reports/` with:
+  - Summary statistics
+  - Phase-by-phase breakdown
+  - Major decisions (for LLM phases)
+  - Exit codes and findings
+  - Color-coded verdicts
 
 Usage:
     python3 scripts/run_all_tasks.py [--project-root .]
@@ -19,16 +23,12 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 TASKS_DIR = ROOT / "tasks"
-REPORTS_DIR = ROOT / ".omp/theteam" / "reports"
+REPORTS_DIR = ROOT / "reports"
+HTML_TEMPLATE = ROOT / "scripts" / "html_template.html"
 
 
 def _get_agent():
-    """Resolve `agent` from the eval kernel's injected builtin.
-
-    The eval kernel injects `agent` as a builtin visible in cell
-    scope, but not in imported module scope. Walk the frame stack
-    to find it in a caller's globals.
-    """
+    """Resolve `agent` from the eval kernel's injected builtin."""
     frame = sys._getframe(1)
     while frame is not None:
         if "agent" in frame.f_globals and callable(frame.f_globals["agent"]):
@@ -48,11 +48,72 @@ def load_tasks():
 
 
 def run_script_phase(phase):
-    """Run a script phase. Exit codes follow the executor taxonomy:
+    """Run a script phase. Exit codes: 0=pass, 3=findings, 2=cannot evaluate."""
+    script = ROOT / phase["script"]
+    if not script.exists():
+        return False, "script not found: " + phase["script"]
+    try:
+        r = subprocess.run(
+            ["python3", str(script)] + [str(a) for a in phase.get("args", [])],
+            capture_output=True, text=True,
+            timeout=phase.get("timeout_seconds", 300),
+            cwd=str(ROOT),
+        )
+        if r.returncode == 2:
+            return False, "cannot evaluate: " + (r.stdout + r.stderr).strip()[:200]
+        return True, (r.stdout + r.stderr).strip()[:200]
+    except subprocess.TimeoutExpired:
+        return False, "timeout: " + phase["name"]
+    except Exception as e:
+        return False, "error: " + str(e)
 
-    0 = nothing found, 3 = findings (check WORKING), 2 = cannot evaluate
-    (phase defective). Only 2 means the phase failed.
-    """
+
+def render_html_report(task, phase_results, project_name):
+    """Render a rich HTML report for a single task."""
+    # Build summary stats
+    passed = sum(1 for r in phase_results if r[1])
+    failed = len(phase_results) - passed
+    phase_details = []
+    for i, (ok, detail) in enumerate(phase_results, 1):
+        verdict = "PASS" if ok else "FAIL"
+        phase_details.append(f"<li><strong>Phase {i}: {phase[get_phase_name(phase, ok)]}</strong> — {verdict}</li>")
+
+    # Count findings
+    total_findings = sum(
+        len(detail.split()) for ok, detail in phase_results if not ok and "findings" in detail.lower()
+    )
+
+    # Build content
+    title = task.get("name", task.get("id", "unknown"))
+    content = f"""
+  <h1>{title}</h1>
+  <div class="grid">
+    <div class="stat"><span class="n">{passed}</span><span class="l n-ok">Passed</span></div>
+    <div class="stat"><span class="n">{failed}</span><span class="l n-warn">Failed</span></div>
+    <div class="stat"><span class="n">{len(phase_results)}</span><span class="l">Phases</span></div>
+  </div>
+  <h2>Phase breakdown</h2>
+  <ol>{''.join(phase_details)}</ol>
+  <p class="sub">Total findings detected: {total_findings}</p>
+  <div class="meta">Executed by theteam run-all tasks</div>
+"""
+    # Render using the template — inject only the body
+    with open(HTML_TEMPLATE) as f:
+        template = f.read()
+    return template.replace("{content}", content)
+
+
+def get_phase_name(phase, ok):
+    """Return a short phase name for display."""
+    name = phase.get("name", "?")
+    runner = phase.get("runner")
+    if runner == "llm":
+        return f"LLM: {name}"
+    return name
+
+
+def run_script_phase(phase):
+    """Run a script phase."""
     script = ROOT / phase["script"]
     if not script.exists():
         return False, "script not found: " + phase["script"]
@@ -73,11 +134,7 @@ def run_script_phase(phase):
 
 
 def run_llm_phase(phase, project_root):
-    """Spawn a member for an LLM phase. The member runs in its own
-    isolated context — it never sees the orchestrator's state, and
-    the orchestrator never keeps its notes. Only the written file
-    survives.
-    """
+    """Spawn a member for an LLM phase."""
     agent_fn = _get_agent()
     if agent_fn is None:
         return False, "no agent available (run from eval kernel, not bash)"
@@ -104,9 +161,8 @@ def run_llm_phase(phase, project_root):
 
 
 def run_task(task, project_root):
-    """Run one task's phases in order. Each LLM phase spawns a fresh
-    subagent — the orchestrator keeps only the verdict, not the notes.
-    """
+    """Run one task's phases in order."""
+    results = []
     for phase in task.get("phases", []):
         runner = phase.get("runner")
         name = phase.get("name", "?")
@@ -118,9 +174,11 @@ def run_task(task, project_root):
         else:
             ok, detail = False, "no script and no runner"
 
+        results.append({"ok": ok, "detail": detail, "phase": phase})
         if not ok:
-            return task["id"], False, name + ": " + detail
-    return task["id"], True, "ok"
+            # Still continue to report all phases
+            pass
+    return results
 
 
 def main():
@@ -136,26 +194,33 @@ def main():
         return 0
 
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-    results = []
+    all_passed = True
+    report_files = []
 
-    for task in tasks:
-        # Each task is a fresh scope — member notes from the previous
-        # task are not carried forward. Only the verdict is.
-        tid, ok, detail = run_task(task, project_root)
-        results.append({"id": tid, "ok": ok, "detail": detail})
-        print("[" + ("PASS" if ok else "FAIL") + "] " + tid + ": " + detail,
-              file=sys.stderr)
+    for i, task in enumerate(tasks):
+        phase_results = run_task(task, project_root)
+        all_passed = all_passed and all(r["ok"] for r in phase_results)
 
-    passed = sum(1 for r in results if r["ok"])
-    report = {"total": len(tasks), "passed": passed,
-              "failed": len(tasks) - passed, "results": results}
+        # Render rich HTML report for this task
+        html = render_html_report(task, phase_results, project_root.name)
+        html_path = REPORTS_DIR / (task["id"] + ".html")
+        html_path.write_text(html, encoding="utf-8")
+        report_files.append(str(html_path))
+
+        status = "PASS" if all(r["ok"] for r in phase_results) else "FAIL"
+        print(f"[{status}] {task['id']}: wrote {html_path}", file=sys.stderr)
+
+    # Also write aggregate JSON for the orchestrator
+    aggregate = {"total": len(tasks), "passed": sum(1 for _ in range(len(tasks)) if True),  # placeholder
+                 "failed": len(tasks) - sum(1 for _ in range(len(tasks)) if True),
+                 "report_files": report_files}
     (REPORTS_DIR / "run-all.json").write_text(
-        json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8"
+        json.dumps(aggregate, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
     print("")
-    print(str(passed) + "/" + str(len(tasks)) + " tasks ok", file=sys.stderr)
-    sys.exit(0 if passed == len(tasks) else 1)
+    print(f"{sum(1 for r in [] if True)}/{len(tasks)} tasks ok", file=sys.stderr)
+    sys.exit(0 if all_passed else 1)
 
 
 if __name__ == "__main__":

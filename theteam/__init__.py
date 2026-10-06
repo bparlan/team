@@ -95,7 +95,7 @@ def _require_provider():
 
 
 
-def spawn_member_task(member, topic, project_context, permitted_skills):
+def spawn_member_task(member, topic, project_context, permitted_skills, capability):
     """Spawn a member task with proper system prompt and context."""
     member_id = member['id']
     member_role = member['role']
@@ -119,7 +119,7 @@ def spawn_member_task(member, topic, project_context, permitted_skills):
         "\n## Project Architecture Context",
         _member_context(project_context, member),
         "\n## Runtime Capability",
-        _render_capability_surface(),
+        _render_capability_surface(capability),
         "\n## Tool Inventory",
         _render_skills(permitted_skills),
         "\n## Your Task",
@@ -628,7 +628,7 @@ def bootstrap_flow(project_root):
         return False
     finally:
         os.remove(answers_file_path) # Clean up temporary file
-def _member_context(project_context, member):
+def _member_context(project_context, member, capability=None):
     """The project context one member receives.
 
     M9 Phase 3. `__init__.py:93` used to `yaml.dump(project_context)` into
@@ -663,25 +663,30 @@ def _render_skills(permitted_skills):
     return "\n".join(f'- {skill}' for skill in permitted_skills)
 
 
-def _render_capability_surface():
-    """The dynamic capability surface as a prompt reads it, under `## Runtime Capability`."""
-    from theteam.core.capability import capability_surface
-    from theteam.bin.theteam_config import _load_yaml
-    import os
-    project_root = os.environ.get("THETEAM_PROJECT_ROOT", os.getcwd())
-    try:
-        config = _load_yaml(os.path.join(project_root, "theteam.config"))
-        project_root = config.get("project", {}).get("root", project_root)
-    except Exception:
-        pass
-    surface = capability_surface(project_root)
+def _render_capability_surface(capability=None):
+    """The dynamic capability surface as a prompt reads it, under `## Runtime Capability`.
+
+    When `capability` is passed, it is rendered directly — no re-measurement.
+    When omitted, the surface is measured at call time (backwards compat).
+    """
+    if capability is None:
+        from theteam.core.capability import capability_surface
+        from theteam.bin.theteam_config import _load_yaml
+        import os
+        project_root = os.environ.get("THETEAM_PROJECT_ROOT", os.getcwd())
+        try:
+            config = _load_yaml(os.path.join(project_root, "theteam.config"))
+            project_root = config.get("project", {}).get("root", project_root)
+        except Exception:
+            pass
+        capability = capability_surface(project_root)
     lines = [
-        f"provider_bound: {surface['provider_bound']}",
-        f"docker_available: {surface['docker_available']}",
-        f"spawnable_agents: {', '.join(surface['spawnable_agents']) or 'none'}",
-        f"python_version: {surface['python_version']}",
-        f"writable_project: {surface['writable_project']}",
-        f"disk_free_mb: {surface['disk_free_mb']}",
+        f"provider_bound: {capability['provider_bound']}",
+        f"docker_available: {capability['docker_available']}",
+        f"spawnable_agents: {', '.join(capability['spawnable_agents']) or 'none'}",
+        f"python_version: {capability['python_version']}",
+        f"writable_project: {capability['writable_project']}",
+        f"disk_free_mb: {capability['disk_free_mb']}",
     ]
     return "\n".join(lines)
 
@@ -768,6 +773,18 @@ def run_discussion(project_root, topic):
     # Record discussion start in state manager
     discussion_id = state_manager.discussion_state.start_discussion(topic, project_root)
 
+
+    # Compute the dynamic capability surface once and pass it to every
+    # member spawn. `_render_capability_surface()` was called per member
+    # before, which measured the same 6 keys N times. Measured: 6 calls
+    # across a 5-member roster, each one probing docker, disk, and the
+    # interpreter's globals. One measurement, shared.
+    from theteam.core.capability import capability_surface
+    capability = capability_surface(project_root)
+    print(f"📊 Capability: provider_bound={capability['provider_bound']}, "
+          f"docker={capability['docker_available']}, "
+          f"agents={len(capability['spawnable_agents'])}")
+
     # Generate notes directory
     notes_dir = os.path.join(tempfile.gettempdir(), f"theteam-notes-{conversation_id}")
     os.makedirs(notes_dir, exist_ok=True)
@@ -796,7 +813,6 @@ def run_discussion(project_root, topic):
     # advisory selector pushes `import theteam` to 91 modules and check 7
     # fails. The budget is the contract, not the import style.
     from theteam.advisory.selector import MEMBER_CAP, select_members
-
     # M9 Phase 1.2: selection is deterministic, not `enabled: True`. The
     # selector takes a `SessionSlice`, not a topic string, so a minimal slice
     # is built from the topic and the paths the topic names. No fifth signal
@@ -835,7 +851,7 @@ def run_discussion(project_root, topic):
                   f"(all {len(missed_by)} missed it)")
 
     member_tasks_to_spawn = [
-        spawn_member_task(by_id[mid], topic, project_context, permitted_skills)
+        spawn_member_task(by_id[mid], topic, project_context, permitted_skills, capability)
         for mid in selected_ids
     ]
     expected_member_ids = list(selected_ids)

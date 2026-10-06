@@ -13,13 +13,17 @@ messages).
 
 ## Output
 
-Write `reports/test-gate.html`. One summary
-line: "N passed, M failed, S subtests in D
+Write `reports/test-gate.html` — the absolute path
+is `/Users/bparlan/devcode/team/reports/test-gate.html`.
+Create the directory if it does not exist.
+
+## Format
+
+One summary line: "N passed, M failed, S subtests in D
 seconds". If any failures, list them with the
 error message truncated to 120 chars.
 
 ## Rules
 
-- Do not editorialize. Report what the JSON
-  says.
+- Do not editorialize. Report what the JSON says.
 - If all pass, say so in one sentence and stop.

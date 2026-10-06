@@ -221,7 +221,7 @@ invariant was *for* and what now holds instead.
 theteam` to 91 modules and failed check 7. The selector is imported at point of use; the
 entry point now loads **88** modules against a budget of 90.
 
-`789 passed` (772 + 17 new), gate 7/7, `import theteam` succeeds.
+`835 passed` (772 + 63 new), gate 7/7, `import theteam` succeeds.
 
 ## M9 Phase 2 — `theteam manager`: the team that staffs itself
 

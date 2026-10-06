@@ -59,9 +59,9 @@ Twelve subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam discuss <topic>` | `--json` | The team's verdict, or a named error if you are outside OMP. Members are selected deterministically from the topic; at most 4 speak and a truncated selection is reported. |
 | `theteam serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else `8000`), `--tick-seconds S` (default `$THETEAM_TICK_SECONDS`, else `60`), `--json` | Runs due tasks on an interval and serves `/metrics` + `/health`. The only command that starts a server. |
 | `theteam loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. |
-| `theteam tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`. |
-| `theteam run` | `--only <id>`, `--dry-run`, `--json` | `{ran, skipped, awaiting, failures, results}`. Idempotent. Returns 1 when a task failed. `--only <id>` runs that task now, scheduled or not. |
-| `theteam history` | `--task <id>`, `--json` | `runs`, `successes`, `failures`, `success_rate`, `last_run`, `last_failure`, `breaker`. |
+| `theteam tasks` | `--json` | One row per task: `id`, `name`, `type`, `depends_on`, `priority`, `order`, `next_run`, `last_result`, `breaker`, `breaker_consecutive_failures`. |
+| `theteam run` | `--only <id>`, `--dry-run`, `--json` | `{ran, skipped, awaiting, failures, results, findings, elapsed, purged_orphans, repaired_schedules, schedule_error, context}`. Idempotent. Returns 1 when a task failed. `--only <id>` runs that task now, scheduled or not. |
+| `theteam history` | `--task <id>`, `--json` | Per task: `id`, `runs`, `successes`, `failures`, `success_rate`, `last_run`, `last_result`, `last_failure`, `breaker`, `consecutive_failures`. |
 | `theteam task create` | `--path <file.yaml>` (required), `--json` | The created task, as stored. |
 | `theteam task edit <task_id>` | `--patch <file>` (required), `--json` | The new task state. |
 | `theteam task delete <task_id>` | `--yes`, `--json` | The deletion plan, or what was removed with `--yes`. |
@@ -287,7 +287,7 @@ the rendered view.** Edit the JSON, then regenerate.
 ## Development
 
 ```bash
-python -m pytest -q                  # 765 tests
+python -m pytest -q                  # 835 tests
 bash scripts/check_invariants.sh     # the engineering invariant gate, 7 checks
 ```
 

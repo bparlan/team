@@ -1,0 +1,33 @@
+{
+  "plan": "Read audit and harmonization reports, verify all 8 claims against the codebase, produce self-contained HTML report at reports/doc-truth.html.",
+  "steps": [
+    {
+      "step": "Read audit report",
+      "status": "done",
+      "result": "8 findings across README.md, ARCHITECTURE.md, CLI.md"
+    },
+    {
+      "step": "Read harmonization report",
+      "status": "done",
+      "result": "Zero edits made — harmonization filter required Confidence: verified marker; no finding carries it"
+    },
+    {
+      "step": "Verify claims against code",
+      "status": "done",
+      "result": "All 8 confirmed: 13 cmd_ functions not 12, 835 tests not 765, tasks are JSON in .omp/theteam/tasks/ not YAML, 9 invariant checks not 7, capability subcommand undocumented, MILESTONE_OF pending commands undocumented, update-team YAML at tasks/ not .omp/theteam/tasks/, --json parent-side for capability unverified"
+    },
+    {
+      "step": "Write HTML report",
+      "status": "done",
+      "result": "reports/doc-truth.html — 4 sections, inline CSS, dark/light readable, relative paths"
+    }
+  ],
+  "artifacts_created": [
+    {
+      "path": "reports/doc-truth.html",
+      "type": "html report"
+    }
+  ],
+  "execution_time": 30,
+  "confidence": 0.98
+}

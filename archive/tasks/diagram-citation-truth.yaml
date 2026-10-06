@@ -9,18 +9,18 @@ depends_on_plans:
 note: No phase waits on user input.
 
 phases:
-  - name: p0-baseline
+  - id: p0-baseline
+    name: Freeze the evidence, add check_diagram_truth.py
     status: done
-    one_line: Freeze the evidence: add check_diagram_truth.py
-  - name: p1-correct-citations
+  - id: p1-correct-citations
+    name: Write 9 correct line numbers into diagram
     status: done
-    one_line: Write 9 correct line numbers into diagram
-  - name: p2-enforce-in-the-gate
+  - id: p2-enforce-in-the-gate
+    name: Teach anchor gate to resolve symbols
     status: done
-    one_line: Teach anchor gate to resolve symbols
-  - name: p3-fix-gate-coverage
+  - id: p3-fix-gate-coverage
+    name: Fix gate coverage and blind spot
     status: done
-    one_line: Fix gate coverage and blind spot
-  - name: p4-close-adjacent-gaps
+  - id: p4-close-adjacent-gaps
+    name: Fix small findings
     status: done
-    one_line: Fix small findings

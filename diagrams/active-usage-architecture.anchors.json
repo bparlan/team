@@ -1,19 +1,19 @@
 {
   "revision": "ca3673bf49606fa81260a9d5e7d84f450f68922e",
   "cited": {
-    "theteam/SKILL.md": "cb6a151219c6461a",
-    "theteam/__init__.py": "c0c10fb49eb2d1b5",
+    "theteam/SKILL.md": "374556b5b08f20ed",
+    "theteam/__init__.py": "39192cce47f0a81c",
     "theteam/advisory/commentary.py": "42fd3127b68f93fd",
     "theteam/advisory/context_slice.py": "6cc1f88589144630",
     "theteam/advisory/manager.py": "763d68e053f160d8",
     "theteam/advisory/selector.py": "acc71da67f6e497c",
-    "theteam/cli.py": "b516cd6c5fe6f993",
+    "theteam/cli.py": "6193680c21255fae",
     "theteam/core/agent_isolation.py": "c9ee129d5795b4dd",
     "theteam/core/circuit_breaker.py": "34b772ae040130a0",
     "theteam/state.py": "5aefdc1d2330c63c",
-    "theteam/tasks/executor.py": "06704f13cdc16008",
+    "theteam/tasks/executor.py": "3f8842c1f5572c9e",
     "theteam/tasks/repository.py": "7a47108a51ab5abd",
-    "theteam/tasks/runners/llm.py": "9daad5c0bce492ba",
+    "theteam/tasks/runners/llm.py": "24b5c05f6ffd327a",
     "theteam/tasks/scheduler.py": "37e68a4ed342fca7"
   }
 }

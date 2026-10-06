@@ -185,12 +185,17 @@ def _diagram_paths() -> list[Path]:
 
     Both are recognised by suffix, so a new one is excluded by the same rule
     rather than needing this list edited.
+
+    Only diagrams WITH a sidecar are evaluated. A diagram without a sidecar
+    is not a candidate for this gate.
     """
     excluded = (SIDECAR_SUFFIX, VISUAL_CHECK_SUFFIX)
-    return [
+    diagrams = [
         p for p in sorted(DIAGRAM_DIR.glob("*.json"))
         if not p.name.startswith(".") and not p.name.endswith(excluded)
     ]
+    # Only evaluate diagrams that have a sidecar
+    return [p for p in diagrams if _sidecar_for(p).exists()]
 
 
 def _check_one(diagram_path: Path) -> tuple[int, list[str]]:
@@ -289,11 +294,17 @@ def check() -> int:
     reports: list[list[str]] = []
     worst = OK
     evaluated = 0
+    evaluated_details = []  # Track which diagrams were evaluated and their verdicts
     for diagram_path in diagrams:
         code, lines = _check_one(diagram_path)
         reports.append(lines)
         if code != CANNOT_EVALUATE:
             evaluated += 1
+            evaluated_details.append({
+                "diagram": diagram_path.name,
+                "verdict": _verdict_class(code),
+                "exit_code": code,
+            })
         # BAD_CITATION(4) outranks FINDINGS(3) outranks OK(0); a diagram that
         # cannot be evaluated does not mask a real finding in another.
         if code == BAD_CITATION or (code == FINDINGS and worst == OK):
@@ -311,6 +322,11 @@ def check() -> int:
         f"- **exit code:** {code}",
         "",
     ]
+    if evaluated_details:
+        header += ["## Evaluated diagrams", ""]
+        for d in evaluated_details:
+            header += [f"- `{d['diagram']}`: verdict={d['verdict']}, exit_code={d['exit_code']}"]
+        header += [""]
     for report in reports:
         header += report + [""]
     _report(header)

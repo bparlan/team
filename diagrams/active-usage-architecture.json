@@ -67,7 +67,7 @@
       "sources": [
         {
           "path": "theteam/cli.py",
-          "line": 1203,
+          "line": 1220,
           "label": "build_parser"
         }
       ],
@@ -127,7 +127,7 @@
       "sources": [
         {
           "path": "theteam/__init__.py",
-          "line": 710,
+          "line": 739,
           "label": "run_discussion"
         }
       ],
@@ -187,7 +187,7 @@
       "sources": [
         {
           "path": "theteam/tasks/runners/llm.py",
-          "line": 190,
+          "line": 192,
           "label": "run_llm_phase"
         }
       ],

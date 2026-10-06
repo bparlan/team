@@ -40,6 +40,21 @@ def find_def_line(source: str, symbol: str) -> Optional[int]:
     return None
 
 
+def resolve_symbol(file_path: Path, symbol: str) -> Optional[int]:
+    """Resolve a symbol to its line number in a file.
+    
+    Returns the 1-indexed line number of the def/class, or None if not found.
+    Only handles .py files.
+    """
+    if not file_path.exists() or file_path.suffix != '.py':
+        return None
+    try:
+        source = file_path.read_text(encoding='utf-8')
+    except Exception:
+        return None
+    return find_def_line(source, symbol)
+
+
 def check_diagram(diagram_path: Path, anchor_path: Path) -> List[Dict[str, Any]]:
     """Check one diagram against its sources. Returns list of findings."""
     with open(diagram_path) as f:

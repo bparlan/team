@@ -1,25 +1,25 @@
 {
-  "plan": "Read audit and harmonization reports, verify all 8 claims against the codebase, produce self-contained HTML report at reports/doc-truth.html.",
+  "plan": "Read audit and harmonization reports, verify all claims against live code, produce one self-contained HTML publish report at reports/doc-truth.html with the four required sections.",
   "steps": [
     {
       "step": "Read audit report",
       "status": "done",
-      "result": "8 findings across README.md, ARCHITECTURE.md, CLI.md"
-    },
-    {
-      "step": "Read harmonization report",
-      "status": "done",
-      "result": "Zero edits made — harmonization filter required Confidence: verified marker; no finding carries it"
+      "result": "6 findings: stale test counts (765/789 vs 835 actual), tasks/run/history payload shapes missing fields, 12 subcommands vs 13, undocumented capability subcommand"
     },
     {
       "step": "Verify claims against code",
       "status": "done",
-      "result": "All 8 confirmed: 13 cmd_ functions not 12, 835 tests not 765, tasks are JSON in .omp/theteam/tasks/ not YAML, 9 invariant checks not 7, capability subcommand undocumented, MILESTONE_OF pending commands undocumented, update-team YAML at tasks/ not .omp/theteam/tasks/, --json parent-side for capability unverified"
+      "result": "pytest --collect-only = 835 tests; build_parser registers 13 subparsers including capability@cli.py:1252; tasks_payload returns 10 keys, run_due_tasks returns 11 keys, history_payload returns 10 keys"
+    },
+    {
+      "step": "Verify harmonization coverage",
+      "status": "done",
+      "result": "5 of 6 claims corrected: README.md (count, 3 payload rows, capability row, subcommand count), ONBOARDING.md (count), CHANGELOG.md (count), ARCHITECTURE.md (count, capability row). CLI.md:17 still says 'twelve subcommands' — missed"
     },
     {
       "step": "Write HTML report",
       "status": "done",
-      "result": "reports/doc-truth.html — 4 sections, inline CSS, dark/light readable, relative paths"
+      "result": "reports/doc-truth.html — 4 sections, inline CSS light/dark, relative paths, 1 still-false entry with reason, method paragraph"
     }
   ],
   "artifacts_created": [
@@ -29,5 +29,5 @@
     }
   ],
   "execution_time": 30,
-  "confidence": 0.98
+  "confidence": 0.97
 }

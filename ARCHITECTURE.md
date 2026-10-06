@@ -91,9 +91,10 @@ theteam task create|edit|delete|show  single-task operations
 theteam comment on|off|status         continuous in-context commentary
 theteam watch status|tasks|history    the trust surface, rendered, in the terminal
 theteam manager                      grow the roster from a topic
+theteam capability                   what theteam can actually do right now (measured)
 ```
 
-Twelve subcommands. The list is the whole surface; nothing else is declared.
+Thirteen subcommands. The list is the whole surface; nothing else is declared.
 
 | Command | Arguments and flags | Output you can predict |
 |---|---|---|
@@ -114,6 +115,7 @@ Twelve subcommands. The list is the whole surface; nothing else is declared.
 | `comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
 | `watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | The same payload the view reads, rendered as a frame. `--once` prints one frame and exits. Unmeasured cells read `-` or `never run`, never `0`/`closed`/`intact`. `--monitor` adds a change block; see below. |
 | `manager` | `--topic`, `--status`, `--reset`, `--apply`, `--json` | `--topic` proposes and writes nothing; `--apply` persists. `--status` states why every member is on the roster, and reports any it cannot justify. `--reset` restores the bootstrapped team. |
+| `capability` | `--json` | `{provider_bound, docker_available, spawnable_agents, python_version, writable_project, disk_free_mb}`. Measured at call time, never cached or committed. Reports the world; it does not judge it. |
 | global | `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`), `--json` | Applies to every command. |
 
 > **`run` returns 1 when a task failed** (M9 Phase 4). It previously returned 0 with

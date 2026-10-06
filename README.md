@@ -50,7 +50,7 @@ theteam run                # execute everything currently due
 
 ## Command reference
 
-Twelve subcommands. `--json` works on **either side** of the subcommand for every one of them.
+Thirteen subcommands. `--json` works on **either side** of the subcommand for every one of them.
 
 | Command | Arguments and flags | What you get back |
 |---|---|---|
@@ -71,6 +71,7 @@ Twelve subcommands. `--json` works on **either side** of the subcommand for ever
 | `theteam comment status` | `--json` | `{on, marker, max_members, last_digest, last_opinion, tick_count}`. |
 | `theteam watch <status\|tasks\|history>` | `--once`, `--interval SECONDS` (default 5), `--monitor`, `--json` | A rendered frame, or the payload the frame draws with `--json`. `--monitor` adds a change block; see below. |
 | `theteam manager` | `--topic`, `--status`, `--reset`, `--apply`, `--json` | Proposes roster additions for a topic; `--apply` persists them. `--status` states why every member is on the roster, and reports any it cannot justify. |
+| `theteam capability` | `--json` | `{provider_bound, docker_available, spawnable_agents, python_version, writable_project, disk_free_mb}`. Reports what theteam can actually do right now, measured at call time. Never judges. |
 
 Global: `--project-root PATH` (default `$THETEAM_PROJECT_ROOT`, else `$PWD`).
 

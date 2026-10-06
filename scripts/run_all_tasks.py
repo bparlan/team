@@ -114,33 +114,66 @@ def run_task(task, project_root):
 
 
 def render_html_report(task, phase_results, project_name):
-    """Render a rich HTML report for a single task."""
+    """Render a rich HTML report for a single task using html_template.html."""
     passed = sum(1 for r in phase_results if r["ok"])
     failed = len(phase_results) - passed
+    total = len(phase_results)
 
-    phase_details = []
+    title = task.get("name", task.get("id", "unknown"))
+
+    # Build stats grid
+    stats_grid = f"""
+  <div class="grid">
+    <div class="stat"><span class="n n-ok">{passed}</span><span class="l">Passed</span></div>
+    <div class="stat"><span class="n n-bad">{failed}</span><span class="l">Failed</span></div>
+    <div class="stat"><span class="n">{total}</span><span class="l">Phases</span></div>
+  </div>"""
+
+    # Build phase breakdown
+    phase_rows = []
     for i, r in enumerate(phase_results, 1):
         verdict = "PASS" if r["ok"] else "FAIL"
         phase_name = r["phase"].get("name", "?")
         phase_type = "LLM" if r["phase"].get("runner") == "llm" else "script"
-        phase_details.append(
-            f"<li><strong>Phase {i} ({phase_type}): {phase_name}</strong> — "
-            f"<span class='{'pass' if r['ok'] else 'fail'}'>{verdict}</span></li>"
+        verdict_class = "t-ok" if r["ok"] else "t-bad"
+        phase_rows.append(
+            f"<tr><td>Phase {i}</td><td>{phase_type}</td><td>{phase_name}</td>"
+            f"<td><span class=\"tag {verdict_class}\">{verdict}</span></td>"
+            f"<td>{r.get('detail', r.get('reason', ''))[:120]}</td></tr>"
         )
 
-    title = task.get("name", task.get("id", "unknown"))
+    phase_table = ""
+    if phase_rows:
+        phase_table = f"""
+  <h2>Phase breakdown</h2>
+  <table>
+    <thead><tr><th>#</th><th>Type</th><th>Phase</th><th>Verdict</th><th>Detail</th></tr></thead>
+    <tbody>{''.join(phase_rows)}</tbody>
+  </table>"""
+
+    # Major decisions section (from phase results)
+    decisions = []
+    for i, r in enumerate(phase_results, 1):
+        if r.get("decision"):
+            decisions.append(f"<tr><td>D{i}</td><td>{r['decision']}</td><td>{r.get('rationale', '')[:80]}</td></tr>")
+
+    decisions_section = ""
+    if decisions:
+        decisions_section = f"""
+  <h2>Major Decisions</h2>
+  <table>
+    <thead><tr><th>#</th><th>Decision</th><th>Rationale</th></tr></thead>
+    <tbody>{''.join(decisions)}</tbody>
+  </table>"""
+
     content = f"""
   <h1>{title}</h1>
-  <div class="grid">
-    <div class="stat"><span class="n">{passed}</span><span class="l n-ok">Passed</span></div>
-    <div class="stat"><span class="n">{failed}</span><span class="l n-warn">Failed</span></div>
-    <div class="stat"><span class="n">{len(phase_results)}</span><span class="l">Phases</span></div>
-  </div>
-  <h2>Phase breakdown</h2>
-  <ol>{''.join(phase_details)}</ol>
   <p class="sub">Executed by theteam run-all tasks</p>
-  <div class="meta">Project: {project_name}</div>
-"""
+{stats_grid}
+{phase_table}
+{decisions_section}
+  <p class="meta">Project: {project_name}</p>"""
+
     with open(HTML_TEMPLATE) as f:
         template = f.read()
     return template.replace("{content}", content).replace("{title}", title)

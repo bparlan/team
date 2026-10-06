@@ -36,4 +36,4 @@ phases:
     output: reports/task-contract.html
     memory_limit_mb: 64
 
-order: 9
+order: 13

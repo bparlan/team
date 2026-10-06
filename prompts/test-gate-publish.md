@@ -20,10 +20,9 @@ Write `reports/test-gate.html`. The report must be a self-contained HTML page wi
 ## Rules
 
 - The HTML must validate as a standalone page — `<!DOCTYPE html>`, `<html>`, `<head>`, `<meta charset>`, `<meta name="viewport">`, `<title>`, `<body>`.
-- Color classes: `.pass`, `.fail`, `.warn`, `.bad`, `.info` — match the styles in `scripts/html_template.html`.
+- Color classes: `.summary`, `.pass`, `.fail`, `.warn`, `.bad`, `.info` — match the styles in `scripts/html_template.html`.
 - If all pass, output only the summary line in green and stop — no failure list.
 - The page must be readable in both light and dark mode (the `@media (prefers-color-scheme: light)` block in the template handles this).
-- Do not include the full template CSS — only the rules needed for this report. The template's base styles (font, colors, grid) are already loaded by the browser from the template file. Your report only needs to USE the classes.
 - The template expects these classes: `.summary`, `.pass`, `.fail`, `.warn`, `.bad`, `.info`, `.tag`, `.grid`, `.stat`, `.n`, `.l`, `.why`, `.meta`, `.card`.
 - Only add the classes you actually use; don't invent new ones.
 

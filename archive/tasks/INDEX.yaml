@@ -59,14 +59,14 @@ plans:
     or deleting rules without a human.
 - file: diagram-citation-truth.yaml
   id: diagram-citation-truth
-  status: not-started
+  status: done
   phases: 5
   blocked_on: null
   one_line: Nine diagram citations were never right, not stale. Correct the 9 numbers, then
     teach scripts/update_team_check.py to resolve symbols so they cannot come back.
 - file: document-citation-truth.yaml
   id: document-citation-truth
-  status: not-started
+  status: done
   phases: 5
   blocked_on: null
   one_line: No checker reads ARCHITECTURE.md, README.md, SKILL.md or CLI.md. They carry

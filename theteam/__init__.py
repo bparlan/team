@@ -32,14 +32,20 @@ from .core.state_manager import get_state_manager
 # event bus, loop) is wired where it runs, not re-exported here. These were 41
 # import-for-re-export lines that nothing in the package, the CLI, the tests or
 # the bin scripts ever read. They cost more than dead weight: `core/__init__`
-# eagerly loads `state_manager`, which loads `database`, which loads the
+# eagerly loaded `state_manager`, which loaded `database`, which loaded the
 # PostgreSQL cluster/wal/transaction modules. So every `import theteam` pulled
 # a database layer that §5.1 never placed in this stack. `check_invariants.sh`
 # invariant 7 now measures that.
-
+#
 # 2026-09-29, M7 follow-up. If you need one of these, import it from its own
 # module at the point of use (`from theteam.core.circuit_breaker import ...`).
 # That is what the CLI, the executor and the tests already do.
+#
+# 2026-10-06: database.py now imports postgres_cluster lazily inside properties,
+# so `import theteam` no longer loads the cluster tier. Invariant 7 confirms
+# 7 theteam.core.* modules (checksum, correlation, database, member,
+# state_manager, transactions, wal) and 0 forbidden modules.
+
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, CURRENT_DIR)

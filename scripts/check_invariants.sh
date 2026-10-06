@@ -123,6 +123,18 @@ if echo "$doc_summary" | grep -q 'DRIFT: parser baseline mismatch'; then
   hard_fail=1
 fi
 
+# 9. No 'rich' import on the package entry path. The watch command may
+# import it at the point of use, but 'import theteam' must not pull it.
+# Uses the same AST helper as checks 2 and 6 so a docstring mention does
+# not count as a call site.
+if out=$(python3 scripts/check_call_sites.py "rich" $(find theteam -name '*.py' -not -path '*/__pycache__/*' 2>/dev/null)); then
+  echo "check 9 PASS: no rich import on package entry path"
+else
+  echo "check 9 FAIL: rich import found on package entry path"
+  echo "$out" | sed 's/^/  /'
+  hard_fail=1
+fi
+
 # m4_pending is a non-blocking finding: check 1's safety-layer consumer is
 # still absent and owned by M4. It is read here so the pattern is real --
 # before this, the variable was assigned at :25 and read nowhere, which is

@@ -1,6 +1,6 @@
 # Truth Gate Publish
 
-You are the **pragmatist**. Turn the truth-gate JSON handoff into a structured JSON summary for the reporter skill to render.
+You are the **pragmatist**. Ensure the truth-gate phase produces human-readable output for the reporter skill.
 
 ## Input
 
@@ -8,31 +8,13 @@ Read `.omp/theteam/reports/truth-gate.json`. It has `total_checked`, `total_find
 
 ## Output
 
-Write `.omp/theteam/reports/truth-gate-publish.json` with this exact schema:
-
-```json
-{
-  "task": "truth-gate",
-  "status": "pass" | "findings" | "fail",
-  "summary": "N checked, M findings, C cannot-evaluate",
-  "stats": {
-    "total_checked": <number>,
-    "total_findings": <number>,
-    "cannot_evaluate": <number>,
-    "pass_count": <number>
-  },
-  "results": [
-    {"checker": "<id>", "verdict": "<pass|findings|fail>", "findings": <number>, "top_finding": "<truncated 80 chars>"}
-  ],
-  "timestamp": "<ISO 8601>"
-}
-```
+Write `reports/truth-gate.json` with the same data (verified/unchanged) — do not construct HTML. The **reporter skill** reads this JSON (along with other task outputs) and renders the final `reports/run-all-summary.html` using `scripts/html_template.html`.
 
 ## Rules
 
-- Do NOT write HTML. The reporter skill renders the final page.
-- A checker with findings > 0 gets `verdict: "findings"`. A checker with exit_code 0 gets `verdict: "pass"`.
-- Top finding per checker should be the first line containing "FAIL", "findings", or "error" — truncated to 80 chars.
+- Do NOT write `<html>`, `<style>`, or `<body>` tags. The reporter skill handles the full HTML page.
+- Only validate/confirm the JSON structure is correct; do not add or modify data.
+- Link to files by relative path from the repo root — never absolute paths.
 - No praise, no restatement of the task. The human reads the outcome.
 
 ---

@@ -1,6 +1,6 @@
 # Test Gate Publish
 
-You are the **pragmatist**. Turn the test-gate JSON handoff into a structured JSON summary for the reporter skill to render.
+You are the **pragmatist**. Ensure the test-gate phase produces human-readable output for the reporter skill.
 
 ## Input
 
@@ -8,32 +8,12 @@ Read `.omp/theteam/reports/test-gate.json`. It has `passed`, `failed`, `subtests
 
 ## Output
 
-Write `.omp/theteam/reports/test-gate-publish.json` with this exact schema:
-
-```json
-{
-  "task": "test-gate",
-  "status": "pass" | "fail" | "findings",
-  "summary": "N passed, M failed, S subtests in D seconds",
-  "stats": {
-    "passed": <number>,
-    "failed": <number>,
-    "subtests": <number>,
-    "duration_seconds": <number>
-  },
-  "failures": [
-    {"test": "<name>", "error": "<message>", "file": "<path>", "line": <number>}
-  ],
-  "all_pass": <boolean>,
-  "timestamp": "<ISO 8601>"
-}
-```
+Write `reports/test-gate.json` with the same data (verified/unchanged) — do not construct HTML. The **reporter skill** reads this JSON (along with other task outputs) and renders the final `reports/run-all-summary.html` using `scripts/html_template.html`.
 
 ## Rules
 
-- Do NOT write HTML. The reporter skill renders the final page.
-- If all tests pass, set `all_pass: true` and `failures: []`.
-- If failures exist, list each one with the test name, error message, and file/line if available.
+- Do NOT write `<html>`, `<style>`, or `<body>` tags. The reporter skill handles the full HTML page.
+- Only validate/confirm the JSON structure is correct; do not add or modify data.
 - Link to files by relative path from the repo root — never absolute paths.
 - No praise, no restatement of the task. The human reads the outcome.
 

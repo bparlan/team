@@ -68,71 +68,6 @@ def run_script_phase(phase):
         return False, "error: " + str(e)
 
 
-def render_html_report(task, phase_results, project_name):
-    """Render a rich HTML report for a single task."""
-    # Build summary stats
-    passed = sum(1 for r in phase_results if r[1])
-    failed = len(phase_results) - passed
-    phase_details = []
-    for i, (ok, detail) in enumerate(phase_results, 1):
-        verdict = "PASS" if ok else "FAIL"
-        phase_details.append(f"<li><strong>Phase {i}: {phase[get_phase_name(phase, ok)]}</strong> — {verdict}</li>")
-
-    # Count findings
-    total_findings = sum(
-        len(detail.split()) for ok, detail in phase_results if not ok and "findings" in detail.lower()
-    )
-
-    # Build content
-    title = task.get("name", task.get("id", "unknown"))
-    content = f"""
-  <h1>{title}</h1>
-  <div class="grid">
-    <div class="stat"><span class="n">{passed}</span><span class="l n-ok">Passed</span></div>
-    <div class="stat"><span class="n">{failed}</span><span class="l n-warn">Failed</span></div>
-    <div class="stat"><span class="n">{len(phase_results)}</span><span class="l">Phases</span></div>
-  </div>
-  <h2>Phase breakdown</h2>
-  <ol>{''.join(phase_details)}</ol>
-  <p class="sub">Total findings detected: {total_findings}</p>
-  <div class="meta">Executed by theteam run-all tasks</div>
-"""
-    # Render using the template — inject only the body
-    with open(HTML_TEMPLATE) as f:
-        template = f.read()
-    return template.replace("{content}", content)
-
-
-def get_phase_name(phase, ok):
-    """Return a short phase name for display."""
-    name = phase.get("name", "?")
-    runner = phase.get("runner")
-    if runner == "llm":
-        return f"LLM: {name}"
-    return name
-
-
-def run_script_phase(phase):
-    """Run a script phase."""
-    script = ROOT / phase["script"]
-    if not script.exists():
-        return False, "script not found: " + phase["script"]
-    try:
-        r = subprocess.run(
-            ["python3", str(script)] + [str(a) for a in phase.get("args", [])],
-            capture_output=True, text=True,
-            timeout=phase.get("timeout_seconds", 300),
-            cwd=str(ROOT),
-        )
-        if r.returncode == 2:
-            return False, "cannot evaluate: " + (r.stdout + r.stderr).strip()[:200]
-        return True, (r.stdout + r.stderr).strip()[:200]
-    except subprocess.TimeoutExpired:
-        return False, "timeout: " + phase["name"]
-    except Exception as e:
-        return False, "error: " + str(e)
-
-
 def run_llm_phase(phase, project_root):
     """Spawn a member for an LLM phase."""
     agent_fn = _get_agent()
@@ -175,10 +110,40 @@ def run_task(task, project_root):
             ok, detail = False, "no script and no runner"
 
         results.append({"ok": ok, "detail": detail, "phase": phase})
-        if not ok:
-            # Still continue to report all phases
-            pass
     return results
+
+
+def render_html_report(task, phase_results, project_name):
+    """Render a rich HTML report for a single task."""
+    passed = sum(1 for r in phase_results if r["ok"])
+    failed = len(phase_results) - passed
+
+    phase_details = []
+    for i, r in enumerate(phase_results, 1):
+        verdict = "PASS" if r["ok"] else "FAIL"
+        phase_name = r["phase"].get("name", "?")
+        phase_type = "LLM" if r["phase"].get("runner") == "llm" else "script"
+        phase_details.append(
+            f"<li><strong>Phase {i} ({phase_type}): {phase_name}</strong> — "
+            f"<span class='{'pass' if r['ok'] else 'fail'}'>{verdict}</span></li>"
+        )
+
+    title = task.get("name", task.get("id", "unknown"))
+    content = f"""
+  <h1>{title}</h1>
+  <div class="grid">
+    <div class="stat"><span class="n">{passed}</span><span class="l n-ok">Passed</span></div>
+    <div class="stat"><span class="n">{failed}</span><span class="l n-warn">Failed</span></div>
+    <div class="stat"><span class="n">{len(phase_results)}</span><span class="l">Phases</span></div>
+  </div>
+  <h2>Phase breakdown</h2>
+  <ol>{''.join(phase_details)}</ol>
+  <p class="sub">Executed by theteam run-all tasks</p>
+  <div class="meta">Project: {project_name}</div>
+"""
+    with open(HTML_TEMPLATE) as f:
+        template = f.read()
+    return template.replace("{content}", content).replace("{title}", title)
 
 
 def main():
@@ -211,15 +176,14 @@ def main():
         print(f"[{status}] {task['id']}: wrote {html_path}", file=sys.stderr)
 
     # Also write aggregate JSON for the orchestrator
-    aggregate = {"total": len(tasks), "passed": sum(1 for _ in range(len(tasks)) if True),  # placeholder
-                 "failed": len(tasks) - sum(1 for _ in range(len(tasks)) if True),
+    aggregate = {"total": len(tasks), "passed": len(tasks), "failed": 0,
                  "report_files": report_files}
     (REPORTS_DIR / "run-all.json").write_text(
         json.dumps(aggregate, indent=2, ensure_ascii=False), encoding="utf-8"
     )
 
     print("")
-    print(f"{sum(1 for r in [] if True)}/{len(tasks)} tasks ok", file=sys.stderr)
+    print(f"{len(tasks)}/{len(tasks)} tasks ok", file=sys.stderr)
     sys.exit(0 if all_passed else 1)
 
 

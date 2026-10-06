@@ -71,5 +71,5 @@ phases:
     memory_limit_mb: 64
     order: 4
 
-order: 2
+order: 6
 depends_on: [project-integrity]

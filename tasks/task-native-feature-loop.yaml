@@ -46,4 +46,4 @@ phases:
     prompt_file: prompts/native-feature-loop-publish.md
     output: reports/native-feature-loop.html
     memory_limit_mb: 64
-order: 7
+order: 11

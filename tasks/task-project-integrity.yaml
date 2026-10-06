@@ -31,4 +31,4 @@ phases:
     args: []
     timeout_seconds: 300
     memory_limit_mb: 64
-order: 0
+order: 1

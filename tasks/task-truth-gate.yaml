@@ -51,4 +51,4 @@ phases:
     memory_limit_mb: 64
     order: 2
 
-order: 1
+order: 5

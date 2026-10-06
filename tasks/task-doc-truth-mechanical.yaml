@@ -60,5 +60,5 @@ phases:
     memory_limit_mb: 64
     order: 4
 
-order: 4
+order: 7
 depends_on: [doc-truth]

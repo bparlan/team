@@ -37,4 +37,4 @@ phases:
     output: reports/prompt-truth.html
     memory_limit_mb: 64
 
-order: 10
+order: 14

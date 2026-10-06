@@ -74,4 +74,4 @@ phases:
     timeout_seconds: 120
     memory_limit_mb: 64
     writable_project: true
-order: 7
+order: 10

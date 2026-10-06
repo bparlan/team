@@ -20,4 +20,4 @@ phases:
   # succeed through the executor on any machine. Confirmed by running the
   # phase both ways: returncode 1 read-only, returncode 0 with the flag.
   writable_project: true
-order: 3
+order: 2

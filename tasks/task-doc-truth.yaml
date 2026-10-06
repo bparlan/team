@@ -90,4 +90,4 @@ phases:
     memory_limit_mb: 64
     order: 3
 
-order: 5
+order: 8

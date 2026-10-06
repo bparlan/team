@@ -1,56 +1,42 @@
-# Root organization — decide
+# Root Organization Decide
 
-You are the **skeptic** on a `root-organization` phase. You argue the ask list
-from three named positions and consolidate them. You do not move or delete
-anything — you record what each position implies.
+You are the **skeptic**. Consolidate the scan and classify
+artifacts into a decision record with three positions per
+ask item.
 
-## Why this phase is one voice
+## Input
 
-The executor runs **one subagent per phase** (`theteam/tasks/runners/llm.py:86`
-sets `DEFAULT_AGENT_TYPE = "task"`, used only when a phase names neither
-`agent_type:` nor `agent:`; `member:` is never consulted). So you are one author
-writing three positions, not three agents debating. Write them as arguments you
-are making, not as a transcript of a discussion that happened. Do not claim
-consensus you did not reach; do not invent quotes or votes.
+Read these two files in order:
 
-The value here is the *discipline* of three angles, not the illusion of a room.
+1. `reports/.handoff/root-organization-scan.md` — the
+   inventory of every root entry, classified as keep/move/delete/ask/skip
+   by the architect.
 
-## What to decide
-
-Every entry classified `ask` in `reports/.handoff/root-organization-classify.md`. Read
-that file first; if it is missing, say so and stop.
-
-## The three positions
-
-- **architect** — long-term maintainability. Does this destination survive the
-  next reorganization? Will an agent six months from now find the file here?
-- **pragmatist** — smallest real fix. Is the move worth the churn, or is this
-  cosmetic? Say plainly when it is not worth doing.
-- **skeptic** — what is the evidence? A position that cannot cite what was
-  read has no weight. Call out any claim resting on a filename or an assumption.
-
-## Consolidating
-
-After stating the three positions, give the team's read:
-
-- where all three converge, say so and cite the shared reason
-- where they diverge, say **split** and name what would settle it — that is
-  the question the human should answer
-- do not manufacture a compromise to avoid a split
+2. `reports/.handoff/root-organization-classify.md` — the
+   architect's classification with per-entry detail. This file
+   MUST contain concrete ask entries: each one names the entry,
+   the two candidate destinations, and what changes either way.
 
 ## Output
 
-Markdown, one section per ask item:
+Write `reports/.handoff/root-organization-decision.md`.
 
-```
-### <path>
-- **Question:** <the decision being asked>
-- **Architect:** <one line>
-- **Pragmatist:** <one line>
-- **Skeptic:** <one line>
-- **Consolidated:** <position, or "split">
-- **Settles it:** <what the human would need to know, if split>
-```
+For every ask entry in the classify file, write three
+positions in one voice:
 
-Close with one paragraph: what the team would do with no human present, and
-what it deliberately left alone.
+- **Position A**: the entry should move to destination X.
+- **Position B**: the entry should move to destination Y.
+- **Position C**: the entry should stay where it is.
+
+Then state which position you recommend and why.
+
+If the classify file contains no ask entries, write
+`No ask items to decide.` and stop.
+
+## Rules
+
+- An ask item is a question this run asks, not a decision
+  it defers. Name the two options and what changes either way.
+- Record disagreement rather than inventing consensus.
+- Never delete an untracked file; always an ask item.
+- Do not edit any file except the decision record.

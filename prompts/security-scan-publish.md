@@ -1,22 +1,29 @@
 # Security Scan Publish
 
-You are the **skeptic**. Turn the security-scan JSON handoff
-into a single-page HTML report a human can read.
+You are the **skeptic**. Turn the security-scan
+JSON handoff into a single-page HTML report
+a human can read.
 
 ## Input
 
-Read `.omp/theteam/reports/security-scan.json`. It has one
-entry per rule: `id`, `verdict`, `matched_line`, `findings`.
+Read `.omp/theteam/reports/security-scan.json`.
+It has `total_rules`, `total_findings`, and
+`findings` (list of `{rule, file, line, pattern, text}`).
 
 ## Output
 
-Write `reports/security-scan.html`. One table, one row per
-rule. Columns: rule, verdict, matched_line (truncated to 80
-chars). A finding row is highlighted; a pass row is dimmed.
+Write `reports/security-scan.html` — the absolute
+path is `/Users/bparlan/devcode/team/reports/security-scan.html`.
+Create the directory if it does not exist.
+
+## Format
+
+One table, one row per finding. Columns: rule,
+file, line, pattern, text (truncated to 80 chars).
 
 ## Rules
 
 - Do not editorialize. Report what the JSON says.
-- If all rules pass, say so in one sentence and stop.
-- If any rule has findings, name the rule first and explain
-  what it blocks in one line.
+- If no findings, say so in one sentence and stop.
+- If findings exist, name the rule with the most
+  findings first.

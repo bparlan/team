@@ -3,16 +3,24 @@ name: Native Feature Loop
 type: analysis
 priority: 7
 description: >-
-  Four phases in order: skeptic reconnaissance decides whether the feature is
-  real, pragmatist implements the smallest change that satisfies it, pytest
-  proves it, and a documentation sync makes the documents describe what the
-  code now does. The test phase stays a script, not a prompt: a test suite is
-  deterministic and must not be judged by a model.
+  Five phases in order: plan_check scans for active feature plans, skeptic
+  reconnaissance decides whether the selected feature is real, pragmatist
+  implements the smallest change that satisfies it, pytest proves it, and a
+  documentation sync makes the documents describe what the code now does.
+  The test phase stays a script, not a prompt: a test suite is deterministic
+  and must not be judged by a model.
 failure_handling: retry
 expected_output: >-
   An implementation, a passing test suite, and documentation that matches
   the code, or a named reason the feature was not built.
 phases:
+  - name: plan_check
+    runner: llm
+    member: skeptic
+    agent_type: reviewer
+    prompt_file: prompts/native-feature-loop-plan-check.md
+    output: .omp/theteam/reports/native-feature-plan-check.md
+    memory_limit_mb: 64
   - name: recon
     runner: llm
     member: skeptic

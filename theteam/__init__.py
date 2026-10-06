@@ -68,7 +68,7 @@ def _require_provider():
     at class-body or module scope would run at import time, which is the
     defect this placement avoids.
     """
-    if "default_api" not in globals():
+    if "agent" not in globals() or not callable(globals()["agent"]):
         # The first clause is load-bearing: `scripts/smoke_cli.py` substring-
         # matches "requires an OMP session" to recognise this as a named
         # refusal rather than a silent non-zero exit. Do not reword it.

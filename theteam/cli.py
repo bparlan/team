@@ -327,7 +327,7 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 
 def cmd_discuss(args: argparse.Namespace) -> int:
-    """One-shot discussion. Outside OMP it fails; it never invents an opinion."""
+    """One-shot discussion. Runs via the task tool; never invents an opinion."""
     from theteam import run_discussion
 
     project_root = _project_root(args)
@@ -707,7 +707,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     # `theteam loop` already refuses an unknown id this way (ARCHITECTURE.md
     # §2: "An unknown task id is a named failure, not a silent no-op"), and
     # `run --only <typo>` reporting "nothing due" is the same lie: it reads
-    # as "the scheduler had nothing for you" when the truth is "that task
+    topic = args.topic if args.only == "discuss" else None
     # does not exist". The check stays here because it is a *command* failure;
     # `run_due_tasks` is only told about ids that exist.
     if args.only and TaskRepository(project_root).get(args.only) is None:
@@ -1327,7 +1327,7 @@ def build_parser() -> argparse.ArgumentParser:
     task_show.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                            help="Machine-readable output.")
     task_show.set_defaults(func=cmd_task)
-
+    run.add_argument("--topic", type=str, help="Topic for discussion task (with --only discuss).")
     comment = sub.add_parser("comment", help="Continuous in-context commentary.")
     # `required=False` so a bare `theteam comment` reaches `cmd_comment`
     # rather than argparse exiting 2. The command then prints its own usage

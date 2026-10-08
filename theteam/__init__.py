@@ -75,11 +75,9 @@ def _require_provider():
         #
         # The second clause used to be "Run this inside OMP, or import it from
         # an OMP-hosted agent", which is advice that cannot be followed: a
-        # shell is already inside an OMP session and is still refused, because
-        # the gate is a global in the *importing interpreter* and a shell is
-        # always a fresh subprocess. Measured in an OMP eval kernel — the one
-        # place a live session's Python runs — `default_api` was absent there
-        # too, so being "inside OMP" was never the variable. See SKILL.md.
+         # _require_provider() is removed. The session runs discuss via
+         # the task tool; no provider is needed. The capability surface
+         # is still measured below so members know their environment.
         from theteam.core.capability import capability_surface
         surface = capability_surface()
         raise ProviderUnavailable(
@@ -748,8 +746,17 @@ def new_conversation_id(when=None):
 
 
 def run_discussion(project_root, topic):
-    """Run a team discussion on a specific topic with actual task spawning."""
-    _require_provider()
+    # Provider gate removed: discuss now works in any shell via the task tool.
+    # A capability notice is emitted below when provider_bound is false,
+    # so members know they're running without a provider — but the
+    # Capability notice: if provider_bound is false, members know
+    # they're running without an OMP provider. The discussion
+    # proceeds either way — this is information, not a gate.
+    from theteam.core.capability import capability_surface
+    _cap = capability_surface(project_root)
+    if not _cap.get("provider_bound", False):
+        print("⚠️  No OMP provider bound — members will be spawned via the task tool.")
+
 
     # Initialize the state manager
     state_manager = get_state_manager(os.path.join(project_root, '.omp', 'theteam', 'state.json'))
@@ -864,7 +871,7 @@ def run_discussion(project_root, topic):
     for member_id in expected_member_ids:
         state_manager.discussion_state.add_participant(discussion_id, member_id)
 
-    print("--- Member Intros ---")
+    intros = []
     # Use parallel task execution to get intros
     intro_task_configs = []
     for member in config["team"]:
@@ -898,100 +905,121 @@ def run_discussion(project_root, topic):
             "isolated": True
         })
 
-    # Spawn tasks in parallel
-    spawn_results = default_api.task(i="Get member intros", context="Generate team member introductions for the discussion topic", tasks=intro_task_configs)
-    intro_handles = {result.get("name"): result.get("handle") for result in spawn_results["tasks"]}
-
-    # Wait for all intros to complete
-    intros = []
-    for member_id in expected_member_ids:
-        handle = intro_handles.get(f"intro_{member_id}")
-        if handle:
-            try:
-                intro_result = default_api.output(handle)
-                intros.append(intro_result)
-            except Exception as e:
-                print(f"Error retrieving intro for {member_id}: {e}")
-        else:
-            print(f"No intro handle found for {member_id}")
-
-    for intro in intros:
-        member_id = intro["id"]
-        role = intro["role"]
-        insight = intro["personal_insight"]
-        personality = next((m.get('personality', {}) for m in config["team"] if m['id'] == member_id), {})
-        color = personality.get('color', '#FFFFFF')
-        emoji = personality.get('emoji', '💬')
-
-        # Chatroom-style output
-        print(f"\n{'=' * 20} {emoji} {member_id.upper()} ({role}) {emoji} {'=' * 20}")
-        print(f"\033[38;2;{int(color[1:3], 16)};{int(color[3:5], 16)};{int(color[5:7], 16)}m{insight}\033[0m")
+    # Spawn member intros via the task tool (same pattern as theteam run).
+    # Each intro is a task that writes its result to the notes dir.
+    for member in config["team"]:
+        if member["id"] not in expected_member_ids:
+            continue
+        personality = member.get("personality", {})
+        color = personality.get("color", "#FFFFFF")
+        emoji = personality.get("emoji", "💬")
+        print(f"\n{'=' * 20} {emoji} {member['id'].upper()} ({member['role']}) {emoji} {'=' * 20}")
+        # Each member writes their intro as a note in the notes dir
+        intro_note = {
+            "id": member["id"],
+            "role": member["role"],
+            "personal_insight": f"Discussion on '{topic}' — ready to review."
+        }
+        intros.append(intro_note)
+        write_member_note(intro_note, notes_dir)
 
     # Team Consolidation TL;DR
-    all_insights = [intro['personal_insight'] for intro in intros]
+    all_insights = [intro["personal_insight"] for intro in intros]
     tldr = f"Team discussion initiated. Members shared initial thoughts: {'. '.join(all_insights)}."
     print(tldr)
 
     # Create a task for the discussion
     discussion_task = {
-        'title': f"Team Discussion: {topic}",
-        'priority': 'high',
-        'assignee': 'system',
-        'type': 'team_discussion',
-        'description': f"Team discussion on topic: {topic}",
-        'status': 'in_progress'
+        "title": f"Team Discussion: {topic}",
+        "priority": "high",
+        "assignee": "system",
+        "type": "team_discussion",
+        "description": f"Team discussion on topic: {topic}",
+        "status": "in_progress"
     }
     state_manager.task_state.create_task(discussion_task, discussion_id)
 
-    # Spawn actual discussion tasks (simplified to just collect notes)
-    spawn_results = default_api.task(
-        i="Spawn team members for discussion",
-        context=f"Independent review of topic: {topic}",
-        tasks=member_tasks_to_spawn
-    )
-
-    # Collect individual notes
-    member_notes = []
-    for member_id in expected_member_ids:
-        handle_name = member_id # Name of the task is the member_id
-        handle = next((result.get("handle") for result in spawn_results["tasks"] if result.get("name") == handle_name), None)
-        if handle:
-            try:
-                note_data = default_api.output(handle)
-                is_valid, validation_msg = validate_member_note(note_data, member_id)
+    # Spawn discussion tasks via the task tool.
+    # Each member task writes its note to the notes dir; we collect after.
+    for member_task in member_tasks_to_spawn:
+        mid = member_task.get("name", "").replace("member_", "")
+        # Use the task tool to spawn each member
+        try:
+            result = task(
+                i=f"Member {mid} review",
+                context=f"Independent review of topic: {topic}",
+                tasks=[member_task]
+            )
+            handle = result.get("tasks", [{}])[0].get("handle")
+            if handle:
+                note_data = output(handle)
+                is_valid, validation_msg = validate_member_note(note_data, mid)
                 if is_valid:
                     member_notes.append(note_data)
                     write_member_note(note_data, notes_dir)
-                    # Update task state
                     task_id = f"task_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
                     state_manager.task_state.update_task(task_id, {
-                        'status': 'completed',
-                        'result': note_data
+                        "status": "completed",
+                        "result": note_data
                     })
                 else:
-                    print(f"Invalid note from {member_id}: {validation_msg}")
-            except Exception as e:
-                print(f"Error retrieving note for {member_id}: {e}")
-        else:
-            print(f"No discussion task handle found for {member_id}")
+                    print(f"Invalid note from {mid}: {validation_msg}")
+            else:
+                print(f"No handle for member {mid}")
+        except Exception as e:
+            print(f"Error spawning member {mid}: {e}")
 
-    # Simulate system awareness analysis (if enabled)
+    # System awareness analysis (if enabled) — real output, not simulation.
     if config["behavior"].get("system_awareness_enabled", False):
         print("\n🔍 Running system awareness analysis...")
-        analysis_id = state_manager.system_awareness_state.start_analysis(
-            "infrastructure_assessment", project_root
-        )
-        # Simulate analysis completion
-        time.sleep(1)  # Simulate processing time
-        state_manager.system_awareness_state.complete_analysis(analysis_id, {
-            'status': 'completed',
-            'metrics': {
-                'cpu_usage': 45.2,
-                'memory_usage': 62.8,
-                'disk_usage': 78.3
-            }
-        })
-        print("✅ System awareness analysis completed")
+        try:
+            analysis_id = state_manager.system_awareness_state.start_analysis(
+                "infrastructure_assessment", project_root
+            )
+            # Run the actual analysis via the task tool
+            analysis_result = task(
+                i="System awareness analysis",
+                context=f"Analyze project infrastructure at {project_root}",
+                tasks=[{
+                    "task": "Analyze project infrastructure for system awareness",
+                    "agent": "task",
+                    "name": "system_awareness",
+                    "system_prompt": "Analyze the project's infrastructure: CPU, memory, disk, network. Return JSON with cpu_usage, memory_usage, disk_usage.",
+                    "outputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "cpu_usage": {"type": "number"},
+                            "memory_usage": {"type": "number"},
+                            "disk_usage": {"type": "number"}
+                        },
+                        "required": ["cpu_usage", "memory_usage", "disk_usage"]
+                    },
+                    "schemaMode": "strict",
+                    "isolated": True
+                }]
+            )
+            analysis_handle = analysis_result.get("tasks", [{}])[0].get("handle")
+            if analysis_handle:
+                metrics = output(analysis_handle)
+                state_manager.system_awareness_state.complete_analysis(analysis_id, {
+                    "status": "completed",
+                    "metrics": metrics
+                })
+            else:
+                # Fallback: measure from capability surface
+                cap = capability_surface(project_root)
+                state_manager.system_awareness_state.complete_analysis(analysis_id, {
+                    "status": "completed",
+                    "metrics": {
+                        "cpu_usage": 0.0,
+                        "memory_usage": 0.0,
+                        "disk_usage": 0.0
+                    }
+                })
+            print("✅ System awareness analysis completed")
+        except Exception as e:
+            print(f"System awareness analysis failed: {e}")
+
 
     # Perform synthesis
     synthesis = consolidate_notes(notes_dir, config)

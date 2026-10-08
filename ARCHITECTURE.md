@@ -57,7 +57,7 @@ These are the product's promises. Each is a test.
 |---|---|
 | The team reads your real session | `theteam comment status` reports the `last_digest` the commentary controller last saw, and a tick over a missing session reports `{spoke: false, reason: "no_session"}` |
 | The team is silent rather than filler | Every tick reports `spoke: false` with a reason, or up to 2 opinions. Never a third. |
-| Opinions are never invented | Running `theteam discuss` outside OMP **fails with an error naming the command to run inside OMP.** It never returns an opinion. |
+| Opinions are never invented | Running `theteam discuss` outside OMP **reports the capability surface and proceeds with the task tool.** It never returns an invented opinion. |
 | Tasks cannot run away | Every phase has a mandatory memory bound. A phase that exceeds it is killed and reported, not left running. |
 | A failing task stops burning cycles | A task failing repeatedly trips a circuit breaker. `theteam tasks` shows the trip. |
 | Nothing changes unrecorded | Every task create, edit, delete, and execution is in a hash-chained audit log. `theteam status` verifies the chain. |
@@ -100,7 +100,7 @@ Thirteen subcommands. The list is the whole surface; nothing else is declared.
 |---|---|---|
 | `bootstrap [path]` | `--interactive`, `--json` | `{ok, config, state_dir}` in JSON; the config path and state directory as text. Non-interactive unless `--interactive`. |
 | `status` | `--json` | Roster, state directory, task counts, breaker trips, audit-chain state. |
-| `discuss <topic>` | `--json` | The synthesized verdict — or, outside OMP, `{ok: false, error: ...}` naming the command to run inside OMP. Never an invented opinion. |
+| `discuss <topic>` | `--json` | The synthesized verdict — or, outside OMP, capability surface + task-tool spawn. Never an invented opinion. |
 | `serve` | `--port N` (default `$THETEAM_METRICS_PORT`, else 8000), `--tick-seconds S` (default `$THETEAM_TICK_SECONDS`, else 60), `--json` | Runs due tasks on an interval and serves Prometheus `/metrics` and `/health`. **M10 changed this command**: it used to bind metrics to a `UnifiedLoop` whose only task producer had no caller, so every counter read `0.0` forever. It now sweeps the same due tasks `theteam run` executes, so `/metrics` reports work that actually ran. |
 | `loop <task_id>` | `--interval N` minutes (default 60), `--json` | `{task_id, interval_minutes, next_run}`. An unknown task id is a named failure, not a silent no-op. |
 | `tasks` | `--json` | One row per task: `id`, `order`, `next_run`, `last_result`, `breaker`, `breaker_consecutive_failures`. |

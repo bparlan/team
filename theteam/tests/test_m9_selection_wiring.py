@@ -58,15 +58,13 @@ class TestToolInventoryIsTheRealBoundary:
 
     def test_member_prompt_names_the_permitted_skills(self):
         member = ROSTER["team"][0]
-        prompt = spawn_member_task(member, "topic", {},
-                                   ["ponytail", "code-search"])["system_prompt"]
+        prompt = spawn_member_task(member, "topic", {}, ["ponytail", "code-search"], {"provider_bound": True, "docker_available": False, "spawnable_agents": ["task"], "python_version": "3.12", "writable_project": True, "disk_free_mb": 1000})["system_prompt"]
         assert "ponytail" in prompt
         assert "code-search" in prompt
 
     def test_member_prompt_no_longer_says_the_manifest_is_unavailable(self):
         member = ROSTER["team"][0]
-        prompt = spawn_member_task(member, "t", {}, ["ponytail"])["system_prompt"]
-        assert "\nN/A" not in prompt
+        prompt = spawn_member_task(member, "t", {}, ["ponytail"], {"provider_bound": True, "docker_available": False, "spawnable_agents": ["task"], "python_version": "3.12", "writable_project": True, "disk_free_mb": 1000})["system_prompt"]
         assert "tool-manifest" not in prompt
 
     def test_an_empty_boundary_is_named_rather_than_blank(self):

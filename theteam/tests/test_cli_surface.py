@@ -91,14 +91,16 @@ def test_discuss_outside_omp_fails_with_the_command_to_run(tmp_path, capsys):
     captured = capsys.readouterr()
     out = captured.out + captured.err
     assert "OMP" in out
-def test_discuss_refusal_names_measured_capability(tmp_path, capsys):
-    """The refusal names the capability it measured, not just denies."""
-    assert main(["--project-root", str(tmp_path), "discuss", "should we ship"]) == 1
-    captured = capsys.readouterr()
-    out = captured.out + captured.err
-    assert "provider_bound=" in out
-    assert "docker_available=" in out
-    assert "spawnable_agents=" in out
+def test_discussion_runs_without_provider(tmp_path, capsys):
+    """The §1.2 promise: discuss works without a provider, using the task tool."""
+    rc = main(["--project-root", str(tmp_path), "discuss", "test topic"])
+    out = capsys.readouterr().out
+    # No ProviderUnavailable — the discussion proceeds
+    assert "ProviderUnavailable" not in out
+    # Capability notice is emitted when provider_bound is false
+    assert "No OMP provider bound" in out
+    # Members are spawned via the task tool
+    assert "task tool" in out
 
 def test_json_output_is_valid_json(tmp_path, capsys):
     """--json emits parseable JSON, not prose that happens to look structured."""

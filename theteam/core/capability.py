@@ -68,15 +68,7 @@ def _disk_free_mb(project_root: str) -> int:
 
 
 def _provider_bound() -> bool:
-    """True when the importing interpreter has bound a provider.
-
-    Checked on the theteam module rather than with `hasattr(theteam,
-    "default_api")` inline, because this module is imported by
-    `theteam/__init__.py` before the host has had a chance to bind anything:
-    at that point the attribute is absent and the check would be a constant
-    False. Reading the module out of sys.modules sees whatever the host set
-    by the time the probe is actually called.
-    """
+    """True when the importing interpreter has bound a provider."""
     module = sys.modules.get("theteam")
     return module is not None and hasattr(module, "default_api")
 

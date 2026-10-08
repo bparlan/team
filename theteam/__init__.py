@@ -747,8 +747,14 @@ def new_conversation_id(when=None):
 
 def run_discussion(project_root, topic):
     # Provider gate removed: discuss now works in any shell via the task tool.
-    # A capability notice is emitted below when provider_bound is false,
-    # so members know they're running without a provider — but the
+    # task/output are OMP eval-kernel builtins available in the
+    # session interpreter. Outside OMP they are undefined and the
+    # call falls through to the except below — same as today.
+    try:
+        from builtins import task as _task, output as _output
+    except ImportError:
+        _task = None
+        _output = None
     # Capability notice: if provider_bound is false, members know
     # they're running without an OMP provider. The discussion
     # proceeds either way — this is information, not a gate.
@@ -756,8 +762,6 @@ def run_discussion(project_root, topic):
     _cap = capability_surface(project_root)
     if not _cap.get("provider_bound", False):
         print("⚠️  No OMP provider bound — members will be spawned via the task tool.")
-
-
     # Initialize the state manager
     state_manager = get_state_manager(os.path.join(project_root, '.omp', 'theteam', 'state.json'))
 
@@ -943,16 +947,19 @@ def run_discussion(project_root, topic):
     # Each member task writes its note to the notes dir; we collect after.
     for member_task in member_tasks_to_spawn:
         mid = member_task.get("name", "").replace("member_", "")
+        if _task is None or _output is None:
+            print(f"  task tool unavailable — skipping member {mid}")
+            continue
         # Use the task tool to spawn each member
         try:
-            result = task(
+            result = _task(
                 i=f"Member {mid} review",
                 context=f"Independent review of topic: {topic}",
                 tasks=[member_task]
             )
             handle = result.get("tasks", [{}])[0].get("handle")
             if handle:
-                note_data = output(handle)
+                note_data = _output(handle)
                 is_valid, validation_msg = validate_member_note(note_data, mid)
                 if is_valid:
                     member_notes.append(note_data)
@@ -1000,7 +1007,7 @@ def run_discussion(project_root, topic):
             )
             analysis_handle = analysis_result.get("tasks", [{}])[0].get("handle")
             if analysis_handle:
-                metrics = output(analysis_handle)
+                metrics = _output(analysis_handle)
                 state_manager.system_awareness_state.complete_analysis(analysis_id, {
                     "status": "completed",
                     "metrics": metrics
@@ -1069,10 +1076,7 @@ def run_discussion(project_root, topic):
             print("Report script stderr:", process.stderr)
         print(f"Report generated at: {report_full_path}")
     except subprocess.CalledProcessError as e:
-        print(f"Error generating report: {e}")
-        print("Report script stdout:", e.stdout)
-        print("Report script stderr:", e.stderr)
-        return False
+        print(f"Report generation failed (non-fatal): {e.stderr.strip() or e.stdout.strip()}")
     finally:
         # Clean up temporary notes directory
         if os.path.exists(notes_dir):

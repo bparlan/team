@@ -1,0 +1,80 @@
+id: self-evolving-team
+name: Self-Evolving theteam Skill
+type: maintenance
+priority: 8
+description: >
+  Design and implement a self-evolving loop for the `theteam` skill that
+  autonomously improves itself as it is used. After each discussion session,
+  the system performs a structured post-session analysis that captures learnings,
+  identifies prompt improvements, and updates the skill's SKILL.md, EVOLUTION.md,
+  and optionally tool manifest — without human intervention on every run.
+  The loop is evidence-based, tracks changes incrementally, and only applies
+  improvements that pass verification gates.
+
+  Key design goals:
+  - Evidence first: every change is tied to a documented finding from a
+    session audit report (M{X}SA{Y}.md format)
+  - Human-in-the-loop for new feature additions (HITL boundary)
+  - Incremental version bumps (patch only) with full changelog
+  - Deterministic member selection and parallel execution
+  - Integration with existing evolve-skills framework
+  - Preserves theteam's deterministic, multi-member discussion flow
+
+phases:
+  - name: scan-session-reports
+    script: scripts/loop_infrastructure_check.py
+    args: ["--self-evolving"]
+    timeout_seconds: 300
+    memory_limit_mb: 64
+    expected_output: .omp/theteam/reports/self-evolving-scan.md
+    order: 1
+  - name: analyze-findings
+    runner: llm
+    member: skeptic
+    agent_type: reviewer
+    prompt_file: prompts/self-evolving-analyze.md
+    output: .omp/theteam/reports/self-evolving-analyze.md
+    memory_limit_mb: 64
+    order: 2
+  - name: generate-updates
+    runner: llm
+    member: architect
+    agent_type: reviewer
+    prompt_file: prompts/self-evolving-generate-updates.md
+    output: .omp/theteam/reports/self-evolving-updates.md
+    memory_limit_mb: 64
+    order: 3
+  - name: apply-updates
+    script: scripts/loop_health_check.py
+    args: ["--self-evolving-apply"]
+    timeout_seconds: 300
+    memory_limit_mb: 64
+    expected_output: updates applied to ~/.omp/agent/skills/evolve-skills/
+    order: 4
+  - name: synthesize-and-record
+    runner: llm
+    member: pragmatist
+    agent_type: task
+    prompt_file: prompts/self-evolving-synthesize.md
+    output: .omp/theteam/reports/self-evolving-synthesis.md
+    memory_limit_mb: 64
+    order: 5
+
+gates:
+  - after phase 3, verify that at least one update is identified before applying
+  - after phase 5, the synthesis must capture: summaries, agreements,
+    disagreements, open questions, and the recommendation (including "no change")
+  - any update that modifies SKILL.md must also update EVOLUTION.md with
+    rationale, date, old/new version
+  - all new tool permissions must be added to theteam.config permitted_skills
+    and cannot remove existing entries without HITL
+
+failure_handling: retry
+expected_output: >
+  .omp/theteam/reports/self-evolving-synthesis.md containing:
+  - session-summary: discussion topic and key outcomes
+  - improvements: list of prompt/structural changes with rationale
+  - evidence-links: references to which session audit reports motivated each change
+  - version-bump: patch version increment of evolve-skills SKILL.md
+  - evolution-ledger: entry in EVOLUTION.md format
+  - approval-status: "approved" if HITL was used, "autonomous" if all checks passed

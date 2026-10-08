@@ -11,14 +11,16 @@ description: >
   The loop is evidence-based, tracks changes incrementally, and only applies
   improvements that pass verification gates.
 
-  Key design goals:
-  - Evidence first: every change is tied to a documented finding from a
-    session audit report (M{X}SA{Y}.md format)
-  - Human-in-the-loop for new feature additions (HITL boundary)
-  - Incremental version bumps (patch only) with full changelog
-  - Deterministic member selection and parallel execution
-  - Integration with existing evolve-skills framework
-  - Preserves theteam's deterministic, multi-member discussion flow
+  Gates (applied after specified phases):
+  - after phase 3, verify that at least one update is identified before applying
+  - after phase 5, the synthesis must capture: summaries, agreements,
+    disagreements, open questions, and the recommendation (including "no change")
+  - any update that modifies SKILL.md must also update EVOLUTION.md with
+    rationale, date, old/new version
+  - all new tool permissions must be added to theteam.config permitted_skills
+    and cannot remove existing entries without HITL
+
+depends_on: [project-integrity]
 
 phases:
   - name: scan-session-reports
@@ -59,15 +61,6 @@ phases:
     output: .omp/theteam/reports/self-evolving-synthesis.md
     memory_limit_mb: 64
     order: 5
-
-gates:
-  - after phase 3, verify that at least one update is identified before applying
-  - after phase 5, the synthesis must capture: summaries, agreements,
-    disagreements, open questions, and the recommendation (including "no change")
-  - any update that modifies SKILL.md must also update EVOLUTION.md with
-    rationale, date, old/new version
-  - all new tool permissions must be added to theteam.config permitted_skills
-    and cannot remove existing entries without HITL
 
 failure_handling: retry
 expected_output: >

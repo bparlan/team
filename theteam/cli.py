@@ -369,7 +369,7 @@ def cmd_loop(args: argparse.Namespace) -> int:
                  f"next run {next_run}")
 
 def tasks_payload(project_root: str):
-    """The `tasks` view as data: `(payload, lines)`, or `(None, error)`.
+    """The `routine` view as data: `(payload, lines)`, or `(None, error)`.
 
     The renderer reads the same rows `theteam tasks` prints. It is the same
     data, not a second source: §2 makes these commands the machine surface.
@@ -1281,9 +1281,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 
     routine = sub.add_parser("routine", help="List every routine and its state.")
-    tasks.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
-                       help="Machine-readable output.")
-    tasks.set_defaults(func=cmd_tasks)
 
     run = sub.add_parser("run", help="Execute everything currently due.")
     run.add_argument("--only", help="Run one task id, ignoring the rest.")
@@ -1376,7 +1373,7 @@ def build_parser() -> argparse.ArgumentParser:
     manager.set_defaults(func=cmd_manager)
 
     watch = sub.add_parser("watch", help="Render status, tasks, or history in the terminal.")
-    watch.add_argument("view", choices=("status", "tasks", "history"),
+    watch.add_argument("view", choices=("status", "routine", "history"),
                        help="Which surface to render.")
     watch.add_argument("--once", action="store_true",
                        help="Render one frame and exit.")

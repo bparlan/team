@@ -29,7 +29,7 @@ Every invocation of this skill starts here:
 |---|---|---|
 | `theteam bootstrap <path>` | Generate a team for this project. `--interactive` asks before writing. | The first invocation in a project with no `theteam.config`. See **Bootstrap** below. |
 | `theteam status` | Roster, state dir, task counts, audit chain. | Read it. Nothing else runs. |
-| `theteam tasks` | Every task with `order`, `next_run`, `last_result`, `breaker`. | Pick an id, or schedule one. |
+| `theteam routine` | Every routine with `order`, `next_run`, `last_result`, `breaker`. | Pick an id, or schedule one. |
 | `theteam run` | Runs what is due. `script:` phases finish on their own. | See **Running an `llm` task** below for the rest. |
 | `theteam run --only <id>` | One task now, scheduled or not. | If it reports `awaiting`, spawn the named agent and write to the `write:` path, then run it again. |
 | `theteam run --dry-run` | What would run and its worst-case time. Runs nothing. | — |
@@ -118,7 +118,7 @@ agent `reviewer`. **Phases 2–5 have not been driven by a live member** — the
 were advanced by writing their output files directly. The loop reaches `ok` on
 all five that way, but only `scan` is verified end to end through a real spawn.
 
-`tasks`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
+`routine`, `run --dry-run`, `history`, `task show`, and `status` work anywhere.
 
 
 ## Running an `llm` task from inside a session

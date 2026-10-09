@@ -1280,7 +1280,7 @@ def build_parser() -> argparse.ArgumentParser:
     loop.set_defaults(func=cmd_loop)
 
 
-    tasks = sub.add_parser("tasks", help="List every task and its state.")
+    routine = sub.add_parser("routine", help="List every routine and its state.")
     tasks.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                        help="Machine-readable output.")
     tasks.set_defaults(func=cmd_tasks)

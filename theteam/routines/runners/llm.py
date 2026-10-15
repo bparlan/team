@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-theteam.tasks.runners.llm - run a task phase that is instructions, not a script.
+theteam.routines.runners.llm - run a task phase that is instructions, not a script.
 
 A `script:` phase runs a Python file. A `runner: llm` phase is *instructions to
 a model*, and this module does not run them. It resolves which phase is next and

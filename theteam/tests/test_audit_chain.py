@@ -15,7 +15,7 @@ things a regression would break silently:
     handle the empty case claims a verified chain for a file that has no
     entries in it - the §3.3 `MockAPI` defect with a friendlier name.
 
-No Docker: the execution case drives `TaskExecutor.execute_task` with a phase
+No Docker: the execution case drives `RoutineExecutor.execute_task` with a phase
 whose script is absent, which is a real attempt that really fails, and the
 audit entries are written the same way on the success and failure paths.
 """
@@ -27,8 +27,8 @@ import yaml
 
 from theteam.cli import main
 from theteam.core.audit_chain import audit_file, read_chain_state
-from theteam.tasks.executor import TaskExecutor
-from theteam.tasks.repository import TaskRepository
+from theteam.routines.executor import RoutineExecutor
+from theteam.routines.repository import RoutineRepository
 
 
 CONFIG = {
@@ -53,12 +53,12 @@ def _project(root, tasks=None, schedule=None, config=True):
         (root / "theteam.config").write_text(
             yaml.safe_dump(CONFIG, sort_keys=False), encoding="utf-8"
         )
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    routines_dir = root / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
     for task_id, fields in (tasks or {}).items():
         payload = {"id": task_id, "order": len(tasks or {})}
         payload.update(fields)
-        (tasks_dir / f"task-{task_id}.yaml").write_text(
+        (routines_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
     if schedule is not None:
@@ -96,7 +96,7 @@ def test_create_edit_and_delete_each_append_to_the_chain(tmp_path):
     """Three writes, three entries, each naming the id it touched."""
     root = _project(tmp_path, tasks={"keep": {"phases": []}})
 
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.create({"id": "added", "phases": []})
     repo.update("added", {"name": "Renamed"})
     repo.delete("added")
@@ -121,7 +121,7 @@ def test_an_execution_is_in_the_chain_with_its_outcome(tmp_path):
                     "memory_limit_mb": 64}]
     }})
 
-    result = TaskExecutor(str(root)).execute_task(
+    result = RoutineExecutor(str(root)).execute_task(
         {"id": "probe", "phases": [
             {"name": "probe", "script": "phases/absent.py", "memory_limit_mb": 64}
         ]}
@@ -143,7 +143,7 @@ def test_the_chain_is_in_the_state_directory_and_named_by_status(tmp_path, capsy
     so the assertion is on the path itself, not on a boolean.
     """
     root = _project(tmp_path, tasks={"keep": {"phases": []}})
-    TaskRepository(str(root)).create({"id": "added", "phases": []})
+    RoutineRepository(str(root)).create({"id": "added", "phases": []})
 
     code, payload = _cli(root, "status", capsys=capsys)
 
@@ -162,7 +162,7 @@ def test_the_chain_is_in_the_state_directory_and_named_by_status(tmp_path, capsy
 def test_status_reports_intact_for_a_chain_that_verifies(tmp_path, capsys):
     """Real entries, real `verify_chain()` behind the word `intact`."""
     root = _project(tmp_path, tasks={"keep": {"phases": []}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.create({"id": "a", "phases": []})
     repo.update("a", {"name": "B"})
     repo.delete("a")
@@ -187,7 +187,7 @@ def test_tampering_with_one_line_is_reported_as_a_broken_chain(tmp_path, capsys)
     itself broken rather than merely suspicious.
     """
     root = _project(tmp_path, tasks={"keep": {"phases": []}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.create({"id": "a", "phases": []})
     repo.update("a", {"name": "B"})
     repo.delete("a")
@@ -216,7 +216,7 @@ def test_a_broken_chain_marks_what_is_written_after_it(tmp_path):
     A break must not stop the trail, and it must not be invisible in it.
     """
     root = _project(tmp_path, tasks={"keep": {"phases": []}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.create({"id": "a", "phases": []})
 
     path = audit_file(str(root))
@@ -226,7 +226,7 @@ def test_a_broken_chain_marks_what_is_written_after_it(tmp_path):
 
     assert read_chain_state(str(root))["state"] == "broken"
 
-    TaskRepository(str(root)).create({"id": "b", "phases": []})
+    RoutineRepository(str(root)).create({"id": "b", "phases": []})
 
     marked = _events(root, "task_created")
     assert [e["task_id"] for e in marked] == ["forged", "b"]

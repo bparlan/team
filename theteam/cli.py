@@ -353,12 +353,12 @@ def cmd_capability(args: argparse.Namespace) -> int:
 
 def cmd_loop(args: argparse.Namespace) -> int:
     """Schedule one registered task to run on an interval."""
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
     if args.interval <= 0:
         return _fail(args, "loop", f"--interval must be positive, got {args.interval}")
 
-    repo = TaskRepository(_project_root(args))
+    repo = RoutineRepository(_project_root(args))
     try:
         next_run = repo.schedule_task(args.task_id, args.interval)
     except KeyError:
@@ -368,15 +368,15 @@ def cmd_loop(args: argparse.Namespace) -> int:
                  f"{args.task_id} scheduled every {args.interval}m, "
                  f"next run {next_run}")
 
-def tasks_payload(project_root: str):
+def routine_payload(project_root: str):
     """The `routine` view as data: `(payload, lines)`, or `(None, error)`.
 
     The renderer reads the same rows `theteam tasks` prints. It is the same
     data, not a second source: §2 makes these commands the machine surface.
     """
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    payload = TaskRepository(project_root).list_tasks()
+    payload = RoutineRepository(project_root).list_routines()
     lines = [
         f"{'order':>5}  {'id':<24} {'type':<12} {'pri':>3}  "
         f"{'next run':<30} breaker",
@@ -395,9 +395,9 @@ def tasks_payload(project_root: str):
     return payload, lines
 
 
-def cmd_tasks(args: argparse.Namespace) -> int:
+def cmd_routines(args: argparse.Namespace) -> int:
     """Every task and its state. An empty list reports why it is empty."""
-    payload, lines = tasks_payload(_project_root(args))
+    payload, lines = routine_payload(_project_root(args))
     return _emit(args, payload, "\n".join(lines))
 
 
@@ -484,7 +484,7 @@ def _contract_problem(task, phase, project_root):
                 f"so it cannot prove it ran")
     return None
 
-def run_due_tasks(project_root: str, only: Optional[str] = None,
+def run_due_routines(project_root: str, only: Optional[str] = None,
                   on_output=None) -> Dict[str, Any]:
     """
     Execute every due task and return the run payload.
@@ -500,10 +500,10 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
     tripped breaker is skipped with the literal `breaker_open`, and a failure
     records the reason that actually explains it.
     """
-    from theteam.tasks.executor import TaskExecutor
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.executor import RoutineExecutor
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(project_root)
+    repo = RoutineRepository(project_root)
     due = repo.due(only=only)
     # Captured here, at the first read of the schedule, and never re-read
     # afterwards. `purge_orphaned_schedules` and `repair_schedules` both call
@@ -533,7 +533,7 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
     repaired = repo.repair_schedules()
     # Purge runs before the breaker states are read: `last_run` is kept, so
     # reading it after the purge sees the same history either way.
-    executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
+    executor = RoutineExecutor(project_root, breaker_states=repo.schedule()["last_run"])
 
     sweep_started = time.monotonic()
     results = []
@@ -677,7 +677,7 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
         # it is the only thing that can keep the gate honest: a file refreshed
         # only by a task nobody runs would eventually read as stale, and
         # `loop_health_check.py:79` would report a finding nothing could fix.
-        # Only the booleans, never the paths or the timing. `run_due_tasks`
+        # Only the booleans, never the paths or the timing. `run_due_routines`
         # returns a payload a test can compare byte-for-byte across two runs
         # that did nothing — `test_two_runs_with_nothing_due_are_byte_identical`
         # enforces exactly that — and an absolute path or a fractional `elapsed`
@@ -700,7 +700,7 @@ def run_due_tasks(project_root: str, only: Optional[str] = None,
 
 def cmd_run(args: argparse.Namespace) -> int:
     """Execute everything currently due. Nothing due means nothing happens."""
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
     project_root = _project_root(args)
     # An id that matches no task is a named failure, not `nothing due`.
@@ -709,21 +709,21 @@ def cmd_run(args: argparse.Namespace) -> int:
     # `run --only <typo>` reporting "nothing due" is the same lie: it reads
     topic = args.topic if args.only == "discuss" else None
     # does not exist". The check stays here because it is a *command* failure;
-    # `run_due_tasks` is only told about ids that exist.
-    if args.only and TaskRepository(project_root).get(args.only) is None:
+    # `run_due_routines` is only told about ids that exist.
+    if args.only and RoutineRepository(project_root).get(args.only) is None:
         return _fail(args, "run --only", f"Task not found: {args.only}")
 
     if args.dry_run:
         return _dry_run(args, project_root, only=args.only)
 
-    for task in TaskRepository(project_root).due(only=args.only):
+    for task in RoutineRepository(project_root).due(only=args.only):
         for phase in task.get("phases", []):
             bound = phase.get("timeout_seconds")
             if bound and not getattr(args, "json", False):
                 print(f"  {task['id']}/{phase['name']}: up to {bound}s",
                       file=sys.stderr, flush=True)
 
-    payload = run_due_tasks(project_root, only=args.only,
+    payload = run_due_routines(project_root, only=args.only,
                             on_output=_live_reporter(args))
     if not payload["results"]:
         # "nothing due" and "the schedule could not be read" are the same
@@ -819,9 +819,9 @@ def _dry_run(args, project_root: str, only=None) -> int:
     and is labelled as one; a measured average would be a number nobody
     measured (§3.3).
     """
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(project_root)
+    repo = RoutineRepository(project_root)
     due = repo.due(only=only)
     if not due:
         return _emit(args, {"dry_run": True, "tasks": []}, "nothing due")
@@ -851,14 +851,14 @@ def history_payload(project_root: str, task_id: Optional[str] = None):
     Same reads, same rows, one implementation - the renderer and the command
     cannot drift because there is only one place that computes a success rate.
     """
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(project_root)
+    repo = RoutineRepository(project_root)
     schedule = repo.schedule()
     rows = []
     for tid in [t["id"] for t in repo.all_tasks()]:
         last = schedule["last_run"].get(tid, {})
-        runs = _task_runs(project_root, tid)
+        runs = _routine_runs(project_root, tid)
         failures = [r for r in runs if not r.get("overall_success")]
         rows.append({
             "id": tid,
@@ -917,14 +917,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     The binding is duck-typed on purpose. `MetricsCollector.collect()` reads
     `.metrics`, `.tasks`, `.circuit_breaker` and `.health_monitor` off whatever
-    it is given, so `TaskScheduler` satisfies it unchanged and the collector
+    it is given, so `RoutineScheduler` satisfies it unchanged and the collector
     needs no second mapping of metric names to producers.
     """
     from theteam.core.metrics import MetricsCollector
-    from theteam.tasks.scheduler import DEFAULT_TICK_SECONDS, TaskScheduler
+    from theteam.routines.scheduler import DEFAULT_TICK_SECONDS, RoutineScheduler
 
     project_root = _project_root(args)
-    scheduler = TaskScheduler(project_root, run_due_tasks,
+    scheduler = RoutineScheduler(project_root, run_due_routines,
                               tick_seconds=args.tick_seconds)
     collector = MetricsCollector(port=args.port)
     collector.bind(loop=scheduler)
@@ -945,7 +945,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
         collector.stop()
         scheduler.stop()
     return EXIT_OK
-def _task_runs(project_root: str, task_id: str) -> List[Dict]:
+def _routine_runs(project_root: str, task_id: str) -> List[Dict]:
     """Every logged execution of one task, oldest first. Unparseable lines skipped."""
     path = StateStore(project_root).execution_log
     if not path.exists():
@@ -967,9 +967,9 @@ def _task_runs(project_root: str, task_id: str) -> List[Dict]:
 
 def cmd_task(args: argparse.Namespace) -> int:
     """Single-task operations. Every write reports what it did to what."""
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(_project_root(args))
+    repo = RoutineRepository(_project_root(args))
     action = args.task_command
 
     if action == "create":
@@ -1191,7 +1191,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     # Without `--json` nothing below changes: the renderer still owns the
     # frame, and the three machine commands still print byte-identically.
     if getattr(args, "json", False):
-        readers = {"status": status_payload, "tasks": tasks_payload,
+        readers = {"status": status_payload, "tasks": routine_payload,
                    "history": history_payload}
         payload, lines = readers[args.view](project_root)
         if payload is None:
@@ -1259,9 +1259,9 @@ def build_parser() -> argparse.ArgumentParser:
     serve.add_argument("--port", type=int,
                        default=int(os.environ.get("THETEAM_METRICS_PORT", "8000")))
     # Hoisted import: the parser needs the default at build time, and the
-    # module it lives in is `theteam.tasks.scheduler`, which imports nothing
+    # module it lives in is `theteam.routines.scheduler`, which imports nothing
     # from this file — so this is not a cycle.
-    from theteam.tasks.scheduler import DEFAULT_TICK_SECONDS
+    from theteam.routines.scheduler import DEFAULT_TICK_SECONDS
     serve.add_argument("--tick-seconds", type=float,
                        default=float(os.environ.get("THETEAM_TICK_SECONDS",
                                                     DEFAULT_TICK_SECONDS)),
@@ -1282,8 +1282,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     routine = sub.add_parser("routine", help="List every routine and its state.")
 
-    run = sub.add_parser("run", help="Execute everything currently due.")
-    run.add_argument("--only", help="Run one task id, ignoring the rest.")
+    routine.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
+                         help="Machine-readable output.")
+    routine.set_defaults(func=cmd_routines)
     run.add_argument("--dry-run", action="store_true",
                      help="Show what would run and its worst-case time; run nothing.")
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,

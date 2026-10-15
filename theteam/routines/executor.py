@@ -80,7 +80,7 @@ TIMEOUT_EXIT_CODE = 124
 EXECUTION_LOG_MAX_LINES = 1000
 
 
-class TaskExecutor:
+class RoutineExecutor:
     def __init__(self, project_root: str = ".", breaker_states: Optional[Dict] = None):
         from theteam.state import StateStore
 
@@ -241,7 +241,7 @@ class TaskExecutor:
         is observable rather than inferred (§7.1.6).
         """
         if phase.get("runner") == "llm":
-            from theteam.tasks.runners.llm import run_llm_phase
+            from theteam.routines.runners.llm import run_llm_phase
 
             # No staging, no run id, no collector. An `llm` phase is done when
             # its declared output exists and is not empty; until then it needs

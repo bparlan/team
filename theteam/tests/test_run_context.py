@@ -254,7 +254,7 @@ def test_an_empty_task_directory_is_never_reported_as_clean(tmp_path):
     (tmp_path / "theteam.config").write_text(
         "project:\n  name: p\n  description: d\n")
     _log_a_failure(tmp_path)
-    # `tasks/` exists but holds no definitions.
+    # `routines/` exists but holds no definitions.
 
     write_run_context(tmp_path, executed=True)
     summary = build_context_summary(tmp_path)
@@ -382,9 +382,9 @@ def test_a_deleted_task_is_never_reported_as_failing(tmp_path):
         + json.dumps({"task_id": "live-task", "success": False,
                      "error": "returncode 1"}) + "\n")
 
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    (tasks_dir / "task-live-task.yaml").write_text(
+    routines_dir = tmp_path / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
+    (routines_dir / "task-live-task.yaml").write_text(
         "id: live-task\nname: Live\norder: 0\nphases: []\n")
 
     failures = _recent_failures(tmp_path)

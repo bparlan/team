@@ -24,7 +24,7 @@ What is pinned, and why each one matters:
     "that task has no history" - the opposite of "there is no such task".
 
 Everything is built in a scratch project under `tmp_path`; the real repo's
-`.omp/`, `tasks/` and execution log are never read.
+`.omp/`, `routines/` and execution log are never read.
 """
 
 import json
@@ -35,7 +35,7 @@ import yaml
 
 from theteam.cli import main
 from theteam.state import STATE_DIR_ENV
-from theteam.tasks.executor import TaskExecutor
+from theteam.routines.executor import RoutineExecutor
 
 
 # ======= scratch project =======
@@ -56,14 +56,14 @@ def _project(root, order=(), tasks=None, schedule=None):
     Build an isolated project: `tasks/task-<id>.yaml` plus
     `.omp/theteam/task-schedule.json`. Nothing is read from the real repo.
     """
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    routines_dir = root / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
     rank = {t: i for i, t in enumerate(order)}
     for task_id, fields in tasks.items():
         payload = {"id": task_id, "order": rank.get(task_id, len(rank))}
         payload.update(fields)
-        (tasks_dir / f"task-{task_id}.yaml").write_text(
+        (routines_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
     if schedule is not None:
@@ -76,7 +76,7 @@ def _project(root, order=(), tasks=None, schedule=None):
 
 
 def _run(task_id, minutes_ago, success):
-    """One execution-log record, shaped exactly as `TaskExecutor` writes one."""
+    """One execution-log record, shaped exactly as `RoutineExecutor` writes one."""
     return {
         "task_id": task_id,
         "timestamp": (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
@@ -100,7 +100,7 @@ def _log(root, *records):
     keeps the fixture honest about the record shape, and the integration test
     in section 7 pins the other half: that a real run actually calls it.
     """
-    executor = TaskExecutor(str(root))
+    executor = RoutineExecutor(str(root))
     for record in records:
         executor.log_execution(record)
     return executor.execution_log
@@ -460,7 +460,7 @@ def _stub_phase(monkeypatch, success):
     execution log. The outcome still comes from the product's own executor.
     """
     monkeypatch.setattr(
-        TaskExecutor, "execute_phase",
+        RoutineExecutor, "execute_phase",
         lambda self, phase, task=None, on_output=None: {
             "success": success, "returncode": 0 if success else 3},
     )

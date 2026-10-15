@@ -51,7 +51,7 @@ class StateStore:
     # -- directories -------------------------------------------------------
 
     @property
-    def tasks_dir(self) -> Path:
+    def routines_dir(self) -> Path:
         return self.root / "tasks"
 
     @property

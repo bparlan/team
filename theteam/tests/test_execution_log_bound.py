@@ -1,7 +1,7 @@
 """
 The execution log is bounded, and the bound drops the oldest lines.
 
-`TaskExecutor.log_execution` is an append-only JSONL file that `theteam
+`RoutineExecutor.log_execution` is an append-only JSONL file that `theteam
 history` reads. Before M4 it had no cap at all and grew to 282 KB with
 nothing enforcing a limit, so the log is now trimmed on every write. A trim
 is the one kind of edit that can quietly lose data while still looking
@@ -25,7 +25,7 @@ would otherwise pass every count-based assertion.
 
 import json
 
-from theteam.tasks.executor import EXECUTION_LOG_MAX_LINES, TaskExecutor
+from theteam.routines.executor import EXECUTION_LOG_MAX_LINES, RoutineExecutor
 
 
 # ======= scratch project =======
@@ -33,7 +33,7 @@ from theteam.tasks.executor import EXECUTION_LOG_MAX_LINES, TaskExecutor
 
 def _executor(root):
     """An executor over a scratch project root; the state dir resolves under it."""
-    return TaskExecutor(str(root))
+    return RoutineExecutor(str(root))
 
 
 def _log_path(executor):

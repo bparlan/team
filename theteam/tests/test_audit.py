@@ -26,7 +26,7 @@ import pytest
 from theteam.core.audit import AuditLogger
 # M10 removed this import with `core/task_contract.py`. It was unused: the
 # tests below construct no `UnifiedTask`, and the one that referenced it was
-# ported to `TaskScheduler`.
+# ported to `RoutineScheduler`.
 
 
 # -- helpers ---------------------------------------------------------------
@@ -339,7 +339,7 @@ def test_task_execution_survives_a_broken_audit_sink(tmp_path):
     append on it raises OSError. The executor wraps its audit call defensively
     precisely so observability failure cannot become control flow.
 
-    M10 ported this from `UnifiedLoop.add_task` to `TaskScheduler.tick`, and
+    M10 ported this from `UnifiedLoop.add_task` to `RoutineScheduler.tick`, and
     renamed it: the original asserted that a task could be *admitted*, which
     tested a method that no longer exists. The invariant is the same and still
     worth defending — a broken audit trail must not stop work.
@@ -348,7 +348,7 @@ def test_task_execution_survives_a_broken_audit_sink(tmp_path):
     explicit `tick()`. Starting the scheduler would fire an immediate sweep of
     its own and the counter would be 2.0 rather than 1.0.
     """
-    from theteam.tasks.scheduler import TaskScheduler
+    from theteam.routines.scheduler import RoutineScheduler
 
     log_dir = tmp_path / ".loop-log"
     log_dir.mkdir()
@@ -361,7 +361,7 @@ def test_task_execution_survives_a_broken_audit_sink(tmp_path):
         return {"ran": 1, "skipped": 0, "failures": 0,
                 "results": [{"id": "task-1", "result": "ok"}]}
 
-    scheduler = TaskScheduler(str(tmp_path), _run, tick_seconds=60)
+    scheduler = RoutineScheduler(str(tmp_path), _run, tick_seconds=60)
     payload = scheduler.tick()
 
     assert payload["ran"] == 1
@@ -379,12 +379,12 @@ def test_scheduler_survives_a_raising_run_callable(tmp_path):
     file must not take the metrics endpoint down with it. The failure is named
     in `last_error` rather than swallowed into a silent zero.
     """
-    from theteam.tasks.scheduler import TaskScheduler
+    from theteam.routines.scheduler import RoutineScheduler
 
     def _boom(root):
         raise OSError("tasks/task-x.yaml: unreadable")
 
-    scheduler = TaskScheduler(str(tmp_path), _boom, tick_seconds=60)
+    scheduler = RoutineScheduler(str(tmp_path), _boom, tick_seconds=60)
     payload = scheduler.tick()
     assert payload == {"ran": 0, "skipped": 0, "failures": 0, "results": []}
     assert "unreadable" in scheduler.last_error

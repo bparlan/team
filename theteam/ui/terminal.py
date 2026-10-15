@@ -258,8 +258,7 @@ def watch(project_root: str, view: str, once: bool = False,
     out = stream if stream is not None else sys.stdout
     mon = Monitor(view) if monitoring else None
     readers = {
-        "status": lambda: cli.status_payload(project_root),
-        "tasks": lambda: cli.tasks_payload(project_root),
+        "tasks": lambda: cli.routine_payload(project_root),
         "history": lambda: cli.history_payload(project_root),
     }
     read = readers[view]

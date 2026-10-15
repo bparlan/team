@@ -2,7 +2,7 @@
 """
 Task repository with full CRUD operations.
 
-Tasks are canonical YAML files under `tasks/`. That is the only source: the
+Tasks are canonical YAML files under `routines/`. That is the only source: the
 legacy JSON registry that M2 dual-read is gone, so a task the read cannot find
 does not exist rather than hiding in a second store.
 
@@ -141,12 +141,12 @@ def _audit(project_root: str, event: str, **fields: Any) -> None:
     record_event(project_root, event, **fields)
 
 
-class TaskRepository:
-    """The task store. YAML under `tasks/` is the only source."""
+class RoutineRepository:
+    """The task store. YAML under `routines/` is the only source."""
 
     def __init__(self, project_root: str) -> None:
         self.project_root = os.path.abspath(project_root)
-        self.tasks_dir = os.path.join(self.project_root, TASKS_DIRNAME)
+        self.routines_dir = os.path.join(self.project_root, TASKS_DIRNAME)
         self._yaml = self._read_yaml()
         # Order is now a per-task key (§5.4). We seed `_rank` from those
         # keys. `TASK_ORDER` is no longer a source.
@@ -175,16 +175,16 @@ class TaskRepository:
 
     def _read_yaml(self) -> Dict[str, Dict[str, Any]]:
         tasks: Dict[str, Dict[str, Any]] = {}
-        if not os.path.isdir(self.tasks_dir):
+        if not os.path.isdir(self.routines_dir):
             return tasks
-        for name in sorted(os.listdir(self.tasks_dir)):
-            # `tasks/` also holds non-tasks (`SECURITY_POLICY.yaml`, and it is
+        for name in sorted(os.listdir(self.routines_dir)):
+            # `routines/` also holds non-tasks (`SECURITY_POLICY.yaml`, and it is
             # not even parseable YAML), so globbing every `*.yaml` here dies on
             # a file that is none of this reader's business. The `task-` prefix
             # is the directory's own convention, not a new one.
             if not (name.startswith("task-") and name.endswith((".yaml", ".yml"))):
                 continue
-            task = _load_yaml(os.path.join(self.tasks_dir, name))
+            task = _load_yaml(os.path.join(self.routines_dir, name))
             task.setdefault("source_file", name)
             tasks[task["id"]] = task
         return tasks
@@ -199,7 +199,7 @@ class TaskRepository:
         """The schedule, or an empty one if the file is missing or unreadable.
 
         A zero-byte file was unrecoverable here. `json.load` raised,
-        `TaskScheduler.tick` caught it and recorded the same `last_error` on
+        `RoutineScheduler.tick` caught it and recorded the same `last_error` on
         every subsequent run, and nothing in the system could write a schedule
         again — a permanent outage from one interrupted write, with the fix
         being "delete the file by hand".
@@ -292,7 +292,7 @@ class TaskRepository:
             "type": task.get("type"),
             # `depends_on` is shown because a task that waits on another and
             # says nothing reads as a task with no work to do. The gate
-            # itself lives in `TaskExecutor.execute_task`; this is the
+            # itself lives in `RoutineExecutor.execute_task`; this is the
             # declaration surfacing in the listing so the reader can see
             # why a task was or was not due.
             "depends_on": task.get("depends_on", []) or [],
@@ -309,7 +309,7 @@ class TaskRepository:
             "breaker_consecutive_failures": last.get("breaker_consecutive_failures"),
         }
 
-    def list_tasks(self) -> Dict[str, Any]:
+    def list_routines(self) -> Dict[str, Any]:
         """
         The `theteam tasks` payload.
 
@@ -475,7 +475,7 @@ class TaskRepository:
     # Every write goes through `_check_writable` on the *merged* mapping before
     # anything touches the disk. Validating the file on disk instead meant the
     # write was never checked, so a task that could not be read back landed
-    # anyway and the next `TaskRepository()` construction raised - one edit
+    # anyway and the next `RoutineRepository()` construction raised - one edit
     # made the whole project unreadable.
 
     def _save_schedule(self, schedule: Dict[str, Any]) -> None:
@@ -484,7 +484,7 @@ class TaskRepository:
         Temp file plus `os.replace`, matching `theteam/core/run_context.py` and
         `theteam/core/wal.py`. A bare `open(path, "w")` truncates before it
         writes, so a process killed mid-dump leaves zero bytes — and then every
-        later `schedule()` raises `JSONDecodeError`, which `TaskScheduler.tick`
+        later `schedule()` raises `JSONDecodeError`, which `RoutineScheduler.tick`
         catches and records as the same `last_error` forever. One Ctrl-C during
         a write was a permanent outage with no way back except deleting the
         file by hand.
@@ -604,7 +604,7 @@ class TaskRepository:
         would push an internal detail into a hand-edited document.
         """
         canonical = {k: v for k, v in task.items() if k != "source_file"}
-        with open(os.path.join(self.tasks_dir, name), "w", encoding="utf-8") as handle:
+        with open(os.path.join(self.routines_dir, name), "w", encoding="utf-8") as handle:
             yaml.dump(canonical, handle, sort_keys=False)
 
     def update(self, task_id: str, patch: Dict[str, Any]) -> None:
@@ -638,8 +638,8 @@ class TaskRepository:
 
         renamed = new_id != task_id
         if renamed:
-            os.rename(os.path.join(self.tasks_dir, old_name),
-                      os.path.join(self.tasks_dir, new_name))
+            os.rename(os.path.join(self.routines_dir, old_name),
+                      os.path.join(self.routines_dir, new_name))
         self._write_task(new_name, {**merged, "source_file": new_name})
         del self._yaml[task_id]
         self._yaml[new_id] = {**merged, "source_file": new_name}
@@ -678,7 +678,7 @@ class TaskRepository:
         if task_id not in self._yaml:
             raise KeyError(f"Task '{task_id}' not found")
 
-        os.remove(os.path.join(self.tasks_dir, self._yaml[task_id]["source_file"]))
+        os.remove(os.path.join(self.routines_dir, self._yaml[task_id]["source_file"]))
         del self._yaml[task_id]
 
         if task_id in self._order:
@@ -741,5 +741,5 @@ __all__ = [
     "_priority",
     "_parse_next_run",
     "_now",
-    "TaskRepository",
+    "RoutineRepository",
 ]

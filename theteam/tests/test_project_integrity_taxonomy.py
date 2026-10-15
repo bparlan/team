@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from theteam.tasks.executor import (
+from theteam.routines.executor import (
     CANNOT_EVALUATE_EXIT_CODE,
     FINDINGS_EXIT_CODE,
     BAD_CITATION_EXIT_CODE,
@@ -83,18 +83,18 @@ def test_a_finding_does_not_trip_the_breaker(tmp_path, monkeypatch):
     """
     from theteam.core.circuit_breaker import (
         CircuitBreaker, CircuitBreakerConfig)
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
     # Drive the real aggregation rather than reimplementing it, so this test
     # breaks if someone reintroduces the breaker call on a findings phase.
     monkeypatch.setattr(
-        TaskExecutor, "execute_phase",
+        RoutineExecutor, "execute_phase",
         lambda self, p, task=None, on_output=None: {
             "success": True, "findings": True,
             "findings_output": "FINDING: something",
             "returncode": FINDINGS_EXIT_CODE, "phase": p["name"]})
 
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
     result = None
     for _ in range(6):
         result = executor.execute_task({"id": "project-integrity", "phases": [
@@ -119,16 +119,16 @@ def test_findings_are_reported_separately_from_success(tmp_path, monkeypatch):
     Collapsing the two facts is how a monitor reporting the same problem for a
     week still renders as `ok`.
     """
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
     monkeypatch.setattr(
-        TaskExecutor, "execute_phase",
+        RoutineExecutor, "execute_phase",
         lambda self, p, task=None, on_output=None: {
             "success": True, "findings": True,
             "findings_output": "FINDING: something",
             "returncode": FINDINGS_EXIT_CODE, "phase": p["name"]})
 
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
     result = executor.execute_task({"id": "project-integrity", "phases": [
         {"name": "check"}]})
 
@@ -138,14 +138,14 @@ def test_findings_are_reported_separately_from_success(tmp_path, monkeypatch):
 
 def test_a_clean_run_has_no_findings(tmp_path, monkeypatch):
     """The converse, so the marker cannot be a constant that is always on."""
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
     monkeypatch.setattr(
-        TaskExecutor, "execute_phase",
+        RoutineExecutor, "execute_phase",
         lambda self, p, task=None, on_output=None: {
             "success": True, "returncode": 0, "phase": p["name"]})
 
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
     result = executor.execute_task({"id": "project-integrity", "phases": [
         {"name": "check"}]})
     assert result["overall_success"] is True
@@ -232,9 +232,9 @@ def test_execute_phase_classifies_every_exit_code(
     branch detectable; asserting only `success` would not, because a findings
     phase is also a success.
     """
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
-    monkeypatch.setattr("theteam.tasks.executor.AgentIsolation",
+    monkeypatch.setattr("theteam.routines.executor.AgentIsolation",
                         _fake_isolation(exit_code))
 
     script = tmp_path / "scripts" / "probe.py"
@@ -243,7 +243,7 @@ def test_execute_phase_classifies_every_exit_code(
 
     phase = {"name": "probe", "script": "scripts/probe.py", "args": [],
              "timeout_seconds": 5, "memory_limit_mb": 128}
-    outcome = TaskExecutor(str(tmp_path)).execute_phase(phase, {"id": "t"})
+    outcome = RoutineExecutor(str(tmp_path)).execute_phase(phase, {"id": "t"})
 
     assert outcome["success"] is expect_success
     assert outcome["returncode"] == exit_code
@@ -260,17 +260,17 @@ def test_bad_citation_is_distinguishable_from_a_changed_file(tmp_path, monkeypat
     Asserting only `findings` would let the BAD_CITATION branch be deleted
     and leave the suite green, because FINDINGS already sets that key.
     """
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
     def outcome_for(code):
-        monkeypatch.setattr("theteam.tasks.executor.AgentIsolation",
+        monkeypatch.setattr("theteam.routines.executor.AgentIsolation",
                             _fake_isolation(code))
         script = tmp_path / "scripts" / "probe.py"
         script.parent.mkdir(parents=True, exist_ok=True)
         script.write_text("print('ok')\n")
         phase = {"name": "probe", "script": "scripts/probe.py", "args": [],
                  "timeout_seconds": 5, "memory_limit_mb": 128}
-        return TaskExecutor(str(tmp_path)).execute_phase(phase, {"id": "t"})
+        return RoutineExecutor(str(tmp_path)).execute_phase(phase, {"id": "t"})
 
     bad = outcome_for(BAD_CITATION_EXIT_CODE)
     changed = outcome_for(FINDINGS_EXIT_CODE)
@@ -288,16 +288,16 @@ def test_a_crash_is_never_read_as_findings(tmp_path, monkeypatch):
     An uncaught exception exits 1. If 1 meant findings, a traceback would be
     recorded as a clean measurement with a result attached.
     """
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
-    monkeypatch.setattr("theteam.tasks.executor.AgentIsolation",
+    monkeypatch.setattr("theteam.routines.executor.AgentIsolation",
                         _fake_isolation(1))
 
     script = tmp_path / "scripts" / "probe.py"
     script.parent.mkdir(parents=True, exist_ok=True)
     script.write_text("raise RuntimeError('boom')\n")
 
-    outcome = TaskExecutor(str(tmp_path)).execute_phase(
+    outcome = RoutineExecutor(str(tmp_path)).execute_phase(
         {"name": "probe", "script": "scripts/probe.py", "args": [],
          "timeout_seconds": 5, "memory_limit_mb": 128}, {"id": "t"})
 

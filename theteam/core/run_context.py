@@ -160,7 +160,7 @@ def refresh_loop_state(project_root: Optional[Path] = None,
 
     So a project where nothing has been due for a week still reads as stale,
     which is true, and a run with nothing due moves no state at all. That is the
-    same purity `TaskRepository.due()` is built on, and
+    same purity `RoutineRepository.due()` is built on, and
     `test_two_runs_with_nothing_due_are_byte_identical` enforces it.
 
     `health` is optional and recorded only when a caller has a real measured
@@ -201,10 +201,10 @@ def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
 
     A task with no YAML file cannot be failing, because nothing can run it.
     """
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
     try:
-        known = {t["id"] for t in TaskRepository(project_root).all_tasks()}
+        known = {t["id"] for t in RoutineRepository(project_root).all_tasks()}
     except _READ_FAILURES as e:
         # Named failures, not a bare `except Exception`. Swallowing everything
         # meant one malformed task YAML dropped this section from the summary
@@ -255,7 +255,7 @@ def _recent_failures(project_root: Path, limit: int = 3) -> List[str]:
     if orphans and not known:
         # An empty registry with recorded failures is not a clean project — it
         # is a project whose tasks cannot be read, and the distinction is the
-        # whole point of this function. Measured: emptying `tasks/` produced
+        # whole point of this function. Measured: emptying `routines/` produced
         # "nothing recorded as failing" from a log full of real failures.
         return [f"no task definitions found, but {len(orphans)} task(s) have "
                 f"recorded failures ({', '.join(orphans[:3])}) — the task "

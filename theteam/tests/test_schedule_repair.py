@@ -4,7 +4,7 @@ Defends two properties of the schedule file.
 **Atomicity.** `task-schedule.json` is read by every sweep. It was written with
 a bare `open(path, "w")` in three places, which truncates before it writes — so
 a process killed mid-dump leaves zero bytes, and then every later `schedule()`
-raises `JSONDecodeError`. `TaskScheduler.tick` catches that and records the same
+raises `JSONDecodeError`. `RoutineScheduler.tick` catches that and records the same
 `last_error` on every subsequent run, forever. Measured consequence: one Ctrl-C
 during a write was a permanent outage with no recovery except deleting the file
 by hand. Now temp-file plus `os.replace`, in one writer all three paths use.
@@ -24,7 +24,7 @@ import os
 
 import pytest
 
-from theteam.tasks.repository import TaskRepository
+from theteam.routines.repository import RoutineRepository
 
 
 def _project(root, tasks=None, schedule=None):
@@ -70,7 +70,7 @@ def test_the_schedule_write_is_atomic(tmp_path, monkeypatch):
         return real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", spy)
-    repo = TaskRepository(str(_project(tmp_path)))
+    repo = RoutineRepository(str(_project(tmp_path)))
     repo.record_run("worker", "ok", "")
 
     assert seen.get("replaced"), (
@@ -79,7 +79,7 @@ def test_the_schedule_write_is_atomic(tmp_path, monkeypatch):
 
 
 def test_no_temp_file_survives_a_write(tmp_path):
-    repo = TaskRepository(str(_project(tmp_path)))
+    repo = RoutineRepository(str(_project(tmp_path)))
     repo.record_run("worker", "ok", "")
     assert not list((tmp_path / ".omp" / "theteam").glob("*.tmp"))
 
@@ -90,18 +90,18 @@ def test_all_three_write_paths_use_the_atomic_writer(tmp_path, monkeypatch):
     Three separate `open(path, "w")` calls for one file means crash-safety
     applies to whichever call site an author happened to remember.
     """
-    repo = TaskRepository(str(_project(
+    repo = RoutineRepository(str(_project(
         tmp_path,
         tasks={"worker": {"phases": [{"timeout_seconds": 60}]}},
     )))
     calls = []
-    real_save = TaskRepository._save_schedule
+    real_save = RoutineRepository._save_schedule
 
     def spy(self, schedule):
         calls.append(1)
         return real_save(self, schedule)
 
-    monkeypatch.setattr(TaskRepository, "_save_schedule", spy)
+    monkeypatch.setattr(RoutineRepository, "_save_schedule", spy)
     repo.schedule_task("worker", 5)
     repo.record_run("worker", "ok", "")
     repo.record_skip("worker", "breaker_open")
@@ -118,7 +118,7 @@ def test_the_schedule_survives_a_truncated_prior_file(tmp_path):
     """
     root = _project(tmp_path)
     (root / ".omp" / "theteam" / "task-schedule.json").write_text("")
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     # The read path must not raise.
     repo.record_run("worker", "ok", "recovered")
     assert (root / ".omp" / "theteam" / "task-schedule.json").stat().st_size > 0
@@ -141,7 +141,7 @@ def test_an_interval_shorter_than_the_task_is_repaired(tmp_path):
             "interval_minutes": 1}},
             "last_run": {}},
     )
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repairs = repo.repair_schedules()
 
@@ -166,7 +166,7 @@ def test_the_repair_is_idempotent(tmp_path):
             "interval_minutes": 1}},
             "last_run": {}},
     )
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     first = repo.repair_schedules()
     after_first = repo.schedule()["scheduled_tasks"]["worker"]
     second = repo.repair_schedules()
@@ -186,7 +186,7 @@ def test_a_workable_interval_is_left_alone(tmp_path):
             "interval_minutes": 60}},
             "last_run": {}},
     )
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     before = repo.schedule()["scheduled_tasks"]["worker"]
 
     assert repo.repair_schedules() == []
@@ -205,7 +205,7 @@ def test_an_entry_for_a_deleted_task_is_not_repaired(tmp_path):
                      "interval_minutes": 1}},
             "last_run": {}},
     )
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repairs = repo.repair_schedules()
 
     assert repairs == [], "an orphan entry was repaired instead of left to purge"
@@ -215,7 +215,7 @@ def test_an_entry_for_a_deleted_task_is_not_repaired(tmp_path):
 def test_the_repaired_interval_is_the_shortest_that_works(interval, expected):
     """The predicate is shared with the write guard, so they cannot disagree."""
     task = {"phases": [{"timeout_seconds": 600}]}
-    worst = TaskRepository.worst_case_seconds(task)
+    worst = RoutineRepository.worst_case_seconds(task)
     assert worst == 600
     if interval * 60 < worst:
         assert max(1, -(-worst // 60)) == expected
@@ -224,6 +224,6 @@ def test_the_repaired_interval_is_the_shortest_that_works(interval, expected):
 def test_the_write_guard_and_the_repair_share_one_predicate():
     """Two copies of "can this task finish in time" would drift silently."""
     task = {"phases": [{"timeout_seconds": 300}, {"timeout_seconds": 300}]}
-    assert TaskRepository.worst_case_seconds(task) == 600, (
+    assert RoutineRepository.worst_case_seconds(task) == 600, (
         "the shared predicate must sum every phase, because the guard and the "
         "repair both decide on the total")

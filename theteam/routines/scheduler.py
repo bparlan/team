@@ -6,7 +6,7 @@ M10 deleted two competing schedulers. `UnifiedLoop` scheduled `UnifiedTask`
 objects that nothing ever produced, and `routine-engine/` scheduled markdown
 routines unrelated to the YAML tasks `theteam run` executes. This module is the
 survivor, and it is thin on purpose: every decision about *what* is due and
-*how* it runs already belongs to `TaskRepository` and `TaskExecutor` (Layer 2
+*how* it runs already belongs to `RoutineRepository` and `RoutineExecutor` (Layer 2
 and Layer 3). All this adds is a clock.
 
 The counters it exposes are the ones `MetricsCollector.collect()` scrapes, and
@@ -29,11 +29,11 @@ DEFAULT_TICK_SECONDS = 60
 TICK_JOIN_SECONDS = 5.0
 
 
-class TaskScheduler:
+class RoutineScheduler:
     """Run due tasks on an interval and expose the counters metrics scrapes.
 
     Args:
-        project_root: the project whose `tasks/` directory is the schedule.
+        project_root: the project whose `routines/` directory is the schedule.
         run_due_tasks: callable `(project_root) -> payload`, injected so this
             module does not depend on the CLI. `theteam.cli.run_due_tasks` is
             the only implementation.
@@ -90,7 +90,7 @@ class TaskScheduler:
                 return False
             self._stop.clear()
             self._thread = threading.Thread(
-                target=self._monitoring_loop, daemon=True, name="TaskScheduler")
+                target=self._monitoring_loop, daemon=True, name="RoutineScheduler")
             self._thread.start()
             return True
 

@@ -1,5 +1,5 @@
 """
-The Layer 4 guard on `TaskExecutor.execute_phase`.
+The Layer 4 guard on `RoutineExecutor.execute_phase`.
 
 Before M4, running a phase meant handing a path to `subprocess.run` in the
 orchestrator's own process space: the script saw the developer's filesystem,
@@ -34,12 +34,12 @@ import pytest
 
 from theteam.core.agent_isolation import AgentIsolation
 from theteam.tasks import executor as executor_module
-from theteam.tasks.executor import (
+from theteam.routines.executor import (
     DEFAULT_IMAGE,
     IMAGE_ENV_VAR,
     OOM_KILL_EXIT_CODE,
     WORKSPACE_MOUNT,
-    TaskExecutor,
+    RoutineExecutor,
 )
 
 #: Every Docker-backed test waits on the daemon, never on a wall clock.
@@ -92,7 +92,7 @@ def test_a_phase_with_no_memory_bound_is_refused_and_says_so(tmp_path):
     script = _phase_script(tmp_path, "greedy.py", SIDEFECT_SCRIPT)
     marker = tmp_path / "ran-uncontrolled.txt"
 
-    result = TaskExecutor(str(tmp_path)).execute_phase(
+    result = RoutineExecutor(str(tmp_path)).execute_phase(
         {"name": "no-bound", "script": script}
     )
 
@@ -120,7 +120,7 @@ def test_no_docker_means_a_named_refusal_and_no_unguarded_run(tmp_path, monkeypa
     marker = tmp_path / "ran-uncontrolled.txt"
     monkeypatch.setattr(AgentIsolation, "available", staticmethod(lambda: False))
 
-    result = TaskExecutor(str(tmp_path)).execute_phase(
+    result = RoutineExecutor(str(tmp_path)).execute_phase(
         {"name": "no-docker", "script": script, "memory_limit_mb": 256}
     )
 
@@ -196,7 +196,7 @@ def test_a_phase_over_its_memory_bound_is_killed_and_the_exit_code_is_reported(
         'ball = bytearray(400 * 1024 * 1024)\nprint(len(ball))\n',
     )
 
-    result = TaskExecutor(str(tmp_path)).execute_phase(
+    result = RoutineExecutor(str(tmp_path)).execute_phase(
         {
             "name": "hog",
             "script": script,
@@ -231,7 +231,7 @@ def test_the_memory_bound_from_the_phase_reaches_the_container(tmp_path):
         'ball = bytearray(32 * 1024 * 1024)\nprint(f"allocated {len(ball)}")\n',
     )
 
-    result = TaskExecutor(str(tmp_path)).execute_phase(
+    result = RoutineExecutor(str(tmp_path)).execute_phase(
         {
             "name": "calm",
             "script": script,
@@ -276,7 +276,7 @@ def test_a_read_only_project_mount_blocks_a_write_and_the_writable_flag_allows_i
         "memory_limit_mb": 256,
         "timeout_seconds": DOCKER_TIMEOUT,
     }
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
 
     read_only = executor.execute_phase(dict(phase))
     assert read_only["success"] is False
@@ -323,7 +323,7 @@ def test_the_image_can_be_overridden_by_environment(tmp_path, monkeypatch):
     monkeypatch.setattr(AgentIsolation, "run", fake_run)
 
     script = _phase_script(tmp_path, "noop.py", "print('hi')\n")
-    result = TaskExecutor(str(tmp_path)).execute_phase(
+    result = RoutineExecutor(str(tmp_path)).execute_phase(
         {
             "name": "env-image",
             "script": script,

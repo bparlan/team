@@ -1097,11 +1097,11 @@ def run_task_stack(project_root, task_id, action="execute"):
     import subprocess
     import json
     
-    from theteam.tasks.repository import TaskRepository
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.repository import RoutineRepository
+    from theteam.routines.executor import RoutineExecutor
 
-    repo = TaskRepository(project_root)
-    executor = TaskExecutor(project_root, breaker_states=repo.schedule()["last_run"])
+    repo = RoutineRepository(project_root)
+    executor = RoutineExecutor(project_root, breaker_states=repo.schedule()["last_run"])
 
     if action == "list":
         tasks = repo.all_tasks()

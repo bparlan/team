@@ -36,8 +36,7 @@ def payload(project_root, view):
     than rendering; a test that got one was asking the wrong question.
     """
     reader = {
-        "status": cli.status_payload,
-        "tasks": cli.tasks_payload,
+        "tasks": cli.routine_payload,
         "history": cli.history_payload,
     }[view]
     data, _ = reader(project_root)
@@ -77,9 +76,9 @@ def unrun_task(empty_project):
 @pytest.fixture
 def tripped_project(unrun_task):
     """The unrun project, plus a breaker a real call recorded as tripped."""
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(unrun_task)
+    repo = RoutineRepository(unrun_task)
     for _ in range(5):
         repo.record_run("idle", "failed", "returncode 1",
                         breaker="open", consecutive_failures=5)

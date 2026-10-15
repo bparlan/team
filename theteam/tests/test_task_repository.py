@@ -3,11 +3,11 @@ The task listing and task run contract.
 
 `theteam tasks` and `theteam run` are the only two surfaces a user touches
 for scheduled work, and both are read paths over two sources: canonical YAML
-under `tasks/`, and the pre-M2 JSON registry that is still served. The
+under `routines/`, and the pre-M2 JSON registry that is still served. The
 observable promises pinned here are the ones a regression would silently break
 while still returning a plausible payload:
 
-  * membership and order come from the `tasks/` YAML itself, so the listing
+  * membership and order come from the `routines/` YAML itself, so the listing
     does not drift when a file gains an entry;
   * an id that lost its YAML file is still listed and flagged, never dropped -
     a task quietly disappearing is indistinguishable from "this project has no
@@ -24,9 +24,9 @@ import yaml
 
 from theteam.cli import main
 from theteam.core.agent_isolation import AgentIsolation
-from theteam.tasks.repository import (
+from theteam.routines.repository import (
     TaskDefinitionError,
-    TaskRepository,
+    RoutineRepository,
 )
 
 
@@ -39,22 +39,22 @@ def _project(root, order=(), tasks=None, schedule=None, registry=None, extra=())
     `<root>/.omp/theteam/`. Nothing is read from the real repo.
 
     Ordering comes from each task's own `order:` key. It used to come from
-    `tasks/TASK_ORDER`, which no longer exists — `TaskRepository` dropped it
+    `tasks/TASK_ORDER`, which no longer exists — `RoutineRepository` dropped it
     when ordering moved onto the tasks themselves, so nothing writes that file
     and this docstring described a layout the repository stopped reading.
     """
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    routines_dir = root / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
     tasks = tasks or {}
     rank = {t: i for i, t in enumerate(order)}
     for task_id, fields in tasks.items():
         payload = {"id": task_id, "order": rank.get(task_id, len(rank))}
         payload.update(fields)
-        (tasks_dir / f"task-{task_id}.yaml").write_text(
+        (routines_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
     for name, text in extra or ():
-        (tasks_dir / name).write_text(text, encoding="utf-8")
+        (routines_dir / name).write_text(text, encoding="utf-8")
 
     state = root / ".omp" / "theteam"
     if schedule is not None:
@@ -104,7 +104,7 @@ def test_tasks_are_listed_in_task_order_sequence(tmp_path):
             "zebra": {"name": "Z", "priority": 5},
         },
     )
-    payload = TaskRepository(str(root)).list_tasks()
+    payload = RoutineRepository(str(root)).list_routines()
 
     assert [t["id"] for t in payload["tasks"]] == ["zebra", "middle", "alpha"]
     # The listed order is also the recorded position, so `order` agrees with it.
@@ -131,7 +131,7 @@ def test_a_migrated_prompt_round_trips_exactly(tmp_path):
     )
     root = _project(tmp_path, order=["review"], tasks={"review": {"prompt": prompt}})
 
-    stored = TaskRepository(str(root)).get("review")
+    stored = RoutineRepository(str(root)).get("review")
 
     assert stored["prompt"] == prompt
 
@@ -284,7 +284,7 @@ def test_run_executes_a_due_task_and_advances_its_schedule(tmp_path, capsys):
     assert schedule["last_run"]["probe"]["result"] == "ok"
     assert timedelta(minutes=50) <= next_run - before <= timedelta(minutes=61)
     # Advanced, so the same task is not immediately due again.
-    assert TaskRepository(str(root)).due() == []
+    assert RoutineRepository(str(root)).due() == []
 
 
 # ======= 6. a due task whose script is gone is skipped, not run =======
@@ -339,8 +339,8 @@ def test_the_registry_is_no_longer_a_source_of_tasks(tmp_path):
         registry={"ghost": {"id": "ghost", "name": "From the registry", "priority": 2}},
     )
 
-    repo = TaskRepository(str(root))
-    payload = repo.list_tasks()
+    repo = RoutineRepository(str(root))
+    payload = repo.list_routines()
 
     assert [t["id"] for t in payload["tasks"]] == ["alpha"]
     assert payload["count"] == 1
@@ -377,7 +377,7 @@ def test_a_task_with_no_yaml_file_does_not_exist(tmp_path):
         tasks={"alpha": {"name": "A"}},
     )
 
-    payload = TaskRepository(str(root)).list_tasks()
+    payload = RoutineRepository(str(root)).list_routines()
 
     assert [t["id"] for t in payload["tasks"]] == ["alpha"]
     assert payload["count"] == 1
@@ -388,7 +388,7 @@ def test_a_task_with_no_yaml_file_does_not_exist(tmp_path):
 
 def test_a_non_task_yaml_in_the_tasks_dir_is_ignored(tmp_path):
     """
-    `tasks/SECURITY_POLICY.yaml` is not a task and is not even parseable YAML.
+    `routines/SECURITY_POLICY.yaml` is not a task and is not even parseable YAML.
     Reading every `*.yaml` in the directory dies on it and takes the whole
     listing down; the `task-` prefix keeps unrelated files out of the read.
     """
@@ -404,7 +404,7 @@ def test_a_non_task_yaml_in_the_tasks_dir_is_ignored(tmp_path):
         ],
     )
 
-    payload = TaskRepository(str(root)).list_tasks()
+    payload = RoutineRepository(str(root)).list_routines()
 
     assert [t["id"] for t in payload["tasks"]] == ["alpha"]
     assert payload["yaml_count"] == 1
@@ -430,7 +430,7 @@ def test_a_malformed_task_file_raises_a_named_error(tmp_path, content, reason):
     (root / "tasks" / "task-broken.yaml").write_text(content, encoding="utf-8")
 
     with pytest.raises(TaskDefinitionError) as caught:
-        TaskRepository(str(root)).list_tasks()
+        RoutineRepository(str(root)).list_routines()
 
     assert "task-broken.yaml" in str(caught.value), reason
 
@@ -473,12 +473,12 @@ def test_delete_does_not_remove_a_task_whose_id_contains_the_deleted_id(tmp_path
         tasks={"check": {"name": "C"}, "health-check": {"name": "H"}},
     )
 
-    TaskRepository(str(root)).delete("check")
+    RoutineRepository(str(root)).delete("check")
 
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["health-check"]
+    assert [t["id"] for t in RoutineRepository(str(root)).all_tasks()] == ["health-check"]
     # The unrelated task is intact: still on disk, still listed, still first.
     assert (root / "tasks" / "task-health-check.yaml").exists()
-    payload = TaskRepository(str(root)).list_tasks()
+    payload = RoutineRepository(str(root)).list_routines()
     assert [t["id"] for t in payload["tasks"]] == ["health-check"]
     assert [t["order"] for t in payload["tasks"]] == [0]
 
@@ -487,18 +487,18 @@ def test_update_writes_no_content_that_fails_validation_on_reload(tmp_path):
     A patch that would not survive a read is refused at the write. Validating
     the file on disk before the patch is applied meant the write was never
     checked, so the invalid content landed and the *next*
-    `TaskRepository()` construction raised - a task edit made the whole
+    `RoutineRepository()` construction raised - a task edit made the whole
     project unreadable.
     """
     root = _project(tmp_path, order=["t1"], tasks={"t1": {"name": "T"}})
 
     with pytest.raises(TaskDefinitionError):
-        TaskRepository(str(root)).update(
+        RoutineRepository(str(root)).update(
             "t1", {"phases": [{"name": "run", "script": ".mp/theteam/loop.py"}]}
         )
 
     # Nothing landed, and the task is still readable.
-    assert TaskRepository(str(root)).get("t1")["name"] == "T"
+    assert RoutineRepository(str(root)).get("t1")["name"] == "T"
     assert ".mp/theteam" not in (root / "tasks" / "task-t1.yaml").read_text()
 
 
@@ -519,15 +519,15 @@ def test_update_renames_the_file_and_carries_the_schedule_entry(tmp_path):
         },
     )
 
-    TaskRepository(str(root)).update("old", {"id": "new"})
+    RoutineRepository(str(root)).update("old", {"id": "new"})
 
     # The file moved with the id.
     assert not (root / "tasks" / "task-old.yaml").exists()
     assert (root / "tasks" / "task-new.yaml").exists()
     # The order follows, by parsed id, and the unrelated task is untouched.
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["new", "keeper"]
+    assert [t["id"] for t in RoutineRepository(str(root)).all_tasks()] == ["new", "keeper"]
     # A rename must not orphan a schedule.
-    fresh = TaskRepository(str(root))
+    fresh = RoutineRepository(str(root))
     assert list(fresh.schedule()["scheduled_tasks"]) == ["new"]
     assert list(fresh.schedule()["last_run"]) == ["new"]
     assert [t["id"] for t in fresh.due()] == ["new"]
@@ -545,16 +545,16 @@ def test_create_appends_to_the_end_of_the_declared_order(tmp_path):
     """
     root = _project(tmp_path, order=["alpha", "beta"], tasks={"alpha": {}, "beta": {}})
 
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.create({"id": "probe"})
-    TaskRepository(str(root)).create({"id": "probe2"})
+    RoutineRepository(str(root)).create({"id": "probe2"})
 
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
+    assert [t["id"] for t in RoutineRepository(str(root)).all_tasks()] == ["alpha", "beta", "probe", "probe2"]
     # The order key is written with the file, so a fresh repository reads it
     # back - and it is one past the current maximum, never a line count.
     assert yaml.safe_load((root / "tasks" / "task-probe.yaml").read_text())["order"] == 2
     assert yaml.safe_load((root / "tasks" / "task-probe2.yaml").read_text())["order"] == 3
-    assert [t["order"] for t in TaskRepository(str(root)).all_tasks()] == [0, 1, 2, 3]
+    assert [t["order"] for t in RoutineRepository(str(root)).all_tasks()] == [0, 1, 2, 3]
 
 def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path, capsys):
     """
@@ -581,7 +581,7 @@ def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path,
     assert code == 0
 
     # A fresh repository is the restart. The edit is on disk, not in a dict.
-    assert TaskRepository(str(root)).get("probe")["name"] == "Probe Renamed"
+    assert RoutineRepository(str(root)).get("probe")["name"] == "Probe Renamed"
 
     # The plan is stated before the write, and names what it will touch.
     code, plan = _cli(root, "task", "delete", "probe", capsys=capsys)
@@ -592,9 +592,9 @@ def test_the_write_path_survives_a_restart_and_leaves_nothing_dangling(tmp_path,
     code, _ = _cli(root, "task", "delete", "probe", "--yes", capsys=capsys)
     assert code == 0
 
-    fresh = TaskRepository(str(root))
+    fresh = RoutineRepository(str(root))
     assert not (root / "tasks" / "task-probe.yaml").exists()
-    assert "probe" not in [t["id"] for t in TaskRepository(str(root)).all_tasks()]
+    assert "probe" not in [t["id"] for t in RoutineRepository(str(root)).all_tasks()]
     assert fresh.get("probe") is None
     assert "probe" not in fresh.schedule()["scheduled_tasks"]
     assert fresh.orphaned_schedules() == []
@@ -614,24 +614,24 @@ def test_a_task_is_created_only_if_every_phase_has_a_memory_bound(tmp_path, caps
     )
 
     with pytest.raises(TaskDefinitionError) as caught:
-        TaskRepository(str(root)).create(
+        RoutineRepository(str(root)).create(
             {"id": "unbounded", "phases": [{"name": "run", "script": "scripts/x.py"}]}
         )
 
     assert "memory_limit_mb" in str(caught.value)
     assert not (root / "tasks" / "task-unbounded.yaml").exists()
-    assert [t["id"] for t in TaskRepository(str(root)).all_tasks()] == ["keep"]
+    assert [t["id"] for t in RoutineRepository(str(root)).all_tasks()] == ["keep"]
 
 
 def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):
     """
-    What lands in `tasks/` is the operator's document, in §5.4's format.
+    What lands in `routines/` is the operator's document, in §5.4's format.
     `source_file` is a back-reference the reader adds, and no migrated task
     carries one - writing it into a hand-editable file pushes an internal
     detail into the file the user owns.
     """
     root = _project(tmp_path, order=["t1"], tasks={"t1": {"name": "T"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.update("t1", {"name": "Renamed"})
     repo.create({"id": "t2", "name": "Second"})
@@ -641,7 +641,7 @@ def test_a_created_or_edited_task_file_carries_no_reader_internals(tmp_path):
         assert "source_file" not in stored, name
     # The reader still resolves both: the back-reference is its own, not the
     # file's.
-    fresh = TaskRepository(str(root))
+    fresh = RoutineRepository(str(root))
     assert fresh.get("t1")["name"] == "Renamed"
     assert fresh.get("t2")["source_file"] == "task-t2.yaml"
 
@@ -685,7 +685,7 @@ def test_depends_on_must_be_a_list_not_a_bare_string(tmp_path):
     )
 
     with pytest.raises(TaskDefinitionError) as excinfo:
-        TaskRepository(str(root))
+        RoutineRepository(str(root))
 
     assert "must be a list" in str(excinfo.value)
     assert "str" in str(excinfo.value)

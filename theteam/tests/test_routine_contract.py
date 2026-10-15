@@ -1,6 +1,6 @@
 """Tests for `scripts/check_task_contract.py` and the `task-contract` task.
 
-The script duplicates `AGENT_TYPES` from `theteam.tasks.runners.llm` so it can
+The script duplicates `AGENT_TYPES` from `theteam.routines.runners.llm` so it can
 run as a bare file with no PYTHONPATH. A duplication with no test is a
 divergence waiting to happen, and a *wrong* spawnable list produces findings
 that are all false -- worse than no findings, because they teach a reader to
@@ -36,19 +36,19 @@ class TestAgentTypesStayInSync(unittest.TestCase):
     """The duplicated tuple is the one thing that can make this script lie."""
 
     def test_agent_types_match_the_runner(self):
-        from theteam.tasks.runners.llm import AGENT_TYPES
+        from theteam.routines.runners.llm import AGENT_TYPES
 
         namespace = _load_script_module()
         self.assertEqual(
             sorted(namespace["AGENT_TYPES"]), sorted(AGENT_TYPES),
             "scripts/check_task_contract.py AGENT_TYPES has drifted from "
-            "theteam.tasks.runners.llm.AGENT_TYPES; the script would flag valid "
+            "theteam.routines.runners.llm.AGENT_TYPES; the script would flag valid "
             "agent types or miss invalid ones",
         )
 
     def test_no_spawnable_type_is_rejected(self):
         """Every real agent type must pass the script's own membership test."""
-        from theteam.tasks.runners.llm import AGENT_TYPES
+        from theteam.routines.runners.llm import AGENT_TYPES
 
         namespace = _load_script_module()
         for agent in AGENT_TYPES:

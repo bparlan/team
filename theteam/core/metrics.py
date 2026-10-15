@@ -247,7 +247,7 @@ class MetricsCollector:
 
         The parameter is still named `loop` because the scraping contract is
         duck-typed on attribute names, not on a type. M10 changed what is bound
-        here from `UnifiedLoop` to `tasks.scheduler.TaskScheduler`; the
+        here from `UnifiedLoop` to `tasks.scheduler.RoutineScheduler`; the
         attributes read below (`.metrics`, `.tasks`, `.circuit_breaker`,
         `.health_monitor`) are the whole interface.
 

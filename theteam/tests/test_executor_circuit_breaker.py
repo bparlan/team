@@ -1,11 +1,11 @@
 """
-The per-task `CircuitBreaker` in `TaskExecutor` (M4, §7.1.5).
+The per-task `CircuitBreaker` in `RoutineExecutor` (M4, §7.1.5).
 
 Four claims, each with a distinct failure mode it is here to catch:
 
 1. A task that fails five times in a row is skipped on its next attempt, with
    the literal reason `breaker_open`, and it is skipped in a *later process* -
-   a breaker that only lives in one `TaskExecutor` forgets the trip the moment
+   a breaker that only lives in one `RoutineExecutor` forgets the trip the moment
    `theteam run` exits, which is the same as not having one.
 2. A breaker that has never run does not report a fabricated `"closed"`.
    §3.3: a default that looks like a measurement is the defect.
@@ -15,7 +15,7 @@ Four claims, each with a distinct failure mode it is here to catch:
 4. A tripped breaker does not run the task, and a refused attempt is not a
    failed attempt.
 
-`cmd_run` builds a fresh `TaskExecutor` on every call, so each `_cli` here is
+`cmd_run` builds a fresh `RoutineExecutor` on every call, so each `_cli` here is
 a fresh breaker map reading only persisted state - the same thing a second
 `theteam run` from a shell does.
 """
@@ -26,8 +26,8 @@ from datetime import datetime, timedelta, timezone
 import yaml
 
 from theteam.cli import main
-from theteam.tasks.executor import TaskExecutor
-from theteam.tasks.repository import TaskRepository
+from theteam.routines.executor import RoutineExecutor
+from theteam.routines.repository import RoutineRepository
 
 
 # ======= scratch project =======
@@ -43,13 +43,13 @@ def _future(minutes=30):
 
 def _project(root, order=(), tasks=None, schedule=None):
     """A throwaway project. The shape is `test_task_repository._project`."""
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    routines_dir = root / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
     rank = {t: i for i, t in enumerate(order)}
     for task_id, fields in (tasks or {}).items():
         payload = {"id": task_id, "order": rank.get(task_id, len(rank))}
         payload.update(fields)
-        (tasks_dir / f"task-{task_id}.yaml").write_text(
+        (routines_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
     if schedule is not None:
@@ -162,7 +162,7 @@ def _run(root, capsys):
 def test_five_failures_across_five_runs_then_a_sixth_is_skipped_breaker_open(tmp_path, capsys):
     """
     §7.1.5 end to end. Five `theteam run` invocations, each building its own
-    `TaskExecutor` and therefore its own breaker map, each recording one real
+    `RoutineExecutor` and therefore its own breaker map, each recording one real
     failure. The sixth is another fresh invocation and still refuses to run the
     task, naming the literal `breaker_open`.
 
@@ -242,7 +242,7 @@ def test_a_task_that_never_ran_reports_no_breaker_state_rather_than_closed(tmp_p
     """
     _unscheduled_task(tmp_path)
 
-    row = TaskRepository(str(tmp_path)).list_tasks()["tasks"][0]
+    row = RoutineRepository(str(tmp_path)).list_routines()["tasks"][0]
 
     assert row["breaker"] is None
     assert row["breaker_consecutive_failures"] is None
@@ -269,7 +269,7 @@ def test_a_successful_run_records_a_measured_closed_breaker(tmp_path, capsys):
 
     _run(root, capsys)
 
-    row = TaskRepository(str(root)).list_tasks()["tasks"][0]
+    row = RoutineRepository(str(root)).list_routines()["tasks"][0]
     assert row["breaker"] == "closed"
     assert row["breaker_consecutive_failures"] == 0
 
@@ -330,7 +330,7 @@ def test_execute_task_reports_the_breaker_state_and_the_failure_count(tmp_path, 
     The keys the CLI persists come from the component, not from a literal:
     `CircuitState.value` and `stats.consecutive_failures`.
     """
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
     executor.execute_phase = lambda phase, task=None, on_output=None: {"success": False, "returncode": 3}
     task = {"id": "solo", "phases": [{"name": "boom", "script": "phases/boom.py"}]}
 
@@ -350,7 +350,7 @@ def test_execute_task_does_not_run_a_tripped_breaker(tmp_path):
     they ran and were ignored. A stubbed `execute_phase` counts its calls; on a
     tripped breaker it must not be called a sixth time.
     """
-    executor = TaskExecutor(str(tmp_path))
+    executor = RoutineExecutor(str(tmp_path))
     calls = []
     executor.execute_phase = lambda phase, task=None, on_output=None: calls.append(phase["name"]) or {
         "success": False, "returncode": 3
@@ -377,7 +377,7 @@ def test_a_breaker_restored_from_stored_failures_is_already_tripped(tmp_path):
     its breaker open. Replaying `record_failure()` re-drives the component's
     state machine; assigning `stats.state` would be a trip it never evaluated.
     """
-    executor = TaskExecutor(
+    executor = RoutineExecutor(
         str(tmp_path),
         breaker_states={"solo": {"breaker": "open",
                                  "breaker_consecutive_failures": 5}},
@@ -391,7 +391,7 @@ def test_a_breaker_restored_from_stored_failures_is_already_tripped(tmp_path):
 
 def test_a_breaker_restored_from_a_healthy_run_still_admits_work(tmp_path):
     """The other half: a task that last succeeded is not left closed out."""
-    executor = TaskExecutor(
+    executor = RoutineExecutor(
         str(tmp_path),
         breaker_states={"solo": {"breaker": "closed",
                                  "breaker_consecutive_failures": 0}},
@@ -407,7 +407,7 @@ def test_state_with_nothing_measured_does_not_invent_failures(tmp_path):
     value as failures would be a fabricated reading, the same defect class as
     a fabricated `"closed"`.
     """
-    executor = TaskExecutor(str(tmp_path), breaker_states={"solo": {}})
+    executor = RoutineExecutor(str(tmp_path), breaker_states={"solo": {}})
 
     breaker = executor._breaker("solo")
 

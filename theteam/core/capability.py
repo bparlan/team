@@ -11,7 +11,7 @@ recording an intention about a dynamic fact is stale the moment the
 environment changes, and this one has been stale since its task was retired.
 
 This is the DYNAMIC half of system awareness. The STATIC half -- what files
-and tasks exist -- is `tasks/system-awareness/analyze_system_awareness.py`
+and tasks exist -- is `routines/system-awareness/analyze_system_awareness.py`
 and is not rebuilt here.
 
     python3 -m theteam.cli capability
@@ -38,13 +38,13 @@ def _spawnable_agents() -> List[str]:
     worse than no check at all -- the task reports itself runnable and then
     cannot spawn anyone.
 
-    `theteam.tasks.runners.llm.AGENT_TYPES` is that registry's export: it was
+    `theteam.routines.runners.llm.AGENT_TYPES` is that registry's export: it was
     derived by probing the host and is hardcoded precisely because the bare
     CLI has no host to probe. It is re-read on every call so a session that
     registers a new agent type after import is reflected here.
     """
     try:
-        from theteam.tasks.runners.llm import AGENT_TYPES
+        from theteam.routines.runners.llm import AGENT_TYPES
     except Exception:
         return []
     return list(AGENT_TYPES)

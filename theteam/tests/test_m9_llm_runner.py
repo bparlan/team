@@ -23,8 +23,8 @@ from pathlib import Path
 import yaml
 
 from theteam.cli import _phase_problem
-from theteam.tasks.repository import TaskRepository
-from theteam.tasks.runners.llm import (
+from theteam.routines.repository import RoutineRepository
+from theteam.routines.runners.llm import (
     AGENT_TYPES,
     DEFAULT_AGENT_TYPE,
     agent_type_for,
@@ -37,9 +37,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 def _project(tmp_path, task):
     """A project whose only task is `task`."""
-    tasks_dir = tmp_path / "tasks"
-    tasks_dir.mkdir(exist_ok=True)
-    with open(tasks_dir / "task-x.yaml", "w") as handle:
+    routines_dir = tmp_path / "tasks"
+    routines_dir.mkdir(exist_ok=True)
+    with open(routines_dir / "task-x.yaml", "w") as handle:
         yaml.dump(task, handle)
     return str(tmp_path)
 
@@ -246,13 +246,13 @@ class TestOnlyBypassesTheSchedule:
 
     def test_an_unscheduled_task_runs_when_named(self, tmp_path):
         root = _project(tmp_path, self._task())
-        repo = TaskRepository(root)
+        repo = RoutineRepository(root)
         assert repo.due() == []
         assert [t["id"] for t in repo.due(only="x")] == ["x"]
 
     def test_it_does_not_schedule_what_it_ran(self, tmp_path):
         root = _project(tmp_path, self._task())
-        repo = TaskRepository(root)
+        repo = RoutineRepository(root)
         repo.due(only="x")
         assert repo.schedule()["scheduled_tasks"] == {}
 
@@ -261,7 +261,7 @@ class TestEveryShippedTask:
     """The shipped manifests, checked against the real files."""
 
     def test_every_task_names_a_spawnable_agent_or_defaults(self):
-        for task in TaskRepository(str(REPO_ROOT)).all_tasks():
+        for task in RoutineRepository(str(REPO_ROOT)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
@@ -272,7 +272,7 @@ class TestEveryShippedTask:
                 )
 
     def test_every_llm_phase_declares_a_prompt_and_an_output(self):
-        for task in TaskRepository(str(REPO_ROOT)).all_tasks():
+        for task in RoutineRepository(str(REPO_ROOT)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
@@ -281,7 +281,7 @@ class TestEveryShippedTask:
 
     def test_every_llm_prompt_file_exists(self):
         root = REPO_ROOT
-        for task in TaskRepository(str(root)).all_tasks():
+        for task in RoutineRepository(str(root)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
@@ -306,7 +306,7 @@ class TestEveryShippedTask:
         """
         root = REPO_ROOT
         MACHINE = (".omp/theteam/reports/", "reports/.handoff/")
-        for task in TaskRepository(str(root)).all_tasks():
+        for task in RoutineRepository(str(root)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("runner") != "llm":
                     continue
@@ -325,7 +325,7 @@ class TestEveryShippedTask:
 
     def test_every_script_phase_names_an_existing_script(self):
         root = REPO_ROOT
-        for task in TaskRepository(str(root)).all_tasks():
+        for task in RoutineRepository(str(root)).all_tasks():
             for phase in task.get("phases", []):
                 if phase.get("script"):
                     assert (root / phase["script"]).exists(), phase

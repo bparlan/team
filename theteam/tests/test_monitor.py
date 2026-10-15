@@ -131,9 +131,9 @@ def frozen_clock(monkeypatch):
 @pytest.fixture
 def tripped(two_tasks):
     """`alpha` tripped by real recorded runs; `beta` still unmeasured."""
-    from theteam.tasks.repository import TaskRepository
+    from theteam.routines.repository import RoutineRepository
 
-    repo = TaskRepository(two_tasks)
+    repo = RoutineRepository(two_tasks)
     repo.record_run("alpha", "failed", "returncode 1",
                     breaker="open", consecutive_failures=5)
     return two_tasks
@@ -164,9 +164,9 @@ class TestTransitions:
     def test_a_breaker_that_opens_is_named_in_the_status_view(self, two_tasks):
         """`breakers.<id>` arrives as a whole dict the frame it first appears."""
         before = payload(two_tasks, "status")
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        TaskRepository(two_tasks).record_run("alpha", "failed", "returncode 1",
+        RoutineRepository(two_tasks).record_run("alpha", "failed", "returncode 1",
                                             breaker="open", consecutive_failures=5)
         after = payload(two_tasks, "status")
 
@@ -181,9 +181,9 @@ class TestTransitions:
         watching when the breaker tripped.
         """
         before = payload(two_tasks, "tasks")
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        TaskRepository(two_tasks).record_run("alpha", "failed", "returncode 1",
+        RoutineRepository(two_tasks).record_run("alpha", "failed", "returncode 1",
                                             breaker="open", consecutive_failures=5)
         after = payload(two_tasks, "tasks")
 
@@ -197,9 +197,9 @@ class TestTransitions:
         whole surface useless: a line that is always on is a line nobody reads.
         """
         before = payload(tripped, "status")
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        TaskRepository(tripped).record_run("beta", "failed", "returncode 1",
+        RoutineRepository(tripped).record_run("beta", "failed", "returncode 1",
                                            breaker="closed", consecutive_failures=0)
         changed = diff(before, payload(tripped, "status"))
 
@@ -249,9 +249,9 @@ class TestTransitions:
         ("anything that became None") shows itself.
         """
         before = payload(two_tasks, "status")
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        TaskRepository(two_tasks).record_run("beta", "ok", "returncode 0")
+        RoutineRepository(two_tasks).record_run("beta", "ok", "returncode 0")
         after = payload(two_tasks, "status")
 
         assert after["breakers"]["beta"]["state"] is None, "nothing measured a state"
@@ -326,9 +326,9 @@ class TestBaselineAndSteadyState:
         monitor_obj = Monitor("status")
         monitor_obj.observe(payload(tripped, "status"))
 
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        TaskRepository(tripped).record_run("beta", "failed", "returncode 1",
+        RoutineRepository(tripped).record_run("beta", "failed", "returncode 1",
                                            breaker="open", consecutive_failures=1)
         monitor_obj.observe(payload(tripped, "status"))
 
@@ -365,13 +365,13 @@ class TestBaselineAndSteadyState:
 
     def test_a_trip_is_recorded_once_and_stays_recorded(self, tripped):
         """The open breaker is named on the frame it opens and not afterwards."""
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
         before = payload(tripped, "status")
         monitor_obj = Monitor("status")
         monitor_obj.observe(before)
 
-        TaskRepository(tripped).record_run("beta", "failed", "returncode 1",
+        RoutineRepository(tripped).record_run("beta", "failed", "returncode 1",
                                            breaker="open", consecutive_failures=1)
         monitor_obj.observe(payload(tripped, "status"))
         monitor_obj.observe(payload(tripped, "status"))
@@ -382,11 +382,11 @@ class TestBaselineAndSteadyState:
 
     def test_recent_lines_are_timestamped_and_newest_last(self, tripped):
         """The frame renders these verbatim, so each carries its stamp."""
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
         monitor_obj = Monitor("status")
         monitor_obj.observe(payload(tripped, "status"))
-        TaskRepository(tripped).record_run("beta", "failed", "returncode 1",
+        RoutineRepository(tripped).record_run("beta", "failed", "returncode 1",
                                            breaker="open", consecutive_failures=1)
         monitor_obj.observe(payload(tripped, "status"))
 
@@ -410,9 +410,9 @@ class TestBoundedTimeline:
     """
 
     def test_the_buffer_drops_the_oldest_events_past_the_bound(self, two_tasks):
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
-        repo = TaskRepository(two_tasks)
+        repo = RoutineRepository(two_tasks)
         # Flip both breakers every frame: exactly one goes closed -> open, so
         # each frame produces one event and the buffer is genuinely overrun
         # rather than merely filled.
@@ -435,12 +435,12 @@ class TestBoundedTimeline:
         assert len(monitor_obj.events) == 100
 
     def test_a_frame_shows_only_the_last_few_events(self, tripped):
-        from theteam.tasks.repository import TaskRepository
+        from theteam.routines.repository import RoutineRepository
 
         monitor_obj = Monitor("status")
         monitor_obj.observe(payload(tripped, "status"))
         for name in ("beta", "gamma", "delta", "epsilon", "zeta", "eta"):
-            TaskRepository(tripped).record_run(name, "failed", "returncode 1",
+            RoutineRepository(tripped).record_run(name, "failed", "returncode 1",
                                                breaker="open",
                                                consecutive_failures=1)
             monitor_obj.observe(payload(tripped, "status"))

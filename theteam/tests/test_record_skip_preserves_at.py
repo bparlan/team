@@ -1,5 +1,5 @@
 """
-`TaskRepository.record_skip` records a skip without restamping `at` or
+`RoutineRepository.record_skip` records a skip without restamping `at` or
 clearing the breaker reading.
 
 The defect this file guards: `record_run` unconditionally writes
@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 
 import yaml
 
-from theteam.tasks.repository import TaskRepository
+from theteam.routines.repository import RoutineRepository
 
 
 # ======= scratch project =======
@@ -25,12 +25,12 @@ from theteam.tasks.repository import TaskRepository
 
 def _project(root, tasks=None, schedule=None):
     """Build an isolated project: `tasks/task-*.yaml` and the state files."""
-    tasks_dir = root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
+    routines_dir = root / "tasks"
+    routines_dir.mkdir(parents=True, exist_ok=True)
     for task_id, fields in (tasks or {}).items():
         payload = {"id": task_id, "order": 0}
         payload.update(fields)
-        (tasks_dir / f"task-{task_id}.yaml").write_text(
+        (routines_dir / f"task-{task_id}.yaml").write_text(
             yaml.safe_dump(payload, sort_keys=False), encoding="utf-8"
         )
     state = root / ".omp" / "theteam"
@@ -61,7 +61,7 @@ def test_record_skip_preserves_at_from_prior_run(tmp_path):
     repeated invocation -- the task stayed permanently unrunnable.
     """
     root = _project(tmp_path, tasks={"solo": {"name": "Solo"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.record_run("solo", "failed", "boom", breaker="open", consecutive_failures=5)
     previous = _last_run(root, "solo")
@@ -84,7 +84,7 @@ def test_record_skip_writes_at_when_no_prior_entry(tmp_path):
     falls back to `previous.get("at") or _now()` and writes a real timestamp.
     """
     root = _project(tmp_path, tasks={"fresh": {"name": "Fresh"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.record_skip("fresh", "never ran")
 
@@ -110,7 +110,7 @@ def test_record_skip_preserves_breaker_when_unspecified(tmp_path):
     discarding the trip.
     """
     root = _project(tmp_path, tasks={"solo": {"name": "Solo"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.record_run("solo", "failed", "boom", breaker="open", consecutive_failures=5)
 
@@ -129,7 +129,7 @@ def test_record_skip_preserves_breaker_when_unspecified(tmp_path):
 def test_record_skip_writes_explicit_breaker_args(tmp_path):
     """Explicit breaker arguments override the preserved reading."""
     root = _project(tmp_path, tasks={"solo": {"name": "Solo"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.record_run("solo", "failed", "boom", breaker="open", consecutive_failures=5)
 
@@ -150,7 +150,7 @@ def test_record_skip_writes_explicit_breaker_args(tmp_path):
 def test_record_skip_does_not_advance_next_run(tmp_path):
     """A skip is not a run: `scheduled_tasks` / `next_run` is untouched."""
     root = _project(tmp_path, tasks={"solo": {"name": "Solo"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
 
     repo.schedule_task("solo", interval_minutes=30)
     next_run_before = repo.schedule()["scheduled_tasks"]["solo"]["next_run"]
@@ -171,7 +171,7 @@ def test_repeated_skips_do_not_re_anchor_the_recovery_window(tmp_path):
     The end-to-end property cases 1 and 3 exist to protect: a burst of skips
     must not stop the breaker from ever probing again.
 
-    `TaskExecutor._breaker` anchors `recovery_deadline` to `last_run[tid].at`.
+    `RoutineExecutor._breaker` anchors `recovery_deadline` to `last_run[tid].at`.
     So a skip that restamps `at` pushes the whole window forward again, and a
     retry loop or a `serve` tick faster than 60s re-arms it forever. Measured
     before the fix: three consecutive skips each moved the deadline a further
@@ -180,10 +180,10 @@ def test_repeated_skips_do_not_re_anchor_the_recovery_window(tmp_path):
     REVERTING-CHECK: with `at` restamped by the skip, the first
     `allow_request()` is False and `at` drifts from `tripped_at`. Both fail.
     """
-    from theteam.tasks.executor import TaskExecutor
+    from theteam.routines.executor import RoutineExecutor
 
     root = _project(tmp_path, tasks={"solo": {"name": "Solo"}})
-    repo = TaskRepository(str(root))
+    repo = RoutineRepository(str(root))
     repo.record_run("solo", "failed", "boom", breaker="open", consecutive_failures=5)
 
     # Age the trip past the 60s recovery window, the way a real failure would be.
@@ -201,5 +201,5 @@ def test_repeated_skips_do_not_re_anchor_the_recovery_window(tmp_path):
         repo.record_skip("solo", "breaker_open", breaker="open", consecutive_failures=5)
         current = _last_run(root, "solo")
         assert current["at"] == tripped_at, "a skip restamped the failure time"
-        breaker = TaskExecutor(str(root), breaker_states={"solo": current})._breaker("solo")
+        breaker = RoutineExecutor(str(root), breaker_states={"solo": current})._breaker("solo")
         assert breaker.allow_request(), "the breaker never became probeable again"

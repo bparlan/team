@@ -1,5 +1,5 @@
 """
-`TaskExecutor._breaker` restores the circuit breaker's recovery deadline from
+`RoutineExecutor._breaker` restores the circuit breaker's recovery deadline from
 the persisted `at` timestamp rather than recomputing it from process start.
 
 The defect this file guards: `record_failure()` was replayed N times on every
@@ -15,12 +15,12 @@ exercise that restoration directly through the public-ish `_breaker` method.
 
 from datetime import datetime, timedelta, timezone
 
-from theteam.tasks.executor import TaskExecutor
+from theteam.routines.executor import RoutineExecutor
 
 
 def _executor(breaker_states):
-    """A TaskExecutor that never touches the filesystem for breaker state."""
-    return TaskExecutor(".", breaker_states=breaker_states)
+    """A RoutineExecutor that never touches the filesystem for breaker state."""
+    return RoutineExecutor(".", breaker_states=breaker_states)
 
 
 def _past(minutes=10):
@@ -41,7 +41,7 @@ def test_breaker_with_old_failure_admits_a_request(tmp_path):
     `allow_request()` is True (half_open admits a probe).
 
     REVERTING-CHECK: this assertion is the one that fails if the `at`-restoration
-    block in `TaskExecutor._breaker` is removed. Without it, `record_failure()`
+    block in `RoutineExecutor._breaker` is removed. Without it, `record_failure()`
     leaves `recovery_deadline = now + 60s` (stamped during replay), the window
     never elapses across process boundaries, and `allow_request()` returns
     False -- the task stays permanently unrunnable, which is the exact defect

@@ -1,0 +1,51 @@
+{
+  "stats": {
+    "ok": 0,
+    "warn": 1,
+    "bad": 1,
+    "info": 4
+  },
+  "decisions": [
+    {
+      "id": 1,
+      "decision": "Pause Implementation",
+      "rationale": "Severe drift detected in the task/routine nomenclature. The project is currently in a 'broken' state with 23+ test failures due to incomplete renames and orphaned terminal UI code."
+    },
+    {
+      "id": 2,
+      "decision": "Evaluate Terminal UI Deletion",
+      "rationale": "The project lacks a real terminal UI, but contains complex rendering logic that is currently blocking test success. Deletion would simplify the core significantly."
+    }
+  ],
+  "findings": [
+    {
+      "title": "Nomenclature Drift",
+      "type": "bad",
+      "why": "Confusion between 'task' and 'routine'. The CLI subparsers use 'tasks' (plural) while some internal functions use 'routine' (singular). This is causing KeyError and AttributeError in tests.",
+      "tag": "drift"
+    },
+    {
+      "title": "Orphaned Terminal UI",
+      "type": "warn",
+      "why": "ui/terminal.py exists but is not used in production, only by tests. It depends on a moving target (cli.py) and breaks whenever command names change.",
+      "tag": "waste"
+    },
+    {
+      "title": "Test Suite Decay",
+      "type": "bad",
+      "why": "Major test files (test_terminal.py, test_monitor.py) are failing due to API mismatches. test_task_executor_isolation.py fails collection due to missing 'theteam.tasks' module.",
+      "tag": "broken"
+    }
+  ],
+  "details": [
+    {
+      "title": "CLI Subparser State",
+      "content": "Current subparsers: status, routine, run, tasks, history, loop, comment, manager, watch. Note that 'tasks' was recently renamed from 'task', but internal readers still look for 'task' or 'routine_payload'."
+    },
+    {
+      "title": "Integration Gaps",
+      "content": "The module 'theteam.tasks' is being imported in test_task_executor_isolation.py but does not exist as a package, causing collection errors."
+    }
+  ],
+  "meta": "Report generated 2026-10-17 18:30:00 (English/HTML format requested by user)"
+}

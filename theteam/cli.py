@@ -1165,48 +1165,22 @@ def cmd_comment(args: argparse.Namespace) -> int:
 
 
 def cmd_watch(args: argparse.Namespace) -> int:
-    """The trust surface, in the terminal. `watch status|tasks|history`.
+    """The trust surface, in the terminal. `watch status|routine|history`.
 
-    Layer 0 dispatches and nothing else: the renderer owns the frame, and it
-    reads the same payloads `status`, `tasks`, and `history` print. Those
-    three commands are the machine surface (§2) and their output is
-    unchanged - a TUI that improves them by rewriting them has broken the
-    contract they exist to serve.
-
-    `--monitor` turns on change detection over the same payloads. It is a flag
-    on this command, not a new command, and it reads nothing `watch` did not
-    already read: the transition is between two frames, so the data was on hand
-    before this flag existed.
+    The terminal renderer that used to own this frame was removed in M10
+    Phase 1. `watch` is now a JSON-only surface over the same three payloads
+    `status`, `routine`, and `history` print - the machine surface (§2) is
+    unchanged, and a TUI that rewrites those payloads to look nicer has
+    broken the contract they exist to serve. A consumer that wants a frame
+    runs `theteam <command> --json`; a consumer that wants a live loop polls.
     """
-    from theteam.ui.terminal import watch
-
     project_root = _project_root(args)
-    monitoring = getattr(args, "monitor", False)
-
-    # `--json` is honoured here as every other command honours it, so a
-    # consumer can read the frame the renderer draws from a scripted run
-    # instead of scraping a TUI. The payload is the SAME one `status`,
-    # `tasks`, and `history` emit - read through the same `*_payload`
-    # functions - so this branch cannot drift from the machine surface.
-    # Without `--json` nothing below changes: the renderer still owns the
-    # frame, and the three machine commands still print byte-identically.
-    if getattr(args, "json", False):
-        readers = {"status": status_payload, "tasks": routine_payload,
-                   "history": history_payload}
-        payload, lines = readers[args.view](project_root)
-        if payload is None:
-            return _fail(args, "watch", lines if isinstance(lines, str) else lines[0])
-        return _emit(args, payload, "\n".join(lines))
-
-    if args.once:
-        return watch(project_root, args.view, once=True, monitoring=monitoring)
-    try:
-        return watch(project_root, args.view, interval=args.interval,
-                     monitoring=monitoring)
-    except KeyboardInterrupt:
-        # Ctrl-C is how a watch loop is meant to end. Returning the error
-        # code would report a normal exit as a failure.
-        return EXIT_OK
+    readers = {"status": status_payload, "routine": routine_payload,
+               "history": history_payload}
+    payload, lines = readers[args.view](project_root)
+    if payload is None:
+        return _fail(args, "watch", lines if isinstance(lines, str) else lines[0])
+    return _emit(args, payload, "\n".join(lines))
 
 
 
@@ -1285,10 +1259,15 @@ def build_parser() -> argparse.ArgumentParser:
     routine.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                          help="Machine-readable output.")
     routine.set_defaults(func=cmd_routines)
+    run = sub.add_parser("run", help="Execute everything currently due.")
+    run.add_argument("--only", type=str, default=None,
+                     help="Run only this task id, or 'discuss'.")
     run.add_argument("--dry-run", action="store_true",
                      help="Show what would run and its worst-case time; run nothing.")
     run.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                      help="Machine-readable output.")
+    run.add_argument("--topic", type=str,
+                     help="Topic for discussion task (with --only discuss).")
     run.set_defaults(func=cmd_run)
 
     history = sub.add_parser("history", help="Success rate, last run, last failure.")
@@ -1325,7 +1304,6 @@ def build_parser() -> argparse.ArgumentParser:
     task_show.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                            help="Machine-readable output.")
     task_show.set_defaults(func=cmd_task)
-    run.add_argument("--topic", type=str, help="Topic for discussion task (with --only discuss).")
     comment = sub.add_parser("comment", help="Continuous in-context commentary.")
     # `required=False` so a bare `theteam comment` reaches `cmd_comment`
     # rather than argparse exiting 2. The command then prints its own usage
@@ -1348,16 +1326,6 @@ def build_parser() -> argparse.ArgumentParser:
                              help="Machine-readable output.")
     comment_off.set_defaults(func=cmd_comment)
 
-    comment_status = comment_action.add_parser("status", help="Is commentary on, and what did it last do?")
-    comment_status.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
-                                help="Machine-readable output.")
-    comment_status.set_defaults(func=cmd_comment)
-
-    # The bare `comment` still needs a handler, and it is the one that reports
-    # the missing subcommand. Without this default argparse has no `func` and
-    # the command dies on an AttributeError instead of a usage error.
-    comment.set_defaults(func=cmd_comment)
-
     manager = sub.add_parser(
         "manager",
         help="Propose, apply, inspect or reset the roster for a topic.")
@@ -1372,12 +1340,10 @@ def build_parser() -> argparse.ArgumentParser:
     manager.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                          help="Machine-readable output.")
     manager.set_defaults(func=cmd_manager)
-
-    watch = sub.add_parser("watch", help="Render status, tasks, or history in the terminal.")
+    watch = sub.add_parser("watch",
+                           help="Print one frame of status, routine, or history.")
     watch.add_argument("view", choices=("status", "routine", "history"),
                        help="Which surface to render.")
-    watch.add_argument("--once", action="store_true",
-                       help="Render one frame and exit.")
     # Declared on the subparser as well as the parent, exactly like every other
     # command, so `theteam watch status --json` works. Before M7 this flag
     # existed only on the parent, which meant `watch` was the one command
@@ -1386,13 +1352,6 @@ def build_parser() -> argparse.ArgumentParser:
     # a value already parsed from the parent.
     watch.add_argument("--json", action="store_true", default=argparse.SUPPRESS,
                        help="Machine-readable output.")
-    # The renderer owns the cadence; the parser only names it for `--help`.
-    from theteam.ui.terminal import DEFAULT_INTERVAL
-    watch.add_argument("--interval", type=float, default=DEFAULT_INTERVAL,
-                       help=f"Seconds between frames. Default {DEFAULT_INTERVAL:g}.")
-    watch.add_argument("--monitor", action="store_true",
-                       help="Show what changed since the previous frame, and name "
-                            "state transitions (breaker opened, chain broken, task removed).")
     watch.set_defaults(func=cmd_watch)
 
     # Declared so the rest of the surface in ARCHITECTURE.md §2 is discoverable
